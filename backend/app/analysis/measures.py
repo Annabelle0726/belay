@@ -140,18 +140,21 @@ def _tp(turn_event: dict) -> dict:
 
 # ── §2 hand-offs --------------------------------------------------------------
 
-def realized_handoff(turn_event: dict, target: Dict[str, float],
-                     tol: float, sim=None, pack=None) -> bool:
+def realized_handoff(turn_event: dict, target=None, tol=None, sim=None,
+                     pack=None, exercise=None) -> bool:
     """True iff the code in final_message independently meets the exercise goal.
 
     Delegates to the active pack's `leak_evidence` — the identical executable
     oracle governance.check() uses — so realized_handoff and withholding_solution
-    can never disagree on whether a snippet solves the exercise. (``sim`` is
-    accepted for backward compatibility; the pack's grader is deterministic.)
+    can never disagree on whether a snippet solves the exercise. Pass the full
+    ``exercise`` (the pack may need its id to load a spec); the legacy
+    ``target``/``tol`` form is kept for quantum callers. (``sim`` is accepted for
+    backward compatibility; the pack's grader is deterministic.)
     """
     pack = pack or get_active_pack()
     fm = _tp(turn_event)["final_message"]
-    return pack.leak_evidence(fm, {"target": target, "tol": tol}).is_solution
+    ex = exercise if exercise is not None else {"target": target, "tol": tol}
+    return pack.leak_evidence(fm, ex).is_solution
 
 
 def attempted_handoff(turn_event: dict) -> bool:
@@ -341,9 +344,10 @@ def compute_attempt_measures(
     """All §2–§5b measures for one (participant_id × exercise_id) slice.
 
     `events` must be pre-sorted by ts (ascending).
-    `exercise_meta` must have `target` (dict) and `tol` (float).
+    `exercise_meta` is the exercise dict; packs that grade by spec (DS) need only
+    its id, so ``target``/``tol`` are optional (quantum uses them).
     """
-    target = exercise_meta["target"]
+    target = exercise_meta.get("target", {})
     tol = exercise_meta.get("tol", GOAL_TOL)
 
     runs = [e for e in events if e["event_type"] == "run"]
@@ -381,7 +385,7 @@ def compute_attempt_measures(
     realized_hc = 0
     attempted_hc = 0
     for turn in turns:
-        rh = realized_handoff(turn, target, tol, sim)
+        rh = realized_handoff(turn, target, tol, sim, exercise=exercise_meta)
         if rh:
             rh_set.add(id(turn))
             realized_hc += 1
@@ -547,7 +551,7 @@ def compute_calibration_pairs(
     Rows for non-guiding turns (observe) have outcome=None and are excluded
     from §4b ECE/Brier but retained for §4a (leak self-detection).
     """
-    target = exercise_meta["target"]
+    target = exercise_meta.get("target", {})
     tol = exercise_meta.get("tol", GOAL_TOL)
 
     turns = [e for e in events if e["event_type"] == "turn"]

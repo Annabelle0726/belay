@@ -15,9 +15,11 @@ Four scenarios tested:
 from __future__ import annotations
 
 from app.agent import run_turn
-from app.curriculum import get_exercise
+from app.core.domain import get_active_pack
 from app.store import InMemoryStore, make_event
 from app.store.consent import ConsentRouter
+
+_EX = get_active_pack().get_exercise("ds-foundations")
 
 
 # ── minimal deterministic stub LLM (no network) ───────────────────────────────
@@ -41,12 +43,12 @@ class _StubLLM:
 def _payload(pid: str, stance: str = "peer") -> dict:
     return {
         "participant_id": pid,
-        "exercise": get_exercise("bell"),
+        "exercise": _EX,
         "event": "run", "mode": "study",
         "stance": stance,
-        "source": "allocate 2\nsuperpose q0\nmeasure all",
-        "result": {"ok": True, "goalMet": False, "tvd": 0.5,
-                   "dist": [{"bits": "00", "p": 0.5}, {"bits": "10", "p": 0.5}]},
+        "source": "import pandas as pd\ndf = pd.read_csv('data/sales.csv')",
+        "result": {"ok": True, "goalMet": False, "metric": 0.5,
+                   "pack": {"id": "datascience", "summary": "0/1 checks passed"}},
         "recent": [],
         "signals": {"attempts": 1, "distanceTrend": [0.5],
                     "repeatedError": False, "sinceLastProgress": 1},
@@ -100,7 +102,7 @@ class TestConsentingParticipant:
         pid = "p_yes"
         router.register_participant(pid, "c1", consent=True)
         store = router.store_for(pid)
-        store.append_event(make_event(pid, "bell", "study", "run",
+        store.append_event(make_event(pid, "ds-foundations", "study", "run",
                                       {"source": "x", "result": {}}, stance="peer"))
         # Export reads from durable → non-empty
         jsonl = router.durable.export_jsonl(pid)
@@ -135,7 +137,7 @@ class TestNonConsentingParticipant:
         pid = "p_no"
         router.register_participant(pid, "c4", consent=False)
         store = router.store_for(pid)
-        store.append_event(make_event(pid, "bell", "study", "run",
+        store.append_event(make_event(pid, "ds-foundations", "study", "run",
                                       {"source": "x", "result": {}}, stance="peer"))
         # Durable export must be empty for this pid
         assert router.durable.export_jsonl(pid).strip() == ""
@@ -178,7 +180,7 @@ class TestFailSafe:
         pid = "p_unregistered"
         # Interact WITHOUT registering
         store = router.store_for(pid)
-        store.append_event(make_event(pid, "bell", "study", "run",
+        store.append_event(make_event(pid, "ds-foundations", "study", "run",
                                       {"source": "x", "result": {}}, stance="peer"))
         assert router.durable.export_jsonl(pid).strip() == ""
 

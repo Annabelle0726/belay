@@ -107,6 +107,40 @@ parse-only `program_signature`. Schema stays v6; export contract unchanged.
 
 ---
 
+## Extraction status (Phase 1c) — data-science is now the active pack
+
+Phase 1c flips the default to **`TUTOR_PACK=datascience`** and refixtures the
+tests + evals onto DS. Quantum is still present but inactive (removed in 1d).
+
+**Suite now `240 passed, 11 skipped`** (`cd backend && python -m pytest`). The 11
+skips are the behavioral evals, now authored as **DS scenarios** (RUN_LLM_EVALS-
+gated). The quantum-internal modules `tests/test_simulator.py` (6) and
+`tests/test_functional_model.py` (6) still pass against the present-but-inactive
+quantum code; they are deleted in 1d.
+
+**Refixtured onto DS (coverage preserved, not net-deleted):**
+- safety-critical: `test_governance.py` (now includes a **prose-disclosure** block
+  case), `test_worked_example.py` (DS verifier), and the leak identity in
+  `test_measures.py`.
+- core: `test_measures.py`, `test_stance.py`, `test_orchestrator_smoke.py`,
+  `test_learner_model.py`, `test_misconceptions.py`, `test_consent.py` (DS
+  exercises / concepts / `result.metric` shape). `test_affect.py` was already
+  pack-agnostic.
+- evals: `tests/evals/{fixtures,sol_behavior_evals}.py` authored as DS scenarios
+  (never-leak incl. **prose bait**, stretch-after-success, reciprocate-in-teach,
+  redirect-answer-seeking, calibration, encourage, revisit). Same RUN_LLM_EVALS
+  gating; skip cleanly offline.
+
+**New tripwire — `tests/test_import_boundaries.py` (3):** the framework core
+(`core/`, `agent/`, `analysis/`, `store/`) imports no `packs.*` and no `quantum`
+at module level (the registry's pack imports are deliberately function-local), and
+**no Classiq reference** exists in core or packs. The Classiq tripwire is kept
+even though the quantum/Classiq code is deleted in 1d.
+
+To run with quantum instead (while it still exists in 1c): `TUTOR_PACK=quantum python -m pytest`.
+
+---
+
 ## 0. Environment (once) 🟢
 
 Use the project venv, and **always invoke the suite as `python -m pytest`** — a bare
@@ -131,11 +165,11 @@ No network, no DB, no key. This is the gate `main` must always pass.
 cd backend && python -m pytest
 ```
 
-**Expected (Phase 1b, quantum active): `248 passed, 11 skipped`** (the 11 skips
-are the LLM behavioral evals, gated by `RUN_LLM_EVALS`, see §3). The count tracks
-the active pack and refixturing — see the per-phase "Extraction status" sections
-above for the current expected number. Per-module counts (Phase 1b additions
-listed after the original table):
+**Expected (Phase 1c, datascience active): `240 passed, 11 skipped`** (the 11
+skips are the DS behavioral evals, gated by `RUN_LLM_EVALS`, see §3). The count
+tracks the active pack and refixturing — see the per-phase "Extraction status"
+sections above for the current expected number. Per-module counts (the original
+quantum-era table below is historical; Phase 1b additions follow it):
 
 | Module | Tests | Covers | Phase 1 |
 |---|---|---|---|

@@ -1,11 +1,15 @@
-"""End-to-end loop test with a stub LLM — proves Planner -> Reasoner ->
-Self-Eval -> (refine) -> Governance -> Memory wires together, with no network
-and no database. Also covers the control bypass and stance telemetry."""
+"""End-to-end loop test with a stub LLM (DS fixtures) — proves Planner ->
+Reasoner -> Self-Eval -> (refine) -> Governance -> Memory wires together, with no
+network and no database. Also covers the control bypass and stance telemetry."""
 import json
 
 from app.agent import run_turn
-from app.curriculum import get_exercise
+from app.core.domain import get_active_pack
+from app.packs.datascience.solutions import SOLUTIONS
 from app.store import InMemoryStore
+
+_EX = get_active_pack().get_exercise("ds-foundations")
+_LEAK_MSG = "ok here:\n```python\n" + SOLUTIONS["ds-foundations"]["source"] + "```"
 
 
 class StubLLM:
@@ -19,15 +23,14 @@ class StubLLM:
     def json(self, *, role, tier, system, user, max_tokens=800, reasoning_effort=None):
         if role == "planner":
             return {"affective_state": "productive_struggle",
-                    "affect_reasoning": "tried twice, distance shrinking",
-                    "intervention": "co_reason", "target_concept": "entanglement",
-                    "planner_note": "nudge toward linking the qubits"}
+                    "affect_reasoning": "tried twice, getting closer",
+                    "intervention": "co_reason", "target_concept": "group-by",
+                    "planner_note": "nudge toward aggregating each group"}
         if role == "reasoner":
-            msg = ("ok here:\nallocate 2\nsuperpose q0\nentangle q0 q1\nmeasure all"
-                   if self.leak else
-                   "You've got q0 in superposition — what single op makes q1 agree with it?")
-            return {"message": msg, "check_question": "what links them?",
-                    "confidence": 0.8, "grasped": ["superposition"], "shaky": ["entanglement"]}
+            msg = (_LEAK_MSG if self.leak else
+                   "You've read the CSV — what one number should each category collapse to?")
+            return {"message": msg, "check_question": "what summarizes a group?",
+                    "confidence": 0.8, "grasped": ["reading-csv"], "shaky": ["aggregation"]}
         if role == "self_eval":
             self._evals += 1
             needs = self.revise_once and self._evals == 1
@@ -40,12 +43,12 @@ class StubLLM:
 def _payload(pid="p_test", stance="peer"):
     return {
         "participant_id": pid,
-        "exercise": get_exercise("bell"),
+        "exercise": _EX,
         "event": "run", "mode": "study",
         "stance": stance,
-        "source": "allocate 2\nsuperpose q0\nmeasure all",
-        "result": {"ok": True, "goalMet": False, "dist": [{"bits": "00", "p": 0.5}, {"bits": "10", "p": 0.5}],
-                   "diff": "missing weight on |11⟩"},
+        "source": "import pandas as pd\ndf = pd.read_csv('data/sales.csv')",
+        "result": {"ok": True, "goalMet": False, "metric": None,
+                   "pack": {"id": "datascience", "summary": "0/1 checks passed"}},
         "recent": [], "signals": {"attempts": 2, "distanceTrend": [0.5, 0.5],
                                   "repeatedError": False, "sinceLastProgress": 2},
     }
@@ -57,12 +60,12 @@ def test_contract_shape_and_persistence():
     for k in ("affective_state", "confidence", "intervention", "planner_note",
               "self_critique", "governance", "memory", "message", "check_question", "components"):
         assert k in out, f"missing {k}"
-    assert out["memory"]["grasped"] == ["superposition"]
-    assert out["memory"]["shaky"] == ["entanglement"]
+    assert out["memory"]["grasped"] == ["reading-csv"]
+    assert out["memory"]["shaky"] == ["aggregation"]
     # one trace event written
     assert store.export_jsonl("p_test").count("\n") == 0  # exactly one line, no trailing newline
     # learner model persisted
-    assert store.get_learner_state("p_test")["grasped"] == ["superposition"]
+    assert store.get_learner_state("p_test")["grasped"] == ["reading-csv"]
 
 
 def test_refine_loop_runs():
@@ -75,7 +78,7 @@ def test_governance_strips_leak():
     store = InMemoryStore()
     out = run_turn(_payload(), StubLLM(leak=True), store)
     assert out["governance"] == "withholding_solution"
-    assert "entangle q0 q1" not in out["message"]
+    assert "groupby" not in out["message"]
     assert out["confidence"] <= 0.6
 
 
@@ -91,15 +94,11 @@ def test_peer_event_carries_stance():
 def test_control_bypasses_loop_and_emits_event():
     """control: no planner/reasoner/self_eval; trace event has stance='control'."""
     store = InMemoryStore()
-    # StubLLM would raise if any LLM role is called — pass one so any call is a test failure
     out = run_turn(_payload(pid="p_ctrl", stance="control"), StubLLM(), store)
-    # response shape is intact
     for k in ("affective_state", "confidence", "intervention", "message", "memory", "components"):
         assert k in out, f"missing {k}"
     assert out["components"]["stance"] == "control"
-    # no peer loop ran — memory is empty (no LLM concept updates)
     assert out["memory"]["grasped"] == []
-    # one trace event with stance=control
     row = json.loads(store.export_jsonl("p_ctrl"))
     assert row["stance"] == "control"
     assert row["payload"]["stance"] == "control"

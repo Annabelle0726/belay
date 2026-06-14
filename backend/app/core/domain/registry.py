@@ -13,8 +13,8 @@ from typing import Callable, Dict, Optional
 
 from .pack import DomainPack
 
-# Default pack id while quantum remains the active pack (Phase 1a).
-DEFAULT_PACK = "quantum"
+# Active pack default. Flipped to data-science in Phase 1c; quantum is removed in 1d.
+DEFAULT_PACK = "datascience"
 
 
 def _load_quantum() -> DomainPack:

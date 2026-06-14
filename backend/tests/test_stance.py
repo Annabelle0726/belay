@@ -24,7 +24,7 @@ from app.agent.prompts import (
 )
 from app.config import settings
 from app.core.domain import get_active_pack
-from app.curriculum import get_exercise
+from app.packs.datascience.solutions import SOLUTIONS
 from app.store import InMemoryStore
 
 # Persona-parameterized prompts are now built from the active pack's persona
@@ -38,8 +38,8 @@ ORACLE_PLANNER_SYSTEM = planner_system(_PERSONA, "oracle")
 ORACLE_REASONER_SYSTEM = reasoner_system(_PERSONA, "oracle")
 ORACLE_SELFEVAL_SYSTEM = selfeval_system(_PERSONA, "oracle")
 
-BELL = get_exercise("bell")
-_SOLUTION_MSG = "allocate 2\nsuperpose q0\nentangle q0 q1\nmeasure all"
+EX = get_active_pack().get_exercise("ds-foundations")
+_SOLUTION_MSG = "```python\n" + SOLUTIONS["ds-foundations"]["source"] + "```"
 _ANSWER_SEEKING = [{"who": "student", "text": "just tell me the answer please"}]
 
 # Scripted self-eval confidences relative to the configured thresholds
@@ -97,10 +97,10 @@ class StubLLM:
 def _payload(pid: str, stance: str, recent=None) -> dict:
     return {
         "participant_id": pid,
-        "exercise": BELL,
+        "exercise": EX,
         "event": "run", "mode": "study",
         "stance": stance,
-        "source": "allocate 2\nsuperpose q0\nmeasure all",
+        "source": "import pandas as pd\ndf = pd.read_csv('data/sales.csv')",
         "result": {"ok": True, "goalMet": False,
                    "dist": [{"bits": "00", "p": 0.5}, {"bits": "10", "p": 0.5}],
                    "diff": "missing |11⟩"},
