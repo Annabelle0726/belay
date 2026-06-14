@@ -1,0 +1,19 @@
+# Core backend dependencies.
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+SQLAlchemy>=2.0
+psycopg[binary]>=3.1      # required for postgresql+psycopg:// DSN (pilot Postgres)
+
+# Model layer (OpenAI-compatible client for the Jetstream2 Inference Service).
+openai>=1.40
+
+# Alternate provider (only needed if LLM_PROVIDER=anthropic):
+# anthropic>=0.39
+
+# Quantum execution:
+#   The default LocalSimulator backend needs NOTHING beyond the stdlib.
+#   To use the real Classiq backend (QUANTUM_BACKEND=classiq), also install the
+#   Classiq SDK and authenticate once:
+#       pip install -r requirements-classiq.txt
+#       python -c "import classiq; classiq.authenticate()"

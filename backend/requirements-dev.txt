@@ -1,0 +1,14 @@
+# Dev / test dependencies. Install alongside the runtime deps:
+#   pip install -r requirements.txt -r requirements-dev.txt
+#
+# Always invoke the suite as `python -m pytest` so it runs in THIS environment's
+# interpreter. A bare `pytest` can resolve to another Python on PATH (e.g. a
+# conda base) that lacks SQLAlchemy and the other runtime deps.
+
+pytest>=8.0
+
+# Only needed to run the behavioral evals (RUN_LLM_EVALS=1) against the Anthropic
+# provider, or for an Anthropic ceiling comparison. The default Jetstream2 path
+# uses the `openai` client already declared in requirements.txt, so this is
+# optional for the core suite.
+anthropic>=0.39

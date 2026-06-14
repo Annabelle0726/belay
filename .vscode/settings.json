@@ -1,0 +1,6 @@
+{
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestArgs": ["backend/tests"],
+  "python.analysis.extraPaths": ["backend"],
+  "files.exclude": { "**/__pycache__": true, "**/*.pyc": true }
+}

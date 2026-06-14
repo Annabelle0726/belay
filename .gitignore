@@ -1,0 +1,41 @@
+# --- Secrets & local config -------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# --- Python -----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# --- Local databases / research trace (never commit participant data) -------
+*.db
+*.sqlite
+*.sqlite3
+*.jsonl
+data/
+exports/
+
+# --- Node / frontend build --------------------------------------------------
+node_modules/
+dist/
+build/
+.vite/
+
+# --- Editor / OS ------------------------------------------------------------
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+.DS_Store
+*.swp
+
+# --- Claude ------------------------------------------------------------------
+.claude/

@@ -1,0 +1,133 @@
+"""
+FastAPI surface for the Quantum Inventioneers peer-tutor MVP.
+
+Routes
+  GET  /healthz                          liveness
+  GET  /api/curriculum                   modules + exercises
+  POST /api/run                          compile + execute + grade; logs a run event
+  POST /api/sol/turn                     the evaluation-first peer loop
+  POST /api/participant                  create/record consent (anonymized)
+  GET  /api/session/{pid}/events.jsonl   export the §6 trace for analysis
+
+The quantum backend (local|classiq), store (memory|sql), and LLM client are
+selected from config so the same app runs offline for dev or wired to the real
+platform for a pilot.
+
+Consent gating (DMP §3 / IRB)
+  Every participant gets a durable Participant row regardless of consent.
+  Events + LearnerState are routed via ConsentRouter:
+    consent=True  → durable SqlStore (persists across restarts)
+    consent=False → per-session ephemeral InMemoryStore (never persisted)
+    unregistered  → ephemeral (fail-safe)
+  The trace export reads ONLY the durable store; tutoring behaviour is
+  byte-for-byte identical regardless of consent.
+"""
+from __future__ import annotations
+
+import uuid
+
+from fastapi import FastAPI, HTTPException, Response
+from fastapi.middleware.cors import CORSMiddleware
+
+from .agent import get_llm, run_turn
+from .config import settings
+from .curriculum import curriculum, get_exercise
+from .quantum import compile_and_run, get_backend
+from .schemas import (
+    ParticipantRequest,
+    ParticipantResponse,
+    RunRequest,
+    RunResult,
+    SolTurnRequest,
+    SolTurnResponse,
+)
+from .store import ConsentRouter, InMemoryStore, SqlStore, make_event
+
+app = FastAPI(title="Quantum Inventioneers — Peer Tutor MVP", version="0.1.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- wiring (swappable via env) ----------------------------------------------
+_durable = SqlStore() if settings.store_backend == "sql" else InMemoryStore()
+_router  = ConsentRouter(_durable)
+_quantum = get_backend(settings.quantum_backend)
+
+
+def _llm():
+    # Constructed per-process lazily; uses the configured provider
+    # (Jetstream2 inference by default). Raises a clear error if unreachable.
+    if not hasattr(_llm, "_inst"):
+        _llm._inst = get_llm()  # type: ignore[attr-defined]
+    return _llm._inst  # type: ignore[attr-defined]
+
+
+@app.get("/healthz")
+def healthz():
+    return {"ok": True, "quantum_backend": _quantum.name, "store": settings.store_backend}
+
+
+@app.get("/api/curriculum")
+def get_curriculum():
+    return curriculum()
+
+
+@app.post("/api/run", response_model=RunResult)
+def run(req: RunRequest):
+    try:
+        ex = get_exercise(req.exercise_id)
+    except KeyError:
+        raise HTTPException(404, f"unknown exercise: {req.exercise_id}")
+    result = compile_and_run(req.source, ex["target"], ex["tol"], _quantum)
+    # Route the trace event to durable or ephemeral based on consent.
+    store = _router.store_for(req.participant_id)
+    store.append_event(make_event(
+        req.participant_id, req.exercise_id, "study", "run",
+        {"source": req.source, "result": result},
+    ))
+    return result
+
+
+@app.post("/api/sol/turn", response_model=SolTurnResponse)
+def sol_turn(req: SolTurnRequest):
+    try:
+        ex = get_exercise(req.exercise_id)
+    except KeyError:
+        raise HTTPException(404, f"unknown exercise: {req.exercise_id}")
+    payload = {
+        "participant_id": req.participant_id,
+        "exercise": ex,
+        "event": req.event,
+        "mode": req.mode,
+        "stance": req.stance,
+        "source": req.source,
+        "result": req.result,
+        "recent": [t.model_dump() for t in req.recent],
+        "signals": req.signals,
+    }
+    # Route events + learner-state writes to durable or ephemeral by consent.
+    store = _router.store_for(req.participant_id)
+    try:
+        return run_turn(payload, _llm(), store)
+    except Exception as e:  # surface a clean error; the front-end shows a graceful note
+        raise HTTPException(502, f"tutor unavailable: {e}")
+
+
+@app.post("/api/participant", response_model=ParticipantResponse)
+def participant(req: ParticipantRequest):
+    pid = "p_" + uuid.uuid4().hex[:12]
+    # Participant row always goes to the durable store (DMP §1).
+    # register_participant also updates the in-process consent cache so the very
+    # next /api/run or /api/sol/turn in this process sees the correct routing
+    # without a round-trip to the DB.
+    _router.register_participant(pid, req.anon_code, req.consent)
+    return ParticipantResponse(id=pid, anon_code=req.anon_code, consent=req.consent)
+
+
+@app.get("/api/session/{pid}/events.jsonl")
+def export_events(pid: str):
+    # Export reads ONLY the durable store; non-consenters have no trace by design.
+    return Response(_router.durable.export_jsonl(pid), media_type="application/x-ndjson")

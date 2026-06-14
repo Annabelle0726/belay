@@ -1,0 +1,3 @@
+# Optional: only needed when QUANTUM_BACKEND=classiq.
+# Pin to the version you validated the endianness smoke test against.
+classiq>=0.86

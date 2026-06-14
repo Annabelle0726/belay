@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Quantum Inventioneers — backend dev client</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #0e1116; color: #e6e9ef;
+         font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Hanken Grotesk", sans-serif; }
+  header { padding: 14px 18px; border-bottom: 1px solid #222a35; }
+  header b { font-family: Fraunces, Georgia, serif; }
+  main { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 18px; }
+  textarea { width: 100%; height: 200px; background: #11151c; color: #d7f7e9;
+             border: 1px solid #222a35; border-radius: 8px; padding: 10px;
+             font: 13px/1.5 "JetBrains Mono", ui-monospace, monospace; resize: vertical; }
+  select, button { background: #1a212c; color: #e6e9ef; border: 1px solid #2b3543;
+                   border-radius: 8px; padding: 8px 12px; font: inherit; cursor: pointer; }
+  button:hover { border-color: #3a64ff; }
+  .card { background: #11151c; border: 1px solid #222a35; border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+  .k { color: #8b93a7; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .bar { height: 8px; background: #1a212c; border-radius: 4px; overflow: hidden; }
+  .bar > span { display: block; height: 100%; background: #5fd0c5; }
+  .row { display: flex; gap: 10px; align-items: center; margin: 6px 0; }
+  .pill { padding: 2px 8px; border-radius: 999px; background: #1a212c; border: 1px solid #2b3543; font-size: 12px; }
+  pre { white-space: pre-wrap; word-break: break-word; margin: 0; }
+  .muted { color: #8b93a7; }
+  input { background:#11151c;color:#e6e9ef;border:1px solid #222a35;border-radius:8px;padding:6px 8px;font:inherit; }
+</style>
+</head>
+<body>
+<header>
+  <b>Quantum Inventioneers</b> — backend dev client
+  <span class="muted">&nbsp;·&nbsp; proves the live loop (run → grade → Sol)</span>
+  <span style="margin-left:16px;padding:3px 10px;background:#e7a93e22;border:1px solid #e7a93e66;border-radius:6px;color:#e7a93e;font-size:12px;font-weight:600">
+    DEV ONLY — not for pilot: uses hardcoded PID, skips consent registration, omits stance
+  </span>
+</header>
+<main>
+  <section>
+    <div class="row">
+      <label class="k">Backend</label>
+      <input id="backend" value="http://localhost:8000" style="flex:1" />
+    </div>
+    <div class="row">
+      <label class="k">Exercise</label>
+      <select id="exercise"></select>
+      <label class="k">Mode</label>
+      <select id="mode"><option value="study">study</option><option value="teach">teach</option></select>
+    </div>
+    <p id="prompt" class="muted"></p>
+    <textarea id="source"></textarea>
+    <div class="row">
+      <button id="run">Synthesize &amp; Run</button>
+      <button id="ask">Ask Sol</button>
+      <span id="status" class="muted"></span>
+    </div>
+    <div class="card">
+      <div class="k">Run result</div>
+      <pre id="result" class="muted">—</pre>
+    </div>
+  </section>
+
+  <section>
+    <div class="card">
+      <div class="k">Sol</div>
+      <pre id="solmsg">—</pre>
+      <p id="solq" class="muted"></p>
+    </div>
+    <div class="card">
+      <div class="k">Glass box · the five components</div>
+      <div class="row"><span class="pill" id="affect">affect</span><span class="pill" id="interv">intervention</span></div>
+      <div class="row"><span class="k" style="width:90px">confidence</span><div class="bar" style="flex:1"><span id="confbar"></span></div><span id="conf" class="muted"></span></div>
+      <div class="row"><span class="k" style="width:90px">planner</span><span id="planner" class="muted"></span></div>
+      <div class="row"><span class="k" style="width:90px">self-eval</span><span id="selfeval" class="muted"></span></div>
+      <div class="row"><span class="k" style="width:90px">governance</span><span id="gov" class="muted"></span></div>
+      <div class="row"><span class="k" style="width:90px">memory</span><span id="mem" class="muted"></span></div>
+      <div class="row"><span class="k" style="width:90px">timings</span><span id="timings" class="muted"></span></div>
+    </div>
+  </section>
+</main>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const PID = "p_dev";  // for a real session, POST /api/participant first
+let EXERCISES = {};
+
+function base() { return $("backend").value.replace(/\/$/, ""); }
+async function jpost(path, body) {
+  const r = await fetch(base() + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(path + " -> " + r.status);
+  return r.json();
+}
+
+async function loadCurriculum() {
+  const r = await fetch(base() + "/api/curriculum");
+  const data = await r.json();
+  const sel = $("exercise"); sel.innerHTML = "";
+  data.modules.forEach((m) => m.exercises.forEach((ex) => {
+    EXERCISES[ex.id] = ex;
+    const o = document.createElement("option"); o.value = ex.id; o.textContent = ex.title; sel.appendChild(o);
+  }));
+  pick();
+}
+function pick() {
+  const ex = EXERCISES[$("exercise").value]; if (!ex) return;
+  $("prompt").textContent = ex.prompt;
+  $("source").value = ex.starter;
+}
+
+let lastResult = null;
+async function run() {
+  $("status").textContent = "running…";
+  try {
+    lastResult = await jpost("/api/run", { participant_id: PID, exercise_id: $("exercise").value, source: $("source").value });
+    $("result").textContent = lastResult.ok
+      ? `backend=${lastResult.backend}  goalMet=${lastResult.goalMet}  tvd=${(+lastResult.tvd).toFixed(3)}\n` +
+        lastResult.dist.map((d) => `${d.bits}: ${(d.p * 100).toFixed(0)}%`).join("   ") + `\n${lastResult.diff}`
+      : "error: " + lastResult.error;
+    $("status").textContent = "";
+  } catch (e) { $("status").textContent = String(e); }
+}
+
+async function ask(event) {
+  $("status").textContent = "Sol is thinking…";
+  try {
+    const out = await jpost("/api/sol/turn", {
+      participant_id: PID, exercise_id: $("exercise").value,
+      event: event || "chat", mode: $("mode").value, stance: "peer",
+      source: $("source").value, result: lastResult, recent: [],
+    });
+    $("solmsg").textContent = out.message;
+    $("solq").textContent = out.check_question ? "↳ " + out.check_question : "";
+    $("affect").textContent = out.affective_state;
+    $("interv").textContent = out.intervention;
+    const c = Math.round((out.confidence || 0) * 100);
+    $("confbar").style.width = c + "%"; $("conf").textContent = c + "%";
+    $("planner").textContent = out.planner_note;
+    const se = out.components?.self_eval || {};
+    $("selfeval").textContent = `${out.self_critique}  ·  leak_risk=${se.leak_risk}`;
+    $("gov").textContent = out.components?.governance?.prose || out.governance;
+    $("mem").textContent = `grasped: ${(out.memory.grasped || []).join(", ") || "—"}  ·  shaky: ${(out.memory.shaky || []).join(", ") || "—"}`;
+    const t = out.components?.timings_ms || {};
+    $("timings").textContent = Object.entries(t).map(([k, v]) => `${k}=${v}`).join("  ");
+    $("status").textContent = "";
+  } catch (e) { $("status").textContent = String(e); }
+}
+
+$("exercise").addEventListener("change", pick);
+$("backend").addEventListener("change", loadCurriculum);
+$("run").addEventListener("click", () => run().then(() => ask("run")));
+$("ask").addEventListener("click", () => ask("chat"));
+loadCurriculum().catch((e) => $("status").textContent = "load failed: " + e);
+</script>
+</body>
+</html>
