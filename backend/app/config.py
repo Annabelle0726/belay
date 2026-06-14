@@ -12,8 +12,9 @@ def _env(key: str, default: str) -> str:
 
 @dataclass
 class Settings:
-    # Quantum execution: "local" (offline simulator) or "classiq" (real platform).
-    quantum_backend: str = field(default_factory=lambda: _env("QUANTUM_BACKEND", "local"))
+    # Execution provider recorded in the §6 telemetry envelope (pack-agnostic).
+    # "local" = the in-house sandboxed runner; reserved for future hosted runners.
+    provider: str = field(default_factory=lambda: _env("PROVIDER", "local"))
 
     # --- Model layer -------------------------------------------------------
     # Provider: "jetstream" (the JS2 Inference Service, OpenAI-compatible) or

@@ -202,7 +202,15 @@ delegates to the pack's parse-only `program_signature`. Export contract unchange
 
 ---
 
-## (d) Deletion list — **execute in Phase 1, NOT now**
+## (d) Deletion list — **EXECUTED in Phase 1d** ✅
+
+> Phases 1b–1d are complete. 1b built `core/runner` + `packs/datascience` +
+> `packs/_skeleton` with quantum still active; 1c flipped `TUTOR_PACK=datascience`
+> and refixtured the suite/evals onto DS (adding `tests/test_import_boundaries.py`);
+> 1d executed the deletions below. Final suite: `228 passed, 11 skipped` with
+> datascience active and quantum gone. The `QUANTUM_BACKEND` config key became the
+> pack-agnostic `PROVIDER`; the registry dropped its `quantum` factory; the
+> import-boundary tripwire keeps Classiq/quantum/`packs.*` out of core.
 
 1. **`backend/app/quantum/` in full:** `simulator.py`, `functional_model.py`,
    `classiq_backend.py`, `backend.py`, `leak_check.py`, `worked_example.py`,

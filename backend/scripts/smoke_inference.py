@@ -38,17 +38,13 @@ from app.agent import reasoner as reasoner_mod
 from app.agent import self_eval as selfeval_mod
 from app.agent.context import build_context, serialize
 from app.agent.llm import OpenAICompatLLM, get_llm, parse_json
-from app.agent.prompts import (
-    PLANNER_SYSTEM, REASONER_SYSTEM, SELFEVAL_SYSTEM,
-    ORACLE_REASONER_SYSTEM,
-)
 from app.config import settings
-from app.curriculum import get_exercise
+from app.core.domain import get_active_pack
 from app.store import InMemoryStore
 
 # ── sample turn fixture ───────────────────────────────────────────────────────
 
-BELL = get_exercise("bell")
+BELL = get_active_pack().get_exercise("ds-foundations")
 
 _SAMPLE_PAYLOAD = {
     "participant_id": "smoke_inf",

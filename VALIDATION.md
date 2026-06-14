@@ -141,6 +141,29 @@ To run with quantum instead (while it still exists in 1c): `TUTOR_PACK=quantum p
 
 ---
 
+## Extraction status (Phase 1d) — quantum removed
+
+Phase 1d executes the EXTRACTION_PLAN §(d) deletion list now that DS proves the
+seam. **Suite `228 passed, 11 skipped`** (`cd backend && python -m pytest`).
+
+Deleted: `backend/app/quantum/` (simulator, functional_model, classiq_backend,
+backend, leak_check, worked_example, pack), `backend/app/curriculum/`
+(content/concepts/misconceptions), the quantum-internal tests
+`test_simulator.py` + `test_functional_model.py`, `backend/requirements-classiq.txt`,
+and `frontend/quantum-inventioneers-peer-tutor.jsx`.
+
+De-quantumed config: the `QUANTUM_BACKEND` key became the pack-agnostic
+`PROVIDER` (`settings.provider`, default `local`), recorded in the §6 telemetry
+`provider` field. The registry no longer has a `quantum` factory.
+
+Tripwires kept: `tests/test_import_boundaries.py` still fails the suite if any
+core/pack module imports Classiq, `packs.*` (module-level), or `quantum`.
+
+Only `datascience` and `_skeleton` packs remain. `TUTOR_PACK=quantum` now raises
+a clear "unknown TUTOR_PACK" error.
+
+---
+
 ## 0. Environment (once) 🟢
 
 Use the project venv, and **always invoke the suite as `python -m pytest`** — a bare
@@ -165,11 +188,12 @@ No network, no DB, no key. This is the gate `main` must always pass.
 cd backend && python -m pytest
 ```
 
-**Expected (Phase 1c, datascience active): `240 passed, 11 skipped`** (the 11
-skips are the DS behavioral evals, gated by `RUN_LLM_EVALS`, see §3). The count
-tracks the active pack and refixturing — see the per-phase "Extraction status"
-sections above for the current expected number. Per-module counts (the original
-quantum-era table below is historical; Phase 1b additions follow it):
+**Expected (Phase 1d, datascience active, quantum removed): `228 passed, 11
+skipped`** (the 11 skips are the DS behavioral evals, gated by `RUN_LLM_EVALS`,
+see §3). The drop from 240 (1c) is the two deleted quantum-internal modules
+`test_simulator.py` + `test_functional_model.py` (12). The original quantum-era
+per-module table below is **historical** (those modules no longer exist); the
+Phase 1b additions follow it.
 
 | Module | Tests | Covers | Phase 1 |
 |---|---|---|---|
@@ -290,20 +314,20 @@ Requires `LearnerState.concepts` column — see schema migration note in §2.
 
 ---
 
-## 4. Quantum platform — Classiq backend 🔴
+## 4. Execution sandbox — `core/runner` 🟢
 
-Needs a Classiq account. *(TODO: add `backend/scripts/smoke_classiq.py`; until then,
-validate via the run endpoint.)*
+The active pack (datascience) runs untrusted student code through `core/runner`
+(subprocess, isolated temp cwd, CPU + wall limits, network made unreachable). The
+former quantum/Classiq platform section is removed (quantum deleted in Phase 1d).
 
 ```bash
-pip install -r backend/requirements-classiq.txt
-python -c "import classiq; classiq.authenticate()"     # once
-
-# run a Bell exercise with the real backend and inspect the distribution:
-QUANTUM_BACKEND=classiq uvicorn app.main:app --reload   # (from backend/)
-# Endianness check: if |01⟩/|10⟩ appear where |00⟩/|11⟩ are expected, flip
-# REVERSE_BITS in backend/app/quantum/classiq_backend.py and re-run.
+cd backend && python -m pytest tests/test_runner_sandbox.py    # 7 passed
 ```
+
+Threat model is documented in the `app/core/runner` module docstring and the
+Phase 1b status section above: a resource/network/isolation boundary, not
+adversarial containment; the containerized runner is the roadmap convergence
+point with Quad's ephemeral sandboxed graders.
 
 ---
 

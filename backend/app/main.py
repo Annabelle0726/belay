@@ -1,5 +1,5 @@
 """
-FastAPI surface for the Quantum Inventioneers peer-tutor MVP.
+FastAPI surface for the peer-tutor framework.
 
 Routes
   GET  /healthz                          liveness
@@ -9,7 +9,7 @@ Routes
   POST /api/participant                  create/record consent (anonymized)
   GET  /api/session/{pid}/events.jsonl   export the §6 trace for analysis
 
-The quantum backend (local|classiq), store (memory|sql), and LLM client are
+The active domain pack (TUTOR_PACK), store (memory|sql), and LLM client are
 selected from config so the same app runs offline for dev or wired to the real
 platform for a pilot.
 
@@ -42,7 +42,7 @@ from .schemas import (
 )
 from .store import ConsentRouter, InMemoryStore, SqlStore, make_event
 
-app = FastAPI(title="Quantum Inventioneers — Peer Tutor MVP", version="0.1.0")
+app = FastAPI(title="Peer-Tutor Framework", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -53,7 +53,7 @@ app.add_middleware(
 # --- wiring (swappable via env) ----------------------------------------------
 _durable = SqlStore() if settings.store_backend == "sql" else InMemoryStore()
 _router  = ConsentRouter(_durable)
-_pack    = get_active_pack()   # active DomainPack (TUTOR_PACK, default quantum)
+_pack    = get_active_pack()   # active DomainPack (TUTOR_PACK, default datascience)
 
 
 def _llm():
@@ -66,7 +66,7 @@ def _llm():
 
 @app.get("/healthz")
 def healthz():
-    return {"ok": True, "pack": _pack.id, "provider": settings.quantum_backend,
+    return {"ok": True, "pack": _pack.id, "provider": settings.provider,
             "store": settings.store_backend}
 
 

@@ -34,8 +34,7 @@ from app.analysis.measures import (
     compute_calibration_pairs,
     ece,
 )
-from app.curriculum import get_exercise
-from app.quantum.backend import LocalSimulator
+from app.core.domain import get_active_pack
 
 _CALIB_FIELDS = [
     "participant_id", "exercise_id", "turn_index",
@@ -72,7 +71,8 @@ def main(argv=None) -> None:
     args = parser.parse_args(argv)
 
     os.makedirs(args.output_dir, exist_ok=True)
-    sim = LocalSimulator()
+    sim = None   # pack grader is deterministic; measures no longer needs a simulator
+    pack = get_active_pack()
 
     events = _load_events(args.trace)
     groups = _group_events(events)
@@ -82,9 +82,9 @@ def main(argv=None) -> None:
 
     for (pid, eid), grp in sorted(groups.items()):
         try:
-            ex_meta = get_exercise(eid)
+            ex_meta = pack.get_exercise(eid)
         except KeyError:
-            # Skip exercises not in the curriculum (e.g. retired IDs)
+            # Skip exercises not in the active pack's curriculum (e.g. retired IDs)
             continue
 
         row = compute_attempt_measures(pid, eid, grp, ex_meta, sim, args.window)

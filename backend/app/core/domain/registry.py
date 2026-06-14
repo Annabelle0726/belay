@@ -2,7 +2,7 @@
 Active-pack registry/loader.
 
 Selects the active `DomainPack` from configuration (``TUTOR_PACK``, default
-``quantum``). The concrete pack is imported lazily inside the loader so that
+``datascience``). The concrete pack is imported lazily inside the loader so that
 ``core.domain`` never imports a domain at module load — keeping the dependency
 arrow pointing from packs to core, not the reverse.
 """
@@ -13,17 +13,11 @@ from typing import Callable, Dict, Optional
 
 from .pack import DomainPack
 
-# Active pack default. Flipped to data-science in Phase 1c; quantum is removed in 1d.
 DEFAULT_PACK = "datascience"
 
 
-def _load_quantum() -> DomainPack:
-    # Lazy import: avoids a core -> quantum import at module load.
-    from ...quantum.pack import QuantumPack
-    return QuantumPack()
-
-
 def _load_datascience() -> DomainPack:
+    # Lazy import: avoids a core -> packs import at module load.
     from ...packs.datascience import DataSciencePack
     return DataSciencePack()
 
@@ -35,7 +29,6 @@ def _load_skeleton() -> DomainPack:
 
 # pack id -> zero-arg factory. New packs register here.
 _FACTORIES: Dict[str, Callable[[], DomainPack]] = {
-    "quantum": _load_quantum,
     "datascience": _load_datascience,
     "_skeleton": _load_skeleton,
 }
@@ -45,7 +38,7 @@ _active_id: Optional[str] = None
 
 
 def active_pack_id() -> str:
-    """The configured active pack id (``TUTOR_PACK`` env, default ``quantum``)."""
+    """The configured active pack id (``TUTOR_PACK`` env, default ``datascience``)."""
     return os.environ.get("TUTOR_PACK", DEFAULT_PACK)
 
 

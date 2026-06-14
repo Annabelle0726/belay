@@ -98,7 +98,7 @@ def _control_turn(payload: dict, ctx: dict, store: Store,
             # §6 pack-agnostic envelope: pack id + generic execution provider
             # (replaces the former domain-specific telemetry.quantum_backend).
             "pack": pack.id,
-            "provider": settings.quantum_backend,
+            "provider": settings.provider,
             "stance": "control",
         },
     }
@@ -317,7 +317,7 @@ def run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
             # §6 pack-agnostic envelope: pack id + generic execution provider
             # (replaces the former domain-specific telemetry.quantum_backend).
             "pack": pack.id,
-            "provider": settings.quantum_backend,
+            "provider": settings.provider,
             "stance": stance,
         },
     }
