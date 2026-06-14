@@ -16,6 +16,8 @@ from __future__ import annotations
 import json
 from typing import Optional
 
+from ..core.domain import get_active_pack
+
 
 def _last_result(result: Optional[dict]) -> object:
     if not result:
@@ -23,12 +25,17 @@ def _last_result(result: Optional[dict]) -> object:
     if not result.get("ok"):
         return {"compiles": False, "error": result.get("error"), "goal_met": False,
                 "distribution": None, "mismatch": None}
+    # dist/diff moved into the namespaced result.pack envelope (§6); fall back to
+    # the legacy top-level keys so pre-envelope payloads still render.
+    pack_env = result.get("pack") or {}
+    dist = pack_env.get("dist") or result.get("dist") or []
+    diff = pack_env.get("diff") or result.get("diff")
     return {
         "compiles": True,
         "error": None,
         "goal_met": result.get("goalMet", False),
-        "distribution": [f"{d['bits']}:{round(d['p'] * 100)}%" for d in result.get("dist", [])],
-        "mismatch": result.get("diff"),
+        "distribution": [f"{d['bits']}:{round(d['p'] * 100)}%" for d in dist],
+        "mismatch": diff,
     }
 
 
@@ -41,8 +48,7 @@ def _misconceptions_context(exercise_id: str) -> dict:
     """Compact rendering for the Peer-Reasoner: expectations + terse misconception
     list (id, belief, signature, peer_move).  inventory_seed is omitted — it is
     only needed for the concept-inventory tool, not for the reasoner."""
-    from ..curriculum.misconceptions import for_exercise
-    entry = for_exercise(exercise_id)
+    entry = get_active_pack().misconceptions().for_exercise(exercise_id)
     return {
         "expectations": entry["expectations"],
         "misconceptions": [
@@ -83,11 +89,11 @@ def build_context(payload: dict, learner_state: dict, attempts: int) -> dict:
 
     # Persistent learner model: spaced follow-up (revisit) — peer/oracle only.
     if stance != "control":
-        from ..curriculum.concepts import CONCEPTS
         from . import learner_model as lm_mod
+        taxonomy = get_active_pack().taxonomy
         concepts = learner_state.get("concepts", {})
         due = lm_mod.due_review(concepts, ex.get("id", ""))
-        ctx["due_review"] = [{"id": cid, "label": CONCEPTS.get(cid, cid)} for cid in due]
+        ctx["due_review"] = [{"id": cid, "label": taxonomy.label(cid)} for cid in due]
         shaky_cids = [cid for cid, v in concepts.items() if v.get("state") == "shaky"]
         grasped_cids = [cid for cid, v in concepts.items() if v.get("state") == "grasped"]
         ctx["concept_model"] = {"n_shaky": len(shaky_cids), "n_grasped": len(grasped_cids)}

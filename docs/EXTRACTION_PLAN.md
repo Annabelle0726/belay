@@ -168,6 +168,29 @@ store only** — non-consenting participants have no trace by design.
 > only domain-specific leakage into the schema and are renamed/generalized as part of
 > the §(d) de-quantum work, tracked as a schema note when it lands.
 
+### Schema note — v6 pack-agnostic envelope (landed in Phase 1a)
+
+The two domain-specific leaks called out above are now generalized. This is a
+**structural** change to the trace, so the schema is **versioned to v6**; the
+export contract (`events.jsonl`: eight-field rows, ordered by `ts`,
+`application/x-ndjson`, durable-store-only) is **unchanged**.
+
+- **`telemetry.quantum_backend` → `telemetry.provider`** (generic execution
+  provider) + added **`telemetry.pack`** (the active pack id). Sets up Phase 2's
+  provider telemetry. Written at `agent/orchestrator.py` (both the turn and the
+  control telemetry blocks).
+- **`payload.result` is now pack-agnostic at the top level** —
+  `{ ok, goalMet, tvd, error, pack }` — with all domain-specific fields moved
+  into a namespaced **`result.pack`** envelope (`{ id, backend, n, gates, dist,
+  diff }` for quantum). Produced by `DomainPack.run` (quantum: `quantum/pack.py`)
+  and surfaced over HTTP by `RunResult` (`schemas.py`). Readers that consumed the
+  old top-level `dist`/`diff` (`analysis/measures._fail_sig`,
+  `agent/context._last_result`) read `result.pack` first and **fall back** to the
+  legacy top-level keys, so pre-v6 traces still parse.
+- This stable, per-pack-invariant envelope is the AWS benchmark portability
+  asset: a consumer reads the fixed top level and may inspect `result.pack`
+  generically without the schema churning per domain.
+
 ---
 
 ## (d) Deletion list — **execute in Phase 1, NOT now**
@@ -239,3 +262,76 @@ store only** — non-consenting participants have no trace by design.
     carries the smoke/extract scripts. **Resolution:** `make_clean_archive.sh` is
     domain-neutral (keep); `smoke_sql*`/`smoke_inference`/`extract_measures` are
     revisited in Phase 1 alongside their subsystems.
+
+---
+
+## (f) Phase 1a — core domain seam (executed; quantum stays the active pack)
+
+Phase 1a creates the `core/domain` seam and **inverts** the quantum dependency so
+core components depend on interfaces, not on `quantum/*` or a concrete curriculum
+module. **No quantum code is deleted**; quantum is adapted in place to implement
+the seam and remains the active pack (`TUTOR_PACK`, default `quantum`). Suite
+stays green (`221 passed, 11 skipped`).
+
+**New module — `backend/app/core/domain/`:**
+- `types.py` — `PersonaSpec`, `Concept`, `Taxonomy` (a `Sequence[Concept]` plus
+  exercise→concept / misconception→concept / prereq edges), `Exercise`, `Module`,
+  `RunResult`, `WorkedExample`, `VerifyResult`, `LeakEvidence`, `Passage`.
+- `pack.py` — `DomainPack`, `KnowledgeBase`, `MisconceptionLibrary` protocols.
+- `registry.py` — `get_active_pack()` / `active_pack_id()` selecting the pack from
+  `TUTOR_PACK` (default `quantum`); lazy-imports the concrete pack so `core` never
+  imports a domain at module load.
+
+**`DomainPack` interface (as implemented):** `id`, `persona: PersonaSpec`,
+`taxonomy: Taxonomy`, `curriculum()`, `get_exercise(id)`, `run(source, exercise)
+-> RunResult`, `verify_worked_example(worked_example, exercise) -> VerifyResult`,
+`misconceptions() -> MisconceptionLibrary`, `leak_evidence(draft, exercise) ->
+LeakEvidence`, `knowledge() -> KnowledgeBase | None`.
+- Two faithful adaptations of the brief's protocol sketch: `verify_worked_example`
+  also takes the current `exercise` (the non-leak / prediction checks are defined
+  relative to it), and `get_exercise` is added (the HTTP edge needs single-exercise
+  lookup through the pack).
+
+**Five consumers re-homed onto the interface** (each now obtains the active pack
+via `get_active_pack()`; none import `quantum/*` or `curriculum/*`):
+- `agent/governance.py` — leak gate consumes `pack.leak_evidence`; decision is core.
+- `agent/orchestrator.py` — worked-example verify via `pack.verify_worked_example`;
+  telemetry envelope (pack/provider).
+- `analysis/measures.py` — `realized_handoff` via `pack.leak_evidence`;
+  `nontrivial_revision` via `pack.run` (compiled-program comparison); no quantum import.
+- `agent/learner_model.py` — taxonomy edges via `pack.taxonomy` (`update_concepts`
+  / `due_review` take an optional `taxonomy`, default active pack).
+- `agent/context.py` — misconceptions via `pack.misconceptions()`; concept labels +
+  `due_review` via `pack.taxonomy`.
+- (`agent/main.py` HTTP edge also re-homed onto the pack — curriculum / run /
+  get_exercise — though it is not one of the five "core" consumers.)
+
+**KnowledgeBase seam (declared, not built):** `search(query, k) -> [Passage]`;
+`Passage` carries text + source citation + locator. Its docstring fixes the
+load-bearing contract: **governance treats exercise solutions as leak-gated
+regardless of whether they arrive via generation or retrieval.** No retrieval is
+implemented; quantum's `knowledge()` returns `None`.
+
+**Persona injection:** `SOL_STANCE` / `ORACLE_STANCE` and the "Quantum Software
+Engineering" wording moved out of `agent/prompts.py` into `QUANTUM_PERSONA`
+(`quantum/pack.py`). Core prompts are now persona-parameterized builders
+(`planner_system` / `reasoner_system` / `selfeval_system`). The persona `id`
+("sol") is the value formerly hardcoded in `schemas.py` (`DialogueTurn.who`),
+now supplied through the seam.
+
+### 1b gap to close — prose-leak heuristics
+
+**Finding:** the quantum leak evidence is **executable-comparison-only**.
+`quantum/leak_check.py` extracts candidate snippets (markdown fences + runs of ≥2
+functional-model op lines) and runs them through the grader (`is_goal_meeting`);
+there are **no domain-agnostic prose-leak heuristics** (no "the answer is …"
+detector). The only generic prose heuristic in core governance is the
+**answer-seeking** detector, which inspects the *student's* message, not the draft.
+
+**Consequence for 1b:** core governance therefore has **no prose-leak heuristics**
+to inherit. Running a pandas draft through the data-science grader will catch
+*executable* leaks but **not a prose disclosure** of the answer (e.g. stating the
+result in words, or pasting a non-executable but answer-revealing line). The 1b
+data-science pack (and/or core governance) must add prose-leak heuristics —
+likely surfaced as additional `LeakEvidence` signals — and the retrieval seam's
+load-bearing contract above must be enforced once a `KnowledgeBase` is built.

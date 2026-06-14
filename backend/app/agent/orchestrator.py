@@ -40,7 +40,7 @@ from __future__ import annotations
 import time
 
 from ..config import settings
-from ..quantum.worked_example import verify_worked_example
+from ..core.domain import get_active_pack
 from ..store import Store, make_event
 from . import governance, memory, planner, reasoner, self_eval
 from .context import build_context
@@ -57,7 +57,7 @@ _GOV_PROSE = {
 
 
 def _control_turn(payload: dict, ctx: dict, store: Store,
-                  pid: str, exercise: dict, mode: str) -> dict:
+                  pid: str, exercise: dict, mode: str, pack) -> dict:
     """Bypass the peer loop for the control condition.
 
     No planner/reasoner/self_eval calls are made. A fixed support message is
@@ -95,7 +95,10 @@ def _control_turn(payload: dict, ctx: dict, store: Store,
             "learner_model": None,
             "timings_ms": {},
             "model_tiers": settings.model_tiers,
-            "quantum_backend": settings.quantum_backend,
+            # §6 pack-agnostic envelope: pack id + generic execution provider
+            # (replaces the former domain-specific telemetry.quantum_backend).
+            "pack": pack.id,
+            "provider": settings.quantum_backend,
             "stance": "control",
         },
     }
@@ -132,13 +135,14 @@ def run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
     mode = payload.get("mode", "study")
     stance = payload.get("stance", "peer")
 
+    pack = get_active_pack()
     learner = store.get_learner_state(pid)
     attempts = store.attempts(pid, exercise["id"])
     ctx = build_context(payload, learner, attempts)
     ctx["_exercise_full"] = exercise  # governance grades against the real target
 
     if stance == "control":
-        return _control_turn(payload, ctx, store, pid, exercise, mode)
+        return _control_turn(payload, ctx, store, pid, exercise, mode, pack)
 
     timings: dict[str, float] = {}
 
@@ -186,9 +190,7 @@ def run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
     # (verify_worked_example reuses is_goal_meeting), so it always passes the gate.
     we_telemetry = None
     if plan.get("intervention") == "worked_analogy" and draft.get("worked_example"):
-        _tol = exercise.get("tol", 0.07)
-        we = verify_worked_example(draft["worked_example"],
-                                   exercise["target"], _tol)
+        we = pack.verify_worked_example(draft["worked_example"], exercise)
         retries = 0
         while not we["ok"] and retries < settings.max_worked_example_retry:
             draft = reasoner.respond(
@@ -201,9 +203,7 @@ def run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
                 stance=stance, reasoning_effort=reasoning_effort,
             )
             evaluation = self_eval.evaluate(ctx, plan, draft, llm, stance=stance)
-            we = verify_worked_example(
-                draft.get("worked_example") or {}, exercise["target"], _tol
-            )
+            we = pack.verify_worked_example(draft.get("worked_example") or {}, exercise)
             retries += 1
         if we["ok"]:
             src = draft["worked_example"]["source"].strip()
@@ -314,7 +314,10 @@ def run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
             "learner_model": lm_telemetry,
             "timings_ms": timings,
             "model_tiers": settings.model_tiers,
-            "quantum_backend": settings.quantum_backend,
+            # §6 pack-agnostic envelope: pack id + generic execution provider
+            # (replaces the former domain-specific telemetry.quantum_backend).
+            "pack": pack.id,
+            "provider": settings.quantum_backend,
             "stance": stance,
         },
     }

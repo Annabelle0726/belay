@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 
 class DialogueTurn(BaseModel):
-    who: str  # "student" | "sol"
+    who: str  # "student" | the active pack's persona id (e.g. "sol"), supplied through the seam
     text: str
 
 
@@ -18,21 +18,20 @@ class RunRequest(BaseModel):
     source: str
 
 
-class DistPoint(BaseModel):
-    bits: str
-    p: float
-
-
 class RunResult(BaseModel):
+    """Pack-agnostic run-result envelope (§6 schema v6).
+
+    Top level is domain-independent so the §6 trace schema is stable across
+    packs; all domain-specific result data (e.g. quantum backend / gates / dist /
+    diff) lives in the namespaced ``pack`` envelope.
+    """
+    model_config = {"extra": "allow"}
+
     ok: bool
-    backend: Optional[str] = None
-    n: Optional[int] = None
-    gates: Optional[List[dict]] = None
-    dist: Optional[List[DistPoint]] = None
     goalMet: Optional[bool] = None
-    diff: Optional[str] = None
     tvd: Optional[float] = None
     error: Optional[str] = None
+    pack: Optional[dict] = None   # {"id": <pack id>, ...domain-specific fields}
 
 
 class SolTurnRequest(BaseModel):

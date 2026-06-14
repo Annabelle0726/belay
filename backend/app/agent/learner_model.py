@@ -22,7 +22,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from ..curriculum.concepts import MISCONCEPTION_CONCEPT, concept_for_exercise, relevant_concepts
+from ..core.domain import get_active_pack
 
 
 def _now_iso() -> str:
@@ -48,6 +48,7 @@ def update_concepts(
     repeated_error: bool,
     now: Optional[str] = None,
     revisit_concept: Optional[str] = None,
+    taxonomy=None,
 ) -> dict:
     """Return an updated concepts dict (does not mutate prev).
 
@@ -62,9 +63,11 @@ def update_concepts(
     """
     if now is None:
         now = _now_iso()
+    if taxonomy is None:
+        taxonomy = get_active_pack().taxonomy
 
     concepts = {k: dict(v) for k, v in prev.items()}
-    own_cid = concept_for_exercise(exercise_id)
+    own_cid = taxonomy.concept_for_exercise(exercise_id)
     goal_met = isinstance(result, dict) and bool(
         result.get("goal_met") or result.get("goalMet")
     )
@@ -82,7 +85,7 @@ def update_concepts(
 
     # 3. Misconception → shaky (unless firmly grasped).
     if misconception_id:
-        mcid = MISCONCEPTION_CONCEPT.get(misconception_id)
+        mcid = taxonomy.concept_for_misconception(misconception_id)
         if mcid:
             entry = dict(concepts.get(mcid, _default_entry(now)))
             firmly_grasped = (
@@ -115,15 +118,17 @@ def update_concepts(
     return concepts
 
 
-def due_review(concepts: dict, exercise_id: str) -> List[str]:
+def due_review(concepts: dict, exercise_id: str, taxonomy=None) -> List[str]:
     """Concept ids that are due for a spaced revisit on this exercise.
 
     A concept is due iff:
       - state == "shaky"
-      - it is in relevant_concepts(exercise_id)  (it matters here)
+      - it is in taxonomy.relevant_concepts(exercise_id)  (it matters here)
       - last_review_ex != exercise_id            (not already revisited on this exercise)
     """
-    rel = relevant_concepts(exercise_id)
+    if taxonomy is None:
+        taxonomy = get_active_pack().taxonomy
+    rel = taxonomy.relevant_concepts(exercise_id)
     result = []
     for cid in rel:
         entry = concepts.get(cid)

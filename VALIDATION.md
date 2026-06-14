@@ -26,6 +26,33 @@ and the Classiq config keys.
 
 ---
 
+## Extraction status (Phase 1a) — core domain seam
+
+Phase 1a introduced `backend/app/core/domain/` (the `DomainPack` / `KnowledgeBase`
+seam + the `TUTOR_PACK` registry) and **inverted** the quantum dependency: the
+five core consumers (`agent/governance`, `agent/orchestrator`, `analysis/measures`,
+`agent/learner_model`, `agent/context`) now depend on the seam, not on `quantum/*`
+or `curriculum/*`. **No quantum code was deleted**; quantum is adapted in place
+(`quantum/pack.py`) and stays the active pack. The persona text moved out of core
+`agent/prompts.py` into `QUANTUM_PERSONA`; core prompts are now persona-parameterized
+builders. The §6 result/telemetry envelope was generalized (schema **v6**; see
+`docs/EXTRACTION_PLAN.md` §(c) schema note).
+
+The offline suite is **unchanged at `221 passed, 11 skipped`** — the inversion is
+behavior-preserving with quantum active. Validated by the same gate as §1:
+```bash
+cd backend && python -m pytest        # 221 passed, 11 skipped
+```
+- New env var **`TUTOR_PACK`** (default `quantum`) — selects the active pack; see
+  `.env.example`. Set it to switch packs once a second pack exists (1b).
+- `tests/test_stance.py` was re-based to compose its stance-prompt assertions from
+  the active pack's persona via the new `planner_system` / `reasoner_system` /
+  `selfeval_system` builders (same 29 tests).
+- The seam itself has no dedicated test module yet; it is exercised through the
+  existing suite (governance, stance, measures, learner-model, misconceptions).
+
+---
+
 ## 0. Environment (once) 🟢
 
 Use the project venv, and **always invoke the suite as `python -m pytest`** — a bare

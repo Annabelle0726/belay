@@ -37,7 +37,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Tuple
 
-from ..quantum.leak_check import is_goal_meeting
+from ..core.domain import get_active_pack
 
 # ── constants -----------------------------------------------------------------
 GOAL_TOL = 0.07          # matches every exercise's tol
@@ -89,20 +89,33 @@ def _linear_slope(values: List[float]) -> Optional[float]:
 
 # ── op-level revision (§5) ---------------------------------------------------
 
-def _ops(source: str) -> List[dict]:
-    """Parse source → gate list; [] on parse error (treated as no-op)."""
-    from ..quantum.functional_model import synthesize
-    r = synthesize(source)
-    return r["gates"] if r.get("ok") else []
+# Target-free exercise stub: revision is a structural comparison of the compiled
+# program, independent of any grading goal.
+_NO_GOAL = {"target": {}, "tol": 1.0}
 
 
-def nontrivial_revision(src_a: str, src_b: str) -> bool:
-    """True iff the parsed op/gate sequence differs between two submissions.
+def _program(source: str, pack=None) -> object:
+    """Compile source → the pack's normalized program (gate list), through the
+    domain runner interface; None on a compile error (treated as no-op).
 
-    Ignores whitespace, comments, and capitalisation because synthesize() strips
-    those before producing the gate list.
+    Domain-agnostic: the structural fingerprint comes from the active pack's
+    `run`, not by importing a concrete compiler.
     """
-    return _ops(src_a) != _ops(src_b)
+    pack = pack or get_active_pack()
+    r = pack.run(source, _NO_GOAL)
+    if not r.get("ok"):
+        return None
+    return (r.get("pack") or {}).get("gates")
+
+
+def nontrivial_revision(src_a: str, src_b: str, pack=None) -> bool:
+    """True iff the compiled program differs between two submissions.
+
+    Ignores whitespace, comments, and capitalisation because the pack's compiler
+    strips those before producing the program representation.
+    """
+    pack = pack or get_active_pack()
+    return _program(src_a, pack) != _program(src_b, pack)
 
 
 # ── per-turn field accessors --------------------------------------------------
@@ -138,15 +151,17 @@ def _tp(turn_event: dict) -> dict:
 # ── §2 hand-offs --------------------------------------------------------------
 
 def realized_handoff(turn_event: dict, target: Dict[str, float],
-                     tol: float, sim=None) -> bool:
+                     tol: float, sim=None, pack=None) -> bool:
     """True iff the code in final_message independently meets the exercise goal.
 
-    Delegates to quantum.leak_check.is_goal_meeting — the identical function
-    that governance.check() uses, so realized_handoff and withholding_solution
-    can never disagree on whether a snippet solves the exercise.
+    Delegates to the active pack's `leak_evidence` — the identical executable
+    oracle governance.check() uses — so realized_handoff and withholding_solution
+    can never disagree on whether a snippet solves the exercise. (``sim`` is
+    accepted for backward compatibility; the pack's grader is deterministic.)
     """
+    pack = pack or get_active_pack()
     fm = _tp(turn_event)["final_message"]
-    return is_goal_meeting(fm, target, tol, sim)
+    return pack.leak_evidence(fm, {"target": target, "tol": tol}).is_solution
 
 
 def attempted_handoff(turn_event: dict) -> bool:
@@ -184,7 +199,9 @@ def _fail_sig(run_event: dict):
         return ("compile_error", (res.get("error") or "")[:80])
     if res.get("goalMet"):
         return None   # success — resets the streak
-    dist = res.get("dist") or []
+    # dist moved into the namespaced result.pack envelope (§6); fall back to the
+    # legacy top-level key so pre-envelope traces still parse.
+    dist = (res.get("pack") or {}).get("dist") or res.get("dist") or []
     sig = tuple(sorted((d["bits"], round(d["p"], 2)) for d in dist))
     return ("runtime", sig)
 

@@ -31,8 +31,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .agent import get_llm, run_turn
 from .config import settings
-from .curriculum import curriculum, get_exercise
-from .quantum import compile_and_run, get_backend
+from .core.domain import get_active_pack
 from .schemas import (
     ParticipantRequest,
     ParticipantResponse,
@@ -54,7 +53,7 @@ app.add_middleware(
 # --- wiring (swappable via env) ----------------------------------------------
 _durable = SqlStore() if settings.store_backend == "sql" else InMemoryStore()
 _router  = ConsentRouter(_durable)
-_quantum = get_backend(settings.quantum_backend)
+_pack    = get_active_pack()   # active DomainPack (TUTOR_PACK, default quantum)
 
 
 def _llm():
@@ -67,21 +66,22 @@ def _llm():
 
 @app.get("/healthz")
 def healthz():
-    return {"ok": True, "quantum_backend": _quantum.name, "store": settings.store_backend}
+    return {"ok": True, "pack": _pack.id, "provider": settings.quantum_backend,
+            "store": settings.store_backend}
 
 
 @app.get("/api/curriculum")
 def get_curriculum():
-    return curriculum()
+    return {"modules": _pack.curriculum()}
 
 
 @app.post("/api/run", response_model=RunResult)
 def run(req: RunRequest):
     try:
-        ex = get_exercise(req.exercise_id)
+        ex = _pack.get_exercise(req.exercise_id)
     except KeyError:
         raise HTTPException(404, f"unknown exercise: {req.exercise_id}")
-    result = compile_and_run(req.source, ex["target"], ex["tol"], _quantum)
+    result = _pack.run(req.source, ex)
     # Route the trace event to durable or ephemeral based on consent.
     store = _router.store_for(req.participant_id)
     store.append_event(make_event(
@@ -94,7 +94,7 @@ def run(req: RunRequest):
 @app.post("/api/sol/turn", response_model=SolTurnResponse)
 def sol_turn(req: SolTurnRequest):
     try:
-        ex = get_exercise(req.exercise_id)
+        ex = _pack.get_exercise(req.exercise_id)
     except KeyError:
         raise HTTPException(404, f"unknown exercise: {req.exercise_id}")
     payload = {
