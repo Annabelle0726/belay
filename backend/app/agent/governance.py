@@ -1,24 +1,34 @@
 """
 Governance component — the last gate before a reply reaches the student.
 
-Mostly deterministic on purpose: safety shouldn't depend on the model
-behaving. Its sharpest tool reuses our own grader — any code Sol proposes is
-run through the functional-model backend against the current exercise's target,
-and if it would actually solve the exercise, that's a full-solution leak. The
-offending snippet is stripped and the turn is flagged. This makes the HARD RULE
-("never hand over the solution") enforceable rather than merely requested.
+Mostly deterministic on purpose: safety shouldn't depend on the model behaving.
+Its sharpest tool reuses the domain's own grader — any code the tutor proposes is
+run through the active pack's executable oracle against the current exercise's
+goal, and if it would actually solve the exercise, that's a full-solution leak.
+The offending snippet is stripped and the turn is flagged. This makes the HARD
+RULE ("never hand over the solution") enforceable rather than merely requested.
+
+Pack-agnostic (Phase 1a): the block/rewrite/abstain decision lives HERE and is
+deterministic. It consumes `LeakEvidence` supplied by the active `DomainPack`
+(`pack.leak_evidence`): the executable grader is one evidence source; the
+decision is core's. The pack owns the domain-specific redaction (which surface to
+strip); core owns the peer-voiced redirect that replaces it.
+
+Note on leak heuristics: the quantum pack's leak evidence is executable-
+comparison-only (it runs candidate snippets through the grader). There are no
+domain-agnostic *prose*-leak heuristics to host in core today (no "the answer is
+X" detector) — only the answer-seeking detector below, which reads the STUDENT's
+message, not the draft. A retrieval-backed or prose-heavy pack (e.g. the 1b
+data-science pack) will need prose-leak heuristics; see EXTRACTION_PLAN §(f).
 
 Governance flags map onto the values the front-end glass box already renders:
   none | withholding_solution | redirect_answer_seeking | encourage_tone | flag_escalate
-
-The snippet extraction + goal-meeting check live in quantum/leak_check.py so
-governance and analysis/measures.py call the SAME function and can never drift.
 """
 from __future__ import annotations
 
 import re
 
-from ..quantum.leak_check import FENCE, OP_LINE, candidate_snippets, is_goal_meeting
+from ..core.domain import get_active_pack
 
 _ANSWER_SEEKING = re.compile(
     r"\b(just tell me|what'?s the answer|give me the (answer|code|solution)|"
@@ -36,7 +46,8 @@ def _student_asked_for_answer(ctx: dict) -> bool:
 
 
 def check(ctx: dict, plan: dict, draft: dict, evaluation: dict,
-          stance: str = "peer") -> dict:
+          stance: str = "peer", pack=None) -> dict:
+    pack = pack or get_active_pack()
     exercise = ctx["_exercise_full"]
     flag = "none"
     blocked = False
@@ -45,10 +56,9 @@ def check(ctx: dict, plan: dict, draft: dict, evaluation: dict,
     if plan.get("intervention") == "escalate":
         flag = "flag_escalate"
 
-    # Strong, deterministic leak check via the grader itself.
+    # Strong, deterministic leak check via the domain's executable oracle.
     # Oracle stance is explicitly allowed to hand over the solution.
-    if stance == "peer" and is_goal_meeting(
-            draft.get("message", ""), exercise["target"], exercise["tol"]):
+    if stance == "peer" and pack.leak_evidence(draft.get("message", ""), exercise).is_solution:
         blocked = True
         flag = "withholding_solution"
         reasons.append("draft contained code that solves the exercise")
@@ -64,17 +74,20 @@ def check(ctx: dict, plan: dict, draft: dict, evaluation: dict,
     return {"flag": flag, "block": blocked, "reasons": reasons}
 
 
-def safe_rewrite(draft: dict, gov: dict, exercise: dict) -> dict:
-    """Strip solution code; leave the surrounding peer prose; add a redirect."""
-    msg = draft.get("message", "")
-    msg = FENCE.sub("", msg)
-    kept = [ln for ln in msg.split("\n") if not OP_LINE.match(ln)]
-    msg = "\n".join(kept).strip()
+def safe_rewrite(draft: dict, gov: dict, exercise: dict, pack=None) -> dict:
+    """Strip solution code; leave the surrounding peer prose; add a redirect.
+
+    The domain-specific redaction comes from the pack (via `LeakEvidence`); the
+    peer-voiced redirect and the confidence cap are the core decision. Re-derives
+    the evidence from the pack (deterministic; only runs on a block).
+    """
+    pack = pack or get_active_pack()
+    msg = pack.leak_evidence(draft.get("message", ""), exercise).redacted_message
     redirect = ("Actually — I don't want to just paste the whole thing, that's the part "
                 "worth working out. What's the *one* operation you think comes next, and why?")
     draft = dict(draft)
     draft["message"] = (msg + "\n\n" + redirect).strip() if msg else redirect
     draft["check_question"] = draft.get("check_question") or "What do you think the next single step is?"
-    # If we had to suppress a solution, Sol shouldn't also claim high confidence.
+    # If we had to suppress a solution, the tutor shouldn't also claim high confidence.
     draft["confidence"] = min(float(draft.get("confidence", 0.5)), 0.6)
     return draft
