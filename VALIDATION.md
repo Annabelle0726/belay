@@ -164,6 +164,31 @@ a clear "unknown TUTOR_PACK" error.
 
 ---
 
+## Phase 2 — Workstream A: store posture (SQLite default, Postgres opt-in, dual CI)
+
+Confirm-and-formalize (the store was already SQLite-first; no migration):
+- **SQLite is the zero-config durable default.** `settings.database_url`
+  (`DATABASE_URL` env, default `sqlite:///./qimvp.db`) is now the explicit source
+  of truth; `store/db.py` reads it from config. `settings.store_is_postgres`
+  reports the mode. **No code path requires Postgres.**
+- **Postgres is opt-in** behind the same store interface — set `DATABASE_URL` to a
+  Postgres DSN (`postgresql+psycopg://user:pass@host:5432/db`).
+- **Dual CI** — `.github/workflows/ci.yml` runs the full suite on a matrix of
+  `{sqlite, postgres}`; the postgres leg starts a `postgres:16` service and sets
+  `DATABASE_URL`. Both legs must be green.
+
+Verified locally on both backends: **`228 passed, 11 skipped`** each
+(`test_sql_store.py`: 15 passed against Postgres). Reproduce the Postgres leg:
+```bash
+docker run -d --rm --name ptf_pg -e POSTGRES_USER=qi -e POSTGRES_PASSWORD=qi \
+  -e POSTGRES_DB=qimvp -p 55432:5432 postgres:16
+cd backend && DATABASE_URL=postgresql+psycopg://qi:qi@localhost:55432/qimvp python -m pytest -q
+docker stop ptf_pg
+```
+Export/import + migration tooling is out of scope (roadmap).
+
+---
+
 ## 0. Environment (once) 🟢
 
 Use the project venv, and **always invoke the suite as `python -m pytest`** — a bare

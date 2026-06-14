@@ -86,6 +86,17 @@ class Settings:
     # Persistence backend for the store: "sql" (durable) or "memory" (ephemeral).
     store_backend: str = field(default_factory=lambda: _env("STORE_BACKEND", "sql"))
 
+    # --- Durable store DSN -------------------------------------------------
+    # SQLite is the zero-config durable DEFAULT (a local file; no server). Postgres
+    # is OPT-IN behind the same store interface — set DATABASE_URL to a Postgres DSN
+    # (e.g. postgresql+psycopg://user:pass@host:5432/db). No code path requires
+    # Postgres; it is for scale, not a prerequisite (Quad §7 / SQLite-first).
+    database_url: str = field(default_factory=lambda: _env("DATABASE_URL", "sqlite:///./qimvp.db"))
+
+    @property
+    def store_is_postgres(self) -> bool:
+        return self.database_url.startswith("postgres")
+
     cors_origins: list = field(default_factory=lambda: _env(
         "CORS_ORIGINS", "http://localhost:5173,http://localhost:3000"
     ).split(","))
