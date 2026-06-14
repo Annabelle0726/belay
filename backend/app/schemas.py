@@ -22,14 +22,15 @@ class RunResult(BaseModel):
     """Pack-agnostic run-result envelope (§6 schema v6).
 
     Top level is domain-independent so the §6 trace schema is stable across
-    packs; all domain-specific result data (e.g. quantum backend / gates / dist /
-    diff) lives in the namespaced ``pack`` envelope.
+    packs; ``metric`` is the pack's primary scalar (quantum tvd; DS held-out
+    score / loss) and all other domain-specific data (gates / dist / diff /
+    checks / stdout) lives in the namespaced ``pack`` envelope.
     """
     model_config = {"extra": "allow"}
 
     ok: bool
     goalMet: Optional[bool] = None
-    tvd: Optional[float] = None
+    metric: Optional[float] = None
     error: Optional[str] = None
     pack: Optional[dict] = None   # {"id": <pack id>, ...domain-specific fields}
 

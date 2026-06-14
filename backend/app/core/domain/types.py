@@ -106,11 +106,18 @@ class Taxonomy:
         return self._misconception_concept.get(misconception_id)
 
     def relevant_concepts(self, exercise_id: str) -> FrozenSet[str]:
-        """Concept ids relevant to an exercise: its own concept + all prereqs'."""
+        """Concept ids relevant to an exercise, for spaced revisit:
+          - the exercise's own concept,
+          - that concept's direct prerequisite concepts (Concept.prereqs edges),
+          - and the concepts of the exercise's prerequisite exercises.
+        """
         cids: set[str] = set()
         own = self._exercise_concept.get(exercise_id)
         if own:
             cids.add(own)
+            own_concept = self._by_id.get(own)
+            if own_concept:
+                cids.update(own_concept.prereqs)
         for prereq in self._exercise_prereqs.get(exercise_id, []):
             pc = self._exercise_concept.get(prereq)
             if pc:
@@ -146,13 +153,22 @@ class Module(TypedDict, total=False):
 class RunResult(TypedDict, total=False):
     """Result of compiling + executing + grading a submission.
 
-    Pack-agnostic top level (``ok``/``goalMet``/``tvd``/``error``) so the §6
-    trace schema is stable across packs; all domain-specific result data lives in
-    the namespaced ``pack`` envelope (e.g. ``{"id": "quantum", "gates": ...}``).
+    Pack-agnostic top level so the §6 trace schema is stable across packs:
+      - ``ok``      — did it run / compile without error?
+      - ``goalMet`` — did it meet the exercise goal? (primary progress signal)
+      - ``metric``  — the pack's primary scalar for this exercise, or None. NOT
+                      direction-normalized across packs (quantum: tvd; DS
+                      regression: held-out score; DS MLP: final loss); it is a
+                      display/telemetry slot, not a cross-pack-comparable number.
+      - ``error``   — error string, or None.
+      - ``pack``    — namespaced domain envelope: ``{"id": <pack id>, ...}``. ALL
+                      domain-specific result data lives here (quantum tvd / gates /
+                      dist / diff; DS checks / stdout). Packs SHOULD include a
+                      human-readable ``summary`` for the tutor context.
     """
     ok: bool
     goalMet: bool
-    tvd: float            # distance-to-target (spec's "result.distance")
+    metric: Optional[float]
     error: Optional[str]
     pack: Dict[str, Any]  # {"id": <pack id>, ...domain-specific fields}
 
@@ -185,10 +201,22 @@ class LeakEvidence:
     - ``redacted_message`` — the draft with solution snippets stripped (the domain
                              knows how to strip its own surface), which core
                              governance wraps with a peer-voiced redirect.
+    - ``prose_disclosure`` — a deterministic signal that the draft's *prose*
+                             (code stripped) discloses the solution: imperative
+                             solution-giving patterns, or essential-token/answer
+                             overlap with the known solution. Added because the
+                             executable oracle catches code leaks but not a prose
+                             disclosure of the answer (EXTRACTION_PLAN §(f)). Packs
+                             without prose heuristics leave it False.
     - ``snippets``         — the candidate solution snippets found (for telemetry).
+
+    Core governance blocks on ``is_solution OR prose_disclosure`` (combined with
+    its own answer-seeking detector). Bias cautious: a false positive is a wasted
+    rewrite; a false negative is a leak.
     """
     is_solution: bool
     redacted_message: str
+    prose_disclosure: bool = False
     snippets: tuple[str, ...] = ()
 
 

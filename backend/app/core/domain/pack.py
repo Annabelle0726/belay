@@ -84,7 +84,16 @@ class DomainPack(Protocol):
     # -- runner (compile + execute + grade) ------------------------------------
     def run(self, source: str, exercise: Exercise) -> RunResult:
         """Compile, execute, and grade a submission against the exercise goal,
-        returning the pack-agnostic `RunResult` envelope."""
+        returning the pack-agnostic `RunResult` envelope. Student code MUST be
+        executed through `core/runner`, never in the main process."""
+        ...
+
+    def program_signature(self, source: str):
+        """A structural fingerprint of ``source`` for the §5 nontrivial-revision
+        measure, computed WITHOUT executing the code (parse/compile only). Two
+        sources that differ only in whitespace/comments must compare equal;
+        meaningfully different programs must compare unequal. Return None when the
+        source does not parse."""
         ...
 
     # -- worked-example verification ------------------------------------------

@@ -23,9 +23,21 @@ def _load_quantum() -> DomainPack:
     return QuantumPack()
 
 
-# pack id -> zero-arg factory. New packs (e.g. datascience in 1b) register here.
+def _load_datascience() -> DomainPack:
+    from ...packs.datascience import DataSciencePack
+    return DataSciencePack()
+
+
+def _load_skeleton() -> DomainPack:
+    from ...packs._skeleton import SkeletonPack
+    return SkeletonPack()
+
+
+# pack id -> zero-arg factory. New packs register here.
 _FACTORIES: Dict[str, Callable[[], DomainPack]] = {
     "quantum": _load_quantum,
+    "datascience": _load_datascience,
+    "_skeleton": _load_skeleton,
 }
 
 _active: Optional[DomainPack] = None

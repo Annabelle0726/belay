@@ -121,21 +121,38 @@ class QuantumPack:
             source, exercise.get("target", {}),
             exercise.get("tol", GOAL_TOL_DEFAULT), self._backend,
         )
-        # Pack-agnostic top level; quantum-specific fields under result.pack.
+        # Pack-agnostic top level; ALL quantum-specific fields (incl. tvd, the
+        # quantum primary scalar) live under result.pack.
+        dist = r.get("dist")
+        diff = r.get("diff")
+        if r.get("ok"):
+            dist_str = ", ".join(f"|{d['bits']}⟩:{round(d['p'] * 100)}%" for d in (dist or []))
+            summary = f"{diff} Distribution: {dist_str}" if diff else dist_str
+        else:
+            summary = r.get("error")
         return {
             "ok": r.get("ok", False),
             "goalMet": r.get("goalMet", False),
-            "tvd": r.get("tvd"),
+            "metric": r.get("tvd"),     # quantum primary scalar = TVD (lower better)
             "error": r.get("error"),
             "pack": {
                 "id": self.id,
                 "backend": r.get("backend"),
                 "n": r.get("n"),
                 "gates": r.get("gates"),
-                "dist": r.get("dist"),
-                "diff": r.get("diff"),
+                "dist": dist,
+                "diff": diff,
+                "tvd": r.get("tvd"),
+                "summary": summary,
             },
         }
+
+    def program_signature(self, source: str):
+        """Compiled gate list (whitespace/comment-insensitive), or None on a
+        parse error. Parse-only — no circuit is executed."""
+        from .functional_model import synthesize
+        r = synthesize(source)
+        return r["gates"] if r.get("ok") else None
 
     # -- worked-example verification ------------------------------------------
     def verify_worked_example(
@@ -173,6 +190,9 @@ class QuantumPack:
         return LeakEvidence(
             is_solution=is_solution,
             redacted_message=redacted,
+            # Quantum's oracle is executable-only; it ships no prose-leak heuristic
+            # (EXTRACTION_PLAN §(f)). The DS pack adds prose disclosure detection.
+            prose_disclosure=False,
             snippets=tuple(snippets),
         )
 

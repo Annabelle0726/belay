@@ -24,18 +24,23 @@ def _last_result(result: Optional[dict]) -> object:
         return "no run yet"
     if not result.get("ok"):
         return {"compiles": False, "error": result.get("error"), "goal_met": False,
-                "distribution": None, "mismatch": None}
-    # dist/diff moved into the namespaced result.pack envelope (§6); fall back to
-    # the legacy top-level keys so pre-envelope payloads still render.
+                "metric": None, "summary": None}
+    # Pack-agnostic (§6): the per-pack human-readable detail is in result.pack.summary
+    # (quantum: distribution + mismatch; DS: check results). Fall back to the legacy
+    # quantum dist/diff so pre-v6 payloads still render something useful.
     pack_env = result.get("pack") or {}
-    dist = pack_env.get("dist") or result.get("dist") or []
-    diff = pack_env.get("diff") or result.get("diff")
+    summary = pack_env.get("summary")
+    if summary is None and (pack_env.get("dist") or result.get("dist") or result.get("diff")):
+        dist = pack_env.get("dist") or result.get("dist") or []
+        diff = pack_env.get("diff") or result.get("diff") or ""
+        dist_str = ", ".join(f"{d['bits']}:{round(d['p'] * 100)}%" for d in dist)
+        summary = f"{diff} {dist_str}".strip()
     return {
         "compiles": True,
         "error": None,
         "goal_met": result.get("goalMet", False),
-        "distribution": [f"{d['bits']}:{round(d['p'] * 100)}%" for d in dist],
-        "mismatch": diff,
+        "metric": result.get("metric"),
+        "summary": summary,
     }
 
 

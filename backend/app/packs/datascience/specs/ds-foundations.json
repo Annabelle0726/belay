@@ -1,0 +1,8 @@
+{
+  "id": "ds-foundations",
+  "data_files": ["data/sales.csv"],
+  "checks": [
+    {"type": "var_numeric", "var": "result",
+     "expected": {"A": 15.0, "B": 40.0, "C": 100.0}, "tol": 1e-6}
+  ]
+}

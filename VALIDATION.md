@@ -53,6 +53,60 @@ cd backend && python -m pytest        # 221 passed, 11 skipped
 
 ---
 
+## Extraction status (Phase 1b) — data-science pack + runner (quantum still active)
+
+Phase 1b adds the restricted execution path and the second pack, **with quantum
+still the active pack** and the suite green.
+
+**Suite now `248 passed, 11 skipped`** (was 221/11; +27 from the three new test
+modules below). Run the same gate: `cd backend && python -m pytest`.
+
+**New pack deps:** numpy + pandas (DS grader / reference solutions; the NN
+exercise uses a numpy micro-MLP — torch is an optional extra, not required):
+```bash
+pip install -r requirements.txt -r requirements-dev.txt -r requirements-packs.txt
+```
+
+**New modules**
+- `app/core/runner/` — the single restricted execution path for student code
+  (subprocess; isolated temp workdir; CPU + wall limits; opt-in memory limit;
+  network made unreachable). **Threat model (honest):** this is a *resource,
+  network, and isolation boundary, NOT adversarial containment*. The network
+  guard is process-level (socket connect paths raise; numpy/pandas stay
+  importable), not an OS route/namespace block; memory (`RLIMIT_AS/DATA`) is
+  enforced on Linux and best-effort on macOS (BLAS virtual-memory accounting
+  makes it unreliable), so **CPU + wall are the hard stops**. The convergence
+  point and closing roadmap step is a **containerized runner** (matching Quad's
+  ephemeral sandboxed graders) adding an OS-level network namespace + FS/PID
+  isolation.
+- `app/packs/datascience/` — the "Robin" `DomainPack`: taxonomy v0 (~65 concepts,
+  7 strata, prereq edges), curriculum v0 (7 thin modules + 3 runnable exercises),
+  declarative grading specs (`specs/*.json`, format in `specs/GRADING_SPEC.md`,
+  convergent with Quad `pkg/gradingspec`), an ~18-entry misconception library,
+  and combined leak evidence (executable oracle + prose-disclosure heuristic).
+- `app/packs/_skeleton/` — dependency-free echo pack for core-only tests.
+
+**New test modules** (added to §1)
+- `tests/test_runner_sandbox.py` (7) — network blocked, wall/CPU timeout, deps
+  importable, isolated workdir + artifacts, **and the bypass test**: DS
+  `run`/`verify_worked_example`/`leak_evidence` must route ALL student code
+  through `core/runner` (spied) and never exec it in-process.
+- `tests/test_datascience_pack.py` (19) — the 3 exercises pass run + grade; leak
+  executable oracle; **prose-leak heuristic** (imperative / answer-value /
+  operation-overlap, plus a benign-hint negative); worked-example verification;
+  taxonomy edges; parse-only program signature.
+- `tests/test_domain_seam.py` (1) — the `_skeleton` pack + a stub LLM complete one
+  full orchestrated turn (core loop runs against any `DomainPack`).
+
+**§6 result genericization (finished):** top-level `payload.result` is now
+`{ok, goalMet, metric, error, pack}` — `tvd` moved into `result.pack` (quantum);
+`metric` is each pack's primary scalar (quantum tvd; DS held-out score / loss;
+None for foundations). `measures` and `context._last_result` read only
+pack-agnostic fields; `measures.nontrivial_revision` compares via the pack's
+parse-only `program_signature`. Schema stays v6; export contract unchanged.
+
+---
+
 ## 0. Environment (once) 🟢
 
 Use the project venv, and **always invoke the suite as `python -m pytest`** — a bare
@@ -61,10 +115,11 @@ Use the project venv, and **always invoke the suite as `python -m pytest`** — 
 ```bash
 cd backend
 python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
-pip install -r requirements.txt -r requirements-dev.txt
+pip install -r requirements.txt -r requirements-dev.txt -r requirements-packs.txt
 ```
 
-Sanity: `python -c "import sqlalchemy, fastapi, openai, pytest; print('deps ok')"`
+Sanity: `python -c "import sqlalchemy, fastapi, openai, pytest, numpy, pandas; print('deps ok')"`
+(`requirements-packs.txt` adds numpy + pandas for the data-science pack.)
 
 ---
 
@@ -76,9 +131,11 @@ No network, no DB, no key. This is the gate `main` must always pass.
 cd backend && python -m pytest
 ```
 
-**Expected: `221 passed, 11 skipped`** (the 11 skips are the LLM behavioral evals,
-gated by `RUN_LLM_EVALS`, see §3 — includes worked_analogy, affect-adaptive, and revisit evals).
-Confirm against the actual run and keep this current. Per-module counts:
+**Expected (Phase 1b, quantum active): `248 passed, 11 skipped`** (the 11 skips
+are the LLM behavioral evals, gated by `RUN_LLM_EVALS`, see §3). The count tracks
+the active pack and refixturing — see the per-phase "Extraction status" sections
+above for the current expected number. Per-module counts (Phase 1b additions
+listed after the original table):
 
 | Module | Tests | Covers | Phase 1 |
 |---|---|---|---|

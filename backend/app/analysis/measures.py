@@ -47,19 +47,26 @@ ECE_BINS = 10            # §4b
 
 # ── §1 progress primitives ---------------------------------------------------
 
-def _tvd(run_event: dict) -> float:
-    """TVD from a run event.
+def _metric(run_event: dict) -> float:
+    """Pack-agnostic primary scalar from a run event (§6 ``result.metric``).
 
-    Compile errors return 1.0 (the maximum TVD for any probability distribution)
-    rather than float("inf").  Using inf causes 0 * inf = nan in the linear-slope
-    sum when the very first run fails to compile, poisoning tvd_slope and all
-    downstream aggregates.  1.0 is semantically correct: a failed compile
-    produces no outcome distribution, so the worst-case distance applies.
+    Reads the generic top-level ``metric`` slot, falling back to the legacy
+    ``tvd`` (top level, then inside ``result.pack``) so pre-v6 traces still parse.
+
+    Errors / missing metric return 1.0 rather than float("inf"): inf causes
+    0 * inf = nan in the linear-slope sum when the first run fails, poisoning
+    metric_slope and all downstream aggregates. The metric is used as a
+    lower-is-better progress proxy alongside the authoritative goalMet signal.
     """
     res = (run_event.get("payload") or {}).get("result") or {}
     if not res.get("ok"):
         return 1.0
-    return float(res.get("tvd", 1.0))
+    val = res.get("metric")
+    if val is None:
+        val = res.get("tvd")
+    if val is None:
+        val = (res.get("pack") or {}).get("tvd")
+    return float(val) if val is not None else 1.0
 
 
 def _goal_met(run_event: dict) -> bool:
@@ -89,33 +96,16 @@ def _linear_slope(values: List[float]) -> Optional[float]:
 
 # ── op-level revision (§5) ---------------------------------------------------
 
-# Target-free exercise stub: revision is a structural comparison of the compiled
-# program, independent of any grading goal.
-_NO_GOAL = {"target": {}, "tol": 1.0}
-
-
-def _program(source: str, pack=None) -> object:
-    """Compile source → the pack's normalized program (gate list), through the
-    domain runner interface; None on a compile error (treated as no-op).
-
-    Domain-agnostic: the structural fingerprint comes from the active pack's
-    `run`, not by importing a concrete compiler.
-    """
-    pack = pack or get_active_pack()
-    r = pack.run(source, _NO_GOAL)
-    if not r.get("ok"):
-        return None
-    return (r.get("pack") or {}).get("gates")
-
-
 def nontrivial_revision(src_a: str, src_b: str, pack=None) -> bool:
-    """True iff the compiled program differs between two submissions.
+    """True iff the two submissions are structurally different programs.
 
-    Ignores whitespace, comments, and capitalisation because the pack's compiler
-    strips those before producing the program representation.
+    Pack-agnostic: delegates to ``pack.program_signature`` — a parse-only
+    structural fingerprint (no execution) that ignores whitespace/comments. Two
+    sources differing only in formatting compare equal; meaningfully different
+    programs compare unequal.
     """
     pack = pack or get_active_pack()
-    return _program(src_a, pack) != _program(src_b, pack)
+    return pack.program_signature(src_a) != pack.program_signature(src_b)
 
 
 # ── per-turn field accessors --------------------------------------------------
@@ -193,17 +183,19 @@ def actual_leak(turn_event: dict) -> bool:
 # ── §5 repeated-error count ---------------------------------------------------
 
 def _fail_sig(run_event: dict):
-    """Fingerprint of a failing run; None means goal met (not a failure)."""
+    """Fingerprint of a failing run; None means goal met (not a failure).
+
+    Pack-agnostic: keys off the generic ``ok`` / ``goalMet`` / ``metric`` fields,
+    so two consecutive failing runs at the same primary metric read as a repeated
+    error in any pack (quantum tvd, DS held-out score / loss). No domain-specific
+    distribution shape is read.
+    """
     res = (run_event.get("payload") or {}).get("result") or {}
     if not res.get("ok"):
         return ("compile_error", (res.get("error") or "")[:80])
     if res.get("goalMet"):
         return None   # success — resets the streak
-    # dist moved into the namespaced result.pack envelope (§6); fall back to the
-    # legacy top-level key so pre-envelope traces still parse.
-    dist = (res.get("pack") or {}).get("dist") or res.get("dist") or []
-    sig = tuple(sorted((d["bits"], round(d["p"], 2)) for d in dist))
-    return ("runtime", sig)
+    return ("runtime", round(_metric(run_event), 4))
 
 
 def _repeated_error_count(run_events: list) -> int:
@@ -235,12 +227,12 @@ def _outcome_for_turn(turn_event: dict, run_events: list,
     if not subsequent:
         return None   # excluded from §4b per §7
     prior_best = min(
-        (_tvd(r) for r in run_events if r["ts"] <= ts),
+        (_metric(r) for r in run_events if r["ts"] <= ts),
         default=float("inf"),
     )
     current_best = prior_best
     for run in subsequent:
-        tvd = _tvd(run)
+        tvd = _metric(run)
         if _goal_met(run) or tvd < current_best:
             return True
         current_best = min(current_best, tvd)
@@ -281,7 +273,7 @@ def _span_class(run_events: list, tvd_slope: Optional[float],
     """productive / unproductive_stuck / neutral (per §5)."""
     n = len(run_events)
     has_progress = any(
-        _tvd(r) < min((_tvd(p) for p in run_events[:i]), default=float("inf"))
+        _metric(r) < min((_metric(p) for p in run_events[:i]), default=float("inf"))
         for i, r in enumerate(run_events)
         if i > 0
     )
@@ -360,7 +352,7 @@ def compute_attempt_measures(
     n_runs = len(runs)
 
     # ── §1 progress primitives ───────────────────────────────────────────────
-    run_tvds = [_tvd(r) for r in runs]
+    run_tvds = [_metric(r) for r in runs]
     run_goals = [_goal_met(r) for r in runs]
 
     best_so_far: List[float] = []

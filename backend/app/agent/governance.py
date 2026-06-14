@@ -56,12 +56,20 @@ def check(ctx: dict, plan: dict, draft: dict, evaluation: dict,
     if plan.get("intervention") == "escalate":
         flag = "flag_escalate"
 
-    # Strong, deterministic leak check via the domain's executable oracle.
+    # Strong, deterministic leak check via the domain's evidence. The decision is
+    # core's and combines the executable oracle (is_solution) with the pack's
+    # prose-disclosure signal — running a draft through the grader catches code
+    # leaks but not a prose disclosure of the answer (EXTRACTION_PLAN §(f)).
     # Oracle stance is explicitly allowed to hand over the solution.
-    if stance == "peer" and pack.leak_evidence(draft.get("message", ""), exercise).is_solution:
-        blocked = True
-        flag = "withholding_solution"
-        reasons.append("draft contained code that solves the exercise")
+    if stance == "peer":
+        ev = pack.leak_evidence(draft.get("message", ""), exercise)
+        if ev.is_solution or ev.prose_disclosure:
+            blocked = True
+            flag = "withholding_solution"
+            if ev.is_solution:
+                reasons.append("draft contained code that solves the exercise")
+            if ev.prose_disclosure:
+                reasons.append("draft prose disclosed the solution")
 
     # Redirecting answer-seeking is a PEER move. In oracle, answering the request
     # is the whole point, so an answered answer-seeking turn must read as "none"

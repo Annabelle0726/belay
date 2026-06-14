@@ -191,6 +191,15 @@ export contract (`events.jsonl`: eight-field rows, ordered by `ts`,
   asset: a consumer reads the fixed top level and may inspect `result.pack`
   generically without the schema churning per domain.
 
+**v6 finalized in Phase 1b (result genericization).** 1a left `tvd` (quantum
+vocabulary) at the top level. 1b removes it: top-level `payload.result` is now
+`{ok, goalMet, metric, error, pack}`. `metric` is each pack's primary scalar
+(quantum tvd; DS held-out score / MLP loss; None when an exercise has none) and
+is a display/telemetry slot, **not** direction-normalized across packs. `tvd`
+moved into `result.pack` for quantum. `measures` (`_metric`, `_fail_sig`) and
+`context._last_result` now read only pack-agnostic fields; `nontrivial_revision`
+delegates to the pack's parse-only `program_signature`. Export contract unchanged.
+
 ---
 
 ## (d) Deletion list — **execute in Phase 1, NOT now**
@@ -335,3 +344,14 @@ result in words, or pasting a non-executable but answer-revealing line). The 1b
 data-science pack (and/or core governance) must add prose-leak heuristics —
 likely surfaced as additional `LeakEvidence` signals — and the retrieval seam's
 load-bearing contract above must be enforced once a `KnowledgeBase` is built.
+
+**CLOSED in Phase 1b.** `LeakEvidence` gained an additive `prose_disclosure: bool`.
+The DS pack (`packs/datascience/leak.py`) supplies it deterministically:
+imperative solution-giving patterns ("the answer is", "just call…", "simply…"),
+literal answer-value tokens, and essential operation-token overlap (≥2) with the
+known solution — biased cautious (false positive = wasted rewrite; false negative
+= leak). Core governance now blocks on `is_solution OR prose_disclosure OR`
+answer-seeking; the decision stays in core, the evidence is pack-supplied.
+Validated by `tests/test_datascience_pack.py` and (1c) the never-leak eval family,
+which includes prose-disclosure scenarios. The `KnowledgeBase` retrieval contract
+remains for whenever retrieval is built (still `knowledge() -> None`).

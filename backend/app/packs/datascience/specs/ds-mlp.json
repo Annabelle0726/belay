@@ -1,0 +1,7 @@
+{
+  "id": "ds-mlp",
+  "data_files": ["data/X.csv", "data/y.csv"],
+  "checks": [
+    {"type": "var_threshold", "var": "final_loss", "op": "<=", "threshold": 0.05, "primary": true}
+  ]
+}
