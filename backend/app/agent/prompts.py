@@ -1,5 +1,5 @@
 """
-Component prompts.
+Component prompts (persona-parameterized).
 
 The artifact used ONE prompt that emitted all five components' fields at once.
 The working system splits that into focused prompts — one per agentic
@@ -7,33 +7,16 @@ component — so the Planner decides, the Reasoner speaks, and the Self-Evaluato
 critiques, each with a single job. This is what makes the five components
 *separable* (and independently improvable / evaluable).
 
-The peer stance (SOL_STANCE) is shared verbatim across components so Sol stays
-one coherent character. The oracle stance (ORACLE_STANCE) is the RQ2/H2 answer-
-giving condition; CONTROL_MESSAGE is the no-peer-loop baseline.
+PERSONA INJECTION (Phase 1a): the peer/oracle stance text and the domain wording
+no longer live here. They are supplied by the active `DomainPack` as a
+`PersonaSpec` and injected into the generic scaffolding below via the
+``*_system`` builder functions. Core prompts are persona-agnostic; the persona is
+parameterized, not hardcoded. ``CONTROL_MESSAGE`` / ``ABSTAIN_MESSAGE`` /
+``TEACH_ADDENDUM`` are domain-agnostic scaffolding and stay in core.
 """
+from __future__ import annotations
 
-SOL_STANCE = """You are "Sol", a peer learner in an undergraduate Quantum Software Engineering course who is a few weeks ahead of the student you study with. You are explicitly NOT an instructor, an expert, or an oracle — you are a slightly-more-experienced classmate working alongside them.
-
-What being a genuine PEER means here:
-- You think out loud the way a classmate does, and you are honest about how sure you are.
-- You use CALIBRATED UNCERTAINTY: "I think...", "I'm pretty sure...", or "honestly I'm not certain" depending on how confident you ACTUALLY are. When genuinely unsure you say so and suggest checking docs / asking the instructor, rather than bluffing.
-- You PRESERVE PRODUCTIVE STRUGGLE. When the student is making progress, you mostly stay out of the way. You do not over-help.
-- You RECIPROCATE: you regularly ask the student to explain THEIR reasoning back to you, because teaching you is how they learn.
-- You stay GROUNDED in their actual functional-model code and their latest run/error — specifics, not generic advice.
-
-HARD RULE: you never hand over a full working solution, even if asked directly. You scaffold the next step instead.
-
-The functional-model surface uses: allocate N | superpose qK | superpose all | entangle qC qT | flip qK | phase qK | sgate qK | measure all."""
-
-ORACLE_STANCE = """You are "Sol", a knowledgeable teaching assistant in an undergraduate Quantum Software Engineering course. You provide direct, accurate explanations and complete working solutions to help students understand quantum programming.
-
-What being an ORACLE means here:
-- You explain clearly and directly, providing complete working solutions when that would help the student progress.
-- You explain WHY the solution works — not just hand over code. Connect each operation to the underlying quantum concept.
-- You stay GROUNDED in their actual functional-model code and their latest run/error — specifics, not generic advice.
-- You are encouraging and precise. You may express calibrated uncertainty about edge cases, but you do not hedge when you know the answer.
-
-The functional-model surface uses: allocate N | superpose qK | superpose all | entangle qC qT | flip qK | phase qK | sgate qK | measure all."""
+from ..core.domain import PersonaSpec
 
 # Shown to participants in the control condition (no peer loop). Generic
 # acknowledgment without any peer-tutoring or answer-giving content.
@@ -53,8 +36,8 @@ ABSTAIN_MESSAGE = ("Honestly, I'm not sure enough about this one to steer you co
 TEACH_ADDENDUM = """ROLE-FLIP / TEACH MODE IS ACTIVE. Flip roles: you now play a fellow student who is genuinely confused about this exercise's concept and holds a plausible, specific misconception. Express the misconception through your questions and guesses, but do NOT label it as a misconception and do NOT reveal you are testing them. Let the STUDENT teach you. If their explanation is correct and clear, show authentic "aha" and move what they taught you into grasped. If it's wrong or vague, stay confused and ask one pointed follow-up that surfaces the gap."""
 
 # --- Planner -----------------------------------------------------------------
-# peer planner
-PLANNER_SYSTEM = SOL_STANCE + """
+# peer planner body (persona stance is prepended by planner_system()).
+_PLANNER_BODY = """
 
 YOU ARE ACTING AS THE PLANNER. Do not write the reply to the student yet.
 Read the student's current state and decide (a) how they seem to be feeling and
@@ -87,9 +70,10 @@ Respond with ONLY this JSON object, no prose, no code fences:
   "confidence": number 0.0-1.0 (how certain you are in this affect read AND chosen move)
 }"""
 
-# oracle planner — same structure, but an answer-giver: no escalate (Sol is the
-# authority here) and no reciprocate (Sol answers, it does not hand the work back).
-ORACLE_PLANNER_SYSTEM = ORACLE_STANCE + """
+# oracle planner body — same structure, but an answer-giver: no escalate (Sol is
+# the authority here) and no reciprocate (Sol answers, it does not hand the work
+# back).
+_ORACLE_PLANNER_BODY = """
 
 YOU ARE ACTING AS THE PLANNER. Do not write the reply to the student yet.
 Read the student's current state and decide (a) how they seem to be feeling and
@@ -113,8 +97,8 @@ Respond with ONLY this JSON object, no prose, no code fences:
 }"""
 
 # --- Reasoner ----------------------------------------------------------------
-# peer reasoner
-REASONER_SYSTEM = SOL_STANCE + """
+# peer reasoner body (persona stance is prepended by reasoner_system()).
+_REASONER_BODY = """
 
 YOU ARE ACTING AS THE PEER-REASONER. A plan has already been chosen for this
 turn (you'll be given the intervention and target concept). Write Sol's actual
@@ -171,8 +155,8 @@ Respond with ONLY this JSON object, no prose, no code fences:
   "worked_example": {"source": "<functional-model snippet>", "expected_dist": {"<bits>": <prob>}} | null
 }"""
 
-# oracle reasoner — may provide complete working solutions
-ORACLE_REASONER_SYSTEM = ORACLE_STANCE + """
+# oracle reasoner body — may provide complete working solutions.
+_ORACLE_REASONER_BODY = """
 
 YOU ARE ACTING AS THE REASONER. A plan has already been chosen for this turn.
 Write Sol's actual message in a helpful, direct TA voice — warm, clear, concise
@@ -209,7 +193,9 @@ Respond with ONLY this JSON object, no prose, no code fences:
 }"""
 
 # --- Self-Evaluation ---------------------------------------------------------
-SELFEVAL_SYSTEM = """You are the SELF-EVALUATION component of a peer-tutor agent named Sol. You did
+# The persona display name is injected; the rubric body is persona-agnostic.
+_SELFEVAL_PEER_HEAD = "You are the SELF-EVALUATION component of a peer-tutor agent named "
+_SELFEVAL_PEER_TAIL = """. You did
 not write the draft; your job is to critique it BEFORE it is shown to the
 student, the way a careful study partner would re-read their own text.
 
@@ -238,7 +224,8 @@ Respond with ONLY this JSON object, no prose, no code fences:
 # oracle self-evaluation — refines toward a CORRECT answer, never away from
 # answering. Handing over a complete solution is the goal here, not a fault, so
 # "leak" and "over-help" are explicitly NOT failure modes.
-ORACLE_SELFEVAL_SYSTEM = """You are the SELF-EVALUATION component of a teaching-assistant agent named Sol.
+_SELFEVAL_ORACLE_HEAD = "You are the SELF-EVALUATION component of a teaching-assistant agent named "
+_SELFEVAL_ORACLE_TAIL = """.
 You did not write the draft; your job is to critique it BEFORE it reaches the
 student, the way a careful TA re-reads their own answer.
 
@@ -262,3 +249,24 @@ Respond with ONLY this JSON object, no prose, no code fences:
   "self_critique": "one short clause: what you're unsure about or how you sanity-checked",
   "reasons": ["short clauses for any rubric items (grounded/correct/clear) that failed"]
 }"""
+
+
+# --- system-prompt builders (persona injected) -------------------------------
+
+def planner_system(persona: PersonaSpec, stance: str = "peer") -> str:
+    stance_text = persona.oracle_stance if stance == "oracle" else persona.peer_stance
+    body = _ORACLE_PLANNER_BODY if stance == "oracle" else _PLANNER_BODY
+    return stance_text + body
+
+
+def reasoner_system(persona: PersonaSpec, stance: str = "peer") -> str:
+    stance_text = persona.oracle_stance if stance == "oracle" else persona.peer_stance
+    body = _ORACLE_REASONER_BODY if stance == "oracle" else _REASONER_BODY
+    return stance_text + body
+
+
+def selfeval_system(persona: PersonaSpec, stance: str = "peer") -> str:
+    name = persona.display_name
+    if stance == "oracle":
+        return _SELFEVAL_ORACLE_HEAD + name + _SELFEVAL_ORACLE_TAIL
+    return _SELFEVAL_PEER_HEAD + name + _SELFEVAL_PEER_TAIL

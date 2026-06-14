@@ -16,13 +16,14 @@ from __future__ import annotations
 
 import json
 
+from ..core.domain import get_active_pack
 from .llm import LLMClient
-from .prompts import ORACLE_SELFEVAL_SYSTEM, SELFEVAL_SYSTEM
+from .prompts import selfeval_system
 
 
 def evaluate(ctx: dict, plan: dict, draft: dict, llm: LLMClient,
              stance: str = "peer") -> dict:
-    system = ORACLE_SELFEVAL_SYSTEM if stance == "oracle" else SELFEVAL_SYSTEM
+    system = selfeval_system(get_active_pack().persona, stance)
     user = json.dumps({
         "exercise": ctx["exercise"],
         "student_state": {

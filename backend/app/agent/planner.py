@@ -8,9 +8,10 @@ should never be left to chance.
 """
 from __future__ import annotations
 
+from ..core.domain import get_active_pack
 from . import context as ctx_mod
 from .llm import LLMClient
-from .prompts import ORACLE_PLANNER_SYSTEM, PLANNER_SYSTEM, TEACH_ADDENDUM
+from .prompts import TEACH_ADDENDUM, planner_system
 
 _VALID_INTERVENTIONS = {
     "observe", "co_reason", "diagnose", "worked_analogy", "stretch",
@@ -94,7 +95,8 @@ def _rules_overlay(plan: dict, ctx: dict, stance: str = "peer") -> dict:
 
 
 def plan(ctx: dict, llm: LLMClient, stance: str = "peer") -> dict:
-    base = ORACLE_PLANNER_SYSTEM if stance == "oracle" else PLANNER_SYSTEM
+    persona = get_active_pack().persona
+    base = planner_system(persona, stance)
     system = base + (("\n\n" + TEACH_ADDENDUM) if ctx["mode"] == "teach" else "")
     out = llm.json(role="planner", tier="fast", system=system,
                    user=ctx_mod.serialize(ctx), max_tokens=400)

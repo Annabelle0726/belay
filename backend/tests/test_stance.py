@@ -18,16 +18,25 @@ from app.agent import run_turn
 from app.agent.prompts import (
     ABSTAIN_MESSAGE,
     CONTROL_MESSAGE,
-    ORACLE_PLANNER_SYSTEM,
-    ORACLE_REASONER_SYSTEM,
-    ORACLE_SELFEVAL_SYSTEM,
-    PLANNER_SYSTEM,
-    REASONER_SYSTEM,
-    SELFEVAL_SYSTEM,
+    planner_system,
+    reasoner_system,
+    selfeval_system,
 )
 from app.config import settings
+from app.core.domain import get_active_pack
 from app.curriculum import get_exercise
 from app.store import InMemoryStore
+
+# Persona-parameterized prompts are now built from the active pack's persona
+# (Phase 1a). Compose the same system strings the components send so the
+# stance-prompt assertions below still pin behavior exactly.
+_PERSONA = get_active_pack().persona
+PLANNER_SYSTEM = planner_system(_PERSONA, "peer")
+REASONER_SYSTEM = reasoner_system(_PERSONA, "peer")
+SELFEVAL_SYSTEM = selfeval_system(_PERSONA, "peer")
+ORACLE_PLANNER_SYSTEM = planner_system(_PERSONA, "oracle")
+ORACLE_REASONER_SYSTEM = reasoner_system(_PERSONA, "oracle")
+ORACLE_SELFEVAL_SYSTEM = selfeval_system(_PERSONA, "oracle")
 
 BELL = get_exercise("bell")
 _SOLUTION_MSG = "allocate 2\nsuperpose q0\nentangle q0 q1\nmeasure all"

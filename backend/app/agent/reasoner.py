@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import json
 
+from ..core.domain import get_active_pack
 from . import context as ctx_mod
 from .llm import LLMClient
-from .prompts import ORACLE_REASONER_SYSTEM, REASONER_SYSTEM, TEACH_ADDENDUM
+from .prompts import TEACH_ADDENDUM, reasoner_system
 
 
 def respond(ctx: dict, plan: dict, llm: LLMClient, critique: dict | None = None,
@@ -21,7 +22,8 @@ def respond(ctx: dict, plan: dict, llm: LLMClient, critique: dict | None = None,
     the orchestrator runs the reasoner at a default effort and re-runs it at a
     higher effort when self-evaluation is under-confident (escalation). Applied
     identically for peer and oracle so capability is held constant across stances."""
-    base = ORACLE_REASONER_SYSTEM if stance == "oracle" else REASONER_SYSTEM
+    persona = get_active_pack().persona
+    base = reasoner_system(persona, stance)
     system = base + (("\n\n" + TEACH_ADDENDUM) if ctx["mode"] == "teach" else "")
 
     user = (
