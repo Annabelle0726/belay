@@ -12,44 +12,57 @@ def _env(key: str, default: str) -> str:
 
 @dataclass
 class Settings:
-    # Execution provider recorded in the §6 telemetry envelope (pack-agnostic).
-    # "local" = the in-house sandboxed runner; reserved for future hosted runners.
-    provider: str = field(default_factory=lambda: _env("PROVIDER", "local"))
+    # --- Model/inference provider seam -------------------------------------
+    # PROVIDER selects the inference provider (and is recorded in the §6 telemetry
+    # `provider` field). The fast/strong TIER POLICY (which component uses which
+    # tier) lives in core and is provider-agnostic; only the tier->concrete-model
+    # mapping is per-provider config below.
+    #   openai_compatible (default, self-hosted first-class): any OpenAI-compatible
+    #     endpoint (Ollama, vLLM, a Jetstream2-hosted model, MESA AI-Verde) via
+    #     base_url + model(s) + optional key. Works with NO Anthropic dependency,
+    #     enabling a zero-external-API deployment.
+    #   anthropic (hosted convenience): wraps the Anthropic client; needs the
+    #     anthropic package + ANTHROPIC_API_KEY.
+    #   bedrock (documented stub; not live): Amazon Nova tier mapping below.
+    provider: str = field(default_factory=lambda: _env("PROVIDER", "openai_compatible"))
 
-    # --- Model layer -------------------------------------------------------
-    # Provider: "jetstream" (the JS2 Inference Service, OpenAI-compatible) or
-    # "anthropic" (alternate, for off-JS2 development / ceiling comparisons).
-    llm_provider: str = field(default_factory=lambda: _env("LLM_PROVIDER", "jetstream"))
+    # openai_compatible — single base_url serves all tiers (Ollama/vLLM/etc).
+    openai_base_url: str = field(default_factory=lambda: _env(
+        "OPENAI_BASE_URL", "http://localhost:11434/v1"))   # Ollama default
+    # Token-free local endpoints still want a non-empty string for the SDK.
+    openai_api_key: str = field(default_factory=lambda: _env(
+        "OPENAI_API_KEY", _env("LLM_API_KEY", "EMPTY")))
+    openai_model_fast: str = field(default_factory=lambda: _env("MODEL_FAST", "llama3.2"))
+    openai_model_strong: str = field(default_factory=lambda: _env("MODEL_STRONG", "llama3.2"))
+    # Optional reasoning-effort knob (gpt-oss etc.); empty = not sent. Applied to
+    # the strong tier only.
+    reasoning_strong: str = field(default_factory=lambda: _env("REASONING_STRONG", ""))
 
-    # Resource-aware model tiers, hosted on Jetstream2's inference service.
-    # fast  -> Planner + Self-Evaluation (frequent, cheap)
-    # strong-> Peer-Reasoner (voice + pedagogy)
-    # Both are US-origin, open-weight models served at IU; no commercial key,
-    # no per-token cost, and no Jetstream2 SUs are consumed by the service.
-    model_tiers: Dict[str, str] = field(default_factory=lambda: {
-        "fast": _env("MODEL_FAST", "llama-4-scout"),
-        "strong": _env("MODEL_STRONG", "gpt-oss-120b"),
-    })
+    # anthropic
+    anthropic_api_key: str = field(default_factory=lambda: _env("ANTHROPIC_API_KEY", ""))
+    anthropic_model_fast: str = field(default_factory=lambda: _env(
+        "ANTHROPIC_MODEL_FAST", "claude-haiku-4-5-20251001"))
+    anthropic_model_strong: str = field(default_factory=lambda: _env(
+        "ANTHROPIC_MODEL_STRONG", "claude-sonnet-4-6"))
 
-    # Per-tier OpenAI-compatible base URLs. The defaults are the JS2 direct
-    # (token-free) endpoints, reachable from any Jetstream2 / IU Research Cloud
-    # instance. Off-instance, point both at the Open WebUI proxy
-    # (https://llm.jetstream-cloud.org/api) and set LLM_API_KEY to your token.
-    tier_base_urls: Dict[str, str] = field(default_factory=lambda: {
-        "fast": _env("LLM_BASE_FAST", "https://llm.jetstream-cloud.org/llama-4-scout/v1"),
-        "strong": _env("LLM_BASE_STRONG", "https://llm.jetstream-cloud.org/gpt-oss-120b/v1"),
-    })
+    # bedrock (stub) — Amazon Nova fast/strong mapping, written down for the
+    # documented stub; not live.
+    bedrock_model_fast: str = field(default_factory=lambda: _env(
+        "BEDROCK_MODEL_FAST", "amazon.nova-lite-v1:0"))
+    bedrock_model_strong: str = field(default_factory=lambda: _env(
+        "BEDROCK_MODEL_STRONG", "amazon.nova-pro-v1:0"))
 
-    # gpt-oss exposes configurable reasoning effort (low|medium|high). Applied
-    # to the strong tier; omit for the fast tier.
-    tier_reasoning: Dict[str, str] = field(default_factory=lambda: {
-        "strong": _env("REASONING_STRONG", "high"),
-    })
-
-    # Direct (on-instance) access needs no token; the OpenAI SDK still wants a
-    # non-empty string, so default to a dummy. Set a real token for the proxy.
-    llm_api_key: str = field(default_factory=lambda: _env("LLM_API_KEY", "EMPTY"))
     llm_temperature: float = field(default_factory=lambda: float(_env("LLM_TEMPERATURE", "0.4")))
+
+    @property
+    def model_tiers(self) -> Dict[str, str]:
+        """Active provider's tier->concrete-model mapping ({fast, strong}). For a
+        single-model self-hosted endpoint, fast and strong map to the same model."""
+        if self.provider == "anthropic":
+            return {"fast": self.anthropic_model_fast, "strong": self.anthropic_model_strong}
+        if self.provider == "bedrock":
+            return {"fast": self.bedrock_model_fast, "strong": self.bedrock_model_strong}
+        return {"fast": self.openai_model_fast, "strong": self.openai_model_strong}
 
     # Evaluation-first loop: how many times the Reasoner may revise after a
     # failing self-evaluation before we gate and ship the best draft.

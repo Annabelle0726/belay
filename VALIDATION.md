@@ -189,6 +189,37 @@ Export/import + migration tooling is out of scope (roadmap).
 
 ---
 
+## Phase 2 — Workstream B: provider seam (provider-agnostic tiers)
+
+Core calls a `Provider` (`app/agent/llm.py`, the `json(...)` method), never a
+concrete SDK. The **fast/strong tier POLICY is in core and provider-agnostic** —
+Planner = fast, Peer-Reasoner = strong, Self-Evaluator = fast (set at the
+`llm.json(tier=...)` call sites). Only the **tier→concrete-model mapping** is
+per-provider config (`settings.model_tiers`). `PROVIDER` selects the provider.
+
+| PROVIDER | status | endpoint / SDK | fast model | strong model | key | reasoning_effort |
+|---|---|---|---|---|---|---|
+| `openai_compatible` | **live, default (self-hosted first-class)** | `OPENAI_BASE_URL` (Ollama/vLLM/JS2/MESA) | `MODEL_FAST` | `MODEL_STRONG` | `OPENAI_API_KEY` (`EMPTY` ok) | `REASONING_STRONG` (strong tier only) |
+| `anthropic` | live (hosted convenience) | Anthropic API | `ANTHROPIC_MODEL_FAST` (`claude-haiku-4-5-20251001`) | `ANTHROPIC_MODEL_STRONG` (`claude-sonnet-4-6`) | `ANTHROPIC_API_KEY` | n/a |
+| `bedrock` | **documented stub (not live)** | Amazon Bedrock | `BEDROCK_MODEL_FAST` (`amazon.nova-lite-v1:0`) | `BEDROCK_MODEL_STRONG` (`amazon.nova-pro-v1:0`) | AWS creds | n/a |
+
+- A **single-model self-hosted endpoint** maps both tiers to one model
+  (`MODEL_FAST == MODEL_STRONG`).
+- `openai_compatible` needs **no Anthropic dependency** — an institution can run
+  the tutor with zero external calls (Workstream D).
+- The default is `openai_compatible` (privacy-first, no external dependency);
+  `anthropic` is the hosted-convenience option. The bedrock stub raises on call
+  but its Nova tier mapping is testable.
+- The provider seam carries **no governance decision**; the inference choice never
+  changes the deterministic leak gate.
+- `PROVIDER` is also the value recorded in the §6 telemetry `provider` field.
+
+Test: `tests/test_provider_seam.py` (9) — selection per `PROVIDER`, per-provider
+tier mapping (incl. single-model collapse + Nova), bedrock stub raises, and a
+stub satisfies the `Provider` protocol. **No network.**
+
+---
+
 ## 0. Environment (once) 🟢
 
 Use the project venv, and **always invoke the suite as `python -m pytest`** — a bare

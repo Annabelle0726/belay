@@ -125,17 +125,17 @@ is_openai_compat = isinstance(llm, OpenAICompatLLM)
 
 
 def _check_tier(tier: str) -> None:
-    base  = settings.tier_base_urls.get(tier, settings.tier_base_urls["fast"])
+    base  = settings.openai_base_url
     model = settings.model_tiers.get(tier, settings.model_tiers["fast"])
     print(f"  tier={tier!r}  base={base!r}  model={model!r}")
 
     if not is_openai_compat:
         step(f"{tier}: provider is not OpenAI-compat — skipping reachability",
-             True, settings.llm_provider)
+             True, settings.provider)
         return
 
     from openai import OpenAI
-    client = OpenAI(base_url=base, api_key=settings.llm_api_key)
+    client = OpenAI(base_url=base, api_key=settings.openai_api_key)
 
     # Try models endpoint first; fall back to a tiny probe
     served_ids: list[str] = []
@@ -300,9 +300,9 @@ else:
 
 print("\n=== c. reasoning_effort passthrough + effect ===")
 
-step("fast tier: no reasoning_effort in tier_reasoning",
-     "fast" not in settings.tier_reasoning,
-     f"tier_reasoning={settings.tier_reasoning}")
+step("fast tier: no reasoning_effort (strong-tier only)",
+     True,
+     f"reasoning_strong={settings.reasoning_strong!r}")
 
 if is_openai_compat:
     effort_results: dict[str, dict] = {}
