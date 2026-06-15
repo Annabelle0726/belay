@@ -71,6 +71,7 @@ def build_router(consent_router: ConsentRouter, pack, llm_factory: Callable[[], 
                        f"GET /{PROTOCOL_VERSION}/capabilities",
                        f"POST /{PROTOCOL_VERSION}/turn",
                        f"POST /{PROTOCOL_VERSION}/goals",
+                       f"POST /{PROTOCOL_VERSION}/reflection",
                        f"POST /{PROTOCOL_VERSION}/events"],
             "learner_goals": "opt-in; the student's own words, pseudonymous, never to grades",
             "license": "Apache-2.0",
@@ -104,6 +105,7 @@ def build_router(consent_router: ConsentRouter, pack, llm_factory: Callable[[], 
             "result": req.gradingspec_result,
             "recent": [t.model_dump() for t in req.recent],
             "signals": req.signals,
+            "request": payload.get("request"),   # e.g. "reflect" (student-initiated)
         }
         # 5. pseudo_id IS the anon-code namespace; no PII is stored.
         consent_router.register_participant(req.pseudo_id, req.pseudo_id, req.consent)
@@ -128,6 +130,22 @@ def build_router(consent_router: ConsentRouter, pack, llm_factory: Callable[[], 
         store = consent_router.store_for(pid)
         artifact = _goals.set_goals(store, pid, payload.get("text", ""))
         return {"ok": True, "pseudo_id": pid, "goals": artifact}
+
+    @api.post("/reflection")
+    def reflection(payload: dict = Body(...)):
+        """Record a student reflection (opt-in), linked to their current goal. Same
+        PII boundary; pseudonymous id only; never written to grades."""
+        try:
+            assert_no_pii(payload)
+        except PIIRejected as e:
+            raise HTTPException(422, f"PII rejected at boundary: {e}")
+        pid = payload.get("pseudo_id")
+        if not pid:
+            raise HTTPException(422, "pseudo_id required")
+        consent_router.register_participant(pid, pid, bool(payload.get("consent", False)))
+        store = consent_router.store_for(pid)
+        refl = _goals.add_reflection(store, pid, payload.get("text", ""))
+        return {"ok": True, "pseudo_id": pid, "reflection": refl}
 
     @api.post("/events")
     def events(payload: dict = Body(...)):

@@ -45,6 +45,7 @@ class SolTurnRequest(BaseModel):
     result: Optional[dict] = None
     recent: List[DialogueTurn] = []
     signals: Optional[dict] = None
+    request: Optional[str] = None   # e.g. "reflect" — student-initiated reflect
 
 
 class Memory(BaseModel):

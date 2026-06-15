@@ -356,4 +356,19 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
     }
     store.append_event(make_event(pid, exercise["id"], mode, "turn", trace,
                                   stance=stance))
+
+    # Additive §6 events (opt-in; fire only when goals/reflect apply, so default
+    # behavior with no goals is unchanged and produces no extra events).
+    goals_art = ctx.get("goals")
+    if goals_art and goals_art.get("honored"):
+        store.append_event(make_event(
+            pid, exercise["id"], mode, "goal_alignment_check",
+            {"goal_text": goals_art.get("text"),
+             "alignment": evaluation.get("goal_alignment"),
+             "intervention": plan["intervention"]}, stance=stance))
+    if plan.get("intervention") == "reflect":
+        store.append_event(make_event(
+            pid, exercise["id"], mode, "reflect",
+            {"prompt": final["message"], "goal_text": (goals_art or {}).get("text"),
+             "concept": plan.get("target_concept")}, stance=stance))
     return final

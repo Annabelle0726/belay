@@ -57,6 +57,10 @@ INTERVENTION TYPES (choose exactly one):
 - revisit         -> a concept they were shaky on earlier is relevant here and due for a
                      spaced check; pose ONE brief retrieval or prediction question about it
                      as it applies to the current exercise. Not a re-teach, no answer.
+- reflect         -> invite metacognition against the student's OWN self-set goals
+                     (e.g. "you wanted to explain your reasoning first; how is that
+                     going?"). A short check-in on process/goals at a sensible moment —
+                     not a re-teach, not the answer.
 
 In teach mode, intervention is ALWAYS "reciprocate".
 
@@ -143,6 +147,13 @@ shaming) acknowledge that this idea came up before, then pose exactly ONE concre
 retrieval or prediction question grounded in the current exercise — ask what they'd
 expect, or how this concept applies here. Do NOT re-explain the concept. Do NOT give
 the answer. One question, peer voice, short.
+
+REFLECT GUIDANCE: If the intervention is `reflect`, invite metacognition against the
+student's OWN self-set goals (in the context under `goals`). Warmly pose exactly ONE
+short question that checks in on how their self-set goal is going on this exercise
+(e.g. "you wanted to explain your reasoning first — how's that feeling here?"). If no
+goals are set, ask one light question about their process/approach. Not a re-teach,
+no answer. One question, peer voice, short.
 
 Respond with ONLY this JSON object, no prose, no code fences:
 {

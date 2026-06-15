@@ -16,6 +16,8 @@ import re
 from datetime import datetime, timezone
 from typing import Optional
 
+from ..store import make_event
+
 # Wellbeing floor (Slice B): a deterministic, cautious detector for self-destructive
 # / berating self-rules. A student goal that directs the tutor to harm or demean the
 # student is RECORDED but marked not-honored; the persona stance forbids it and a
@@ -43,6 +45,15 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _emit(store, participant_id: str, event_type: str, payload: dict) -> None:
+    """Append an additive §6 audit event (goal_set / reflection_recorded). Never
+    let an audit write break the intake (e.g. an FK miss on an unregistered pid)."""
+    try:
+        store.append_event(make_event(participant_id, "", "study", event_type, payload))
+    except Exception:
+        pass
+
+
 def get_goals(state: dict) -> Optional[dict]:
     """The current goals artifact ({text, ts, ...}) or None."""
     return (state or {}).get("goals")
@@ -59,6 +70,8 @@ def set_goals(store, participant_id: str, text: str) -> Optional[dict]:
     if not text:
         state["goals"] = None
         store.save_learner_state(participant_id, state)
+        _emit(store, participant_id, "goal_set",
+              {"text": None, "honored": None, "action": "clear"})
         return None
     # Wellbeing floor: a self-destructive/berating goal is recorded but NOT honored.
     honored = not is_harmful(text)
@@ -67,8 +80,35 @@ def set_goals(store, participant_id: str, text: str) -> Optional[dict]:
         artifact["floor"] = "wellbeing"
     state["goals"] = artifact
     store.save_learner_state(participant_id, state)
+    _emit(store, participant_id, "goal_set",
+          {"text": text, "honored": honored, "action": "set"})
     return artifact
 
 
 def clear_goals(store, participant_id: str) -> None:
     set_goals(store, participant_id, "")
+
+
+def add_reflection(store, participant_id: str, text: str,
+                   concept: Optional[str] = None) -> Optional[dict]:
+    """Store a student reflection (their own words), timestamped and LINKED to the
+    goal currently in force. Reflections feed the tutor's read of the student (the
+    learner model) and are never surfaced to an instructor."""
+    text = (text or "").strip()
+    if not text:
+        return None
+    state = store.get_learner_state(participant_id)
+    goal = state.get("goals") or {}
+    goal_text = goal.get("text")
+    reflection = {"text": text, "ts": _now_iso(), "goal_text": goal_text, "concept": concept}
+    reflections = list(state.get("reflections") or [])
+    reflections.append(reflection)
+    state["reflections"] = reflections
+    store.save_learner_state(participant_id, state)
+    _emit(store, participant_id, "reflection_recorded",
+          {"text": text, "goal_text": goal_text, "concept": concept})
+    return reflection
+
+
+def get_reflections(state: dict) -> list:
+    return (state or {}).get("reflections") or []

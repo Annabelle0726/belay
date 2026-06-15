@@ -527,6 +527,37 @@ cd backend && python -m pytest tests/test_goal_safety.py -q
 
 ---
 
+## Learner goals & reflection — Slice C: reflect intervention, reflections, additive events
+
+- **`reflect` intervention** (added to the taxonomy / `_VALID_INTERVENTIONS` and the
+  planner+reasoner prompts): invites metacognition against the student's OWN goals
+  (e.g. "you wanted to explain your reasoning first; how is that going?"). Selectable
+  **both ways**: **tutor-offered** (the planner can pick it; it survives the overlay)
+  and **student-initiated** (an explicit `request:"reflect"` on the turn, or a
+  dialogue cue like "can we reflect on my goal?" → the overlay forces `reflect`).
+- **Reflection storage:** `agent/goals.add_reflection` appends the student's words to
+  `learner_state.reflections`, timestamped and **linked to the goal in force**
+  (`goal_text`). Pseudonymous; recent reflections are injected into `ctx.reflections`
+  for the tutor's read; never surfaced to an instructor. Intake: `POST /api/reflection`
+  and sidecar `POST /quad/v1/reflection` (same PII boundary).
+- **Additive §6 events** — `goal_set` (on intake), `goal_alignment_check` (per turn
+  when honored goals exist), `reflect` (on a reflect turn), `reflection_recorded` (on
+  intake). **Additive only:** new `event_type` values; the 8-field row shape and the
+  `events.jsonl` export contract are unchanged, and `measures` (which keys on
+  `run`/`turn`) ignores them. With no goals/reflect, a plain turn still emits exactly
+  one `turn` event.
+
+Tests: `tests/test_reflect.py` (10) — reflect selectable both ways, reflect off by
+default, reflection stored + linked to its goal, all four additive events present with
+the stable row shape, and no extra events without goals. Suite: **295 passed, 1 skipped**;
+import boundary holds (4 passed — `agent/goals` imports core only).
+
+```bash
+cd backend && python -m pytest tests/test_reflect.py -q
+```
+
+---
+
 ## 0. Environment (once) 🟢
 
 Use the project venv, and **always invoke the suite as `python -m pytest`** — a bare

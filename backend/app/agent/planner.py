@@ -15,7 +15,7 @@ from .prompts import TEACH_ADDENDUM, planner_system
 
 _VALID_INTERVENTIONS = {
     "observe", "co_reason", "diagnose", "worked_analogy", "stretch",
-    "reciprocate", "escalate", "encourage", "revisit",
+    "reciprocate", "escalate", "encourage", "revisit", "reflect",
 }
 # Oracle is an answer-giver: no escalate (Sol is the authority) and no
 # reciprocate (Sol answers rather than handing the work back). "encourage" and
@@ -37,6 +37,14 @@ def _rules_overlay(plan: dict, ctx: dict, stance: str = "peer") -> dict:
     # Teach mode is always reciprocal — but reciprocate is a peer-only move.
     if mode == "teach" and stance != "oracle":
         plan["intervention"] = "reciprocate"
+        return plan
+
+    # Student-initiated reflect (peer): honor an explicit request to reflect on
+    # their own goals. Tutor-offered reflect is left to the planner's own choice
+    # (it survives the overlay as a valid intervention).
+    if stance != "oracle" and ctx.get("reflect_requested"):
+        plan["intervention"] = "reflect"
+        plan["planner_note"] = "student asked to reflect on their goals"
         return plan
 
     # On a solved exercise, offer a stretch rather than more help. Oracle has no

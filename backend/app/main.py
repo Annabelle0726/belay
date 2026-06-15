@@ -38,6 +38,7 @@ from .schemas import (
     GoalRequest,
     ParticipantRequest,
     ParticipantResponse,
+    ReflectionRequest,
     RunRequest,
     RunResult,
     SolTurnRequest,
@@ -116,6 +117,7 @@ def sol_turn(req: SolTurnRequest):
         "result": req.result,
         "recent": [t.model_dump() for t in req.recent],
         "signals": req.signals,
+        "request": req.request,
     }
     # Route events + learner-state writes to durable or ephemeral by consent.
     store = _router.store_for(req.participant_id)
@@ -158,3 +160,12 @@ def get_goals(pid: str):
     store = _router.store_for(pid)
     return {"participant_id": pid,
             "goals": goals_mod.get_goals(store.get_learner_state(pid))}
+
+
+@app.post("/api/reflection")
+def add_reflection(req: ReflectionRequest):
+    """Record the student's reflection (their own words), linked to their current
+    goal. Stored pseudonymously on the learner model; never surfaced to an instructor."""
+    store = _router.store_for(req.participant_id)
+    reflection = goals_mod.add_reflection(store, req.participant_id, req.text)
+    return {"participant_id": req.participant_id, "reflection": reflection}

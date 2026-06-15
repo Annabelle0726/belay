@@ -14,9 +14,22 @@ any reasoner call, so it never sees this map.
 from __future__ import annotations
 
 import json
+import re
 from typing import Optional
 
 from ..core.domain import get_active_pack
+
+# Student-initiated reflect: an explicit cue in the latest student message.
+_REFLECT_CUE = re.compile(
+    r"\b(let'?s reflect|i want to reflect|can we reflect|reflect on (my|the) (goal|progress)"
+    r"|how am i doing|am i on track|check in on (my|the) goal)\b", re.IGNORECASE)
+
+
+def _student_wants_reflect(recent: list) -> bool:
+    for turn in reversed(recent or []):
+        if turn.get("who") == "student":
+            return bool(_REFLECT_CUE.search(turn.get("text", "")))
+    return False
 
 
 def _last_result(result: Optional[dict]) -> object:
@@ -90,6 +103,11 @@ def build_context(payload: dict, learner_state: dict, attempts: int) -> dict:
     # within its stance — never as authority over the stance. Absent for control.
     if stance != "control":
         ctx["goals"] = learner_state.get("goals")
+        ctx["reflections"] = (learner_state.get("reflections") or [])[-3:]  # recent, for the tutor's read
+        # Student-initiated reflect: an explicit `request: "reflect"` or a dialogue cue.
+        ctx["reflect_requested"] = bool(
+            payload.get("request") == "reflect"
+            or _student_wants_reflect(payload.get("recent", [])))
     # Shared capability (F6): inject misconception expectations + signatures for
     # the peer and oracle stances so both arms have the same tutor knowledge.
     # Control short-circuits in the orchestrator before the reasoner runs, so
