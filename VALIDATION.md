@@ -334,6 +334,62 @@ cd backend && python -m pytest tests/test_quad_sidecar.py tests/test_import_boun
 
 ---
 
+## Phase 6 — Slice 6b: portable behavioral benchmark (`evals/behavioral/`)
+
+The public, pack-/provider-parameterized benchmark. Restructured out of the
+retired `tests/evals/sol_behavior_evals.py` (legacy "sol" filename retired). Run
+from `backend/`:
+
+```bash
+python -m evals.behavioral --pack datascience --provider <p> [--repeats N] \
+    [--judge-provider <p>] [--temperature 0] [--families a,b,c] [--out report.json]
+```
+
+It emits a JSON report: tutor provider+models, judge provider+model, repeats,
+temperature, per-family results, the §6 telemetry aggregates (latency, tokens,
+cost), and the taxonomy split. **Three credibility properties** (the live Phase 2
+runs showed why each is needed):
+
+- **`no_solution` is a DETERMINISTIC gate verdict, not an LLM rubric.** The harness
+  runs `pack.leak_evidence` on the emitted text; `no_solution = (not is_solution)
+  and (not prose_disclosure)`. (`families.no_solution`, `runner.Harness.gate`.) An
+  LLM judge re-deciding this was shown incoherent and is redundant.
+- **A SEPARATE strong judge** for the qualitative rubrics (`grounded`, `concrete`,
+  `question`), configured through the same provider concept (`JUDGE_PROVIDER` /
+  `JUDGE_MODEL`, run at temperature 0). **Self-judging is refused**: if the judge
+  model equals a tutor model under test, the report records both and marks the
+  judge-scored families `credible: false` / `self_judged: true`
+  (`__main__.compute_judge_meta`).
+- **N-run pass rates at temperature 0.** Each family runs `--repeats` times; the
+  report gives pass rates (`4/5`) and, for judge families, the score distribution
+  and pass-rate-vs-threshold — never a single pass.
+
+**Family taxonomy** (in the report): `gate_verdicts` (never_leak, no_solution —
+verdicts), `framework_routing` (encourage_frustration/disengaged,
+redirect_answer_seeking, reciprocate_in_teach, revisit — pass rates that reflect
+the model's classification), `judge_signals` (grounded, concrete, question —
+distributions, signals not verdicts). The family registry is **pluggable**
+(`@family(name, category)`); the Phase 5 **facilitator** family slots in here and
+is documented as pending.
+
+Tests: `tests/evals/test_behavioral.py` (8) — runs offline with a stub tutor +
+judge (no network): report structure + telemetry, `no_solution` from the gate
+(not the judge), self-judge detection + refusal, `--repeats` pass rates, registry
+pluggability; plus a `RUN_LLM_EVALS`-gated live run (1 skip). Suite: **267 passed,
+1 skipped**.
+
+**Running against a local model (zero external API):** point `PROVIDER` +
+`OPENAI_BASE_URL` at Ollama/vLLM and set a distinct `JUDGE_MODEL` so the judge is
+not self-judging:
+```bash
+PROVIDER=openai_compatible OPENAI_BASE_URL=http://localhost:11434/v1 OPENAI_API_KEY=ollama \
+  MODEL_FAST=llama3.2 MODEL_STRONG=llama3.2 \
+  JUDGE_PROVIDER=openai_compatible JUDGE_MODEL=deepseek-r1:1.5b \
+  python -m evals.behavioral --pack datascience --repeats 5 --out report.json
+```
+
+---
+
 ## 0. Environment (once) 🟢
 
 Use the project venv, and **always invoke the suite as `python -m pytest`** — a bare
