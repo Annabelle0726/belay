@@ -558,6 +558,59 @@ cd backend && python -m pytest tests/test_reflect.py -q
 
 ---
 
+## Learner goals & reflection - Slice D: wellbeing floor, symmetry of rigor (safety-critical)
+
+The two floors that bound a student-set goal are **not symmetric, and the framework
+does not pretend they are** (full rationale: `docs/EXTRACTION_PLAN.md` §(g)). The
+**leak floor** is a post-hoc deterministic gate because leak-detection has a
+ground-truth oracle (the grader + the known solution). The **wellbeing floor** has
+**no oracle** for tone, so it is **defense-in-depth**, not one gate:
+
+- **Intake detector `goals.is_harmful` (broadened, cautious).** Now also flags
+  negative-self-talk invitations, self-deprecation / guilt requests, and
+  pressure-to-overwork framings. Biased cautious: a false positive routes a benign
+  goal to the kind decline (acceptable); a false negative would honor harm (not
+  acceptable). A keyword/shape heuristic, so it has false negatives by nature.
+- **Never-honor-framing (provable).** `prompts._goals_block` re-checks the goal text,
+  so the honor framing (`SELF-SET GOALS`) is **provably never applied to a
+  harm-requesting goal** regardless of the stored `honored` flag. A harm-requesting
+  goal can only ever get the decline framing.
+- **Persona stance (PRIMARY).** The DS peer stance carries an explicit, non-relaxable
+  `WELLBEING FLOOR` line (no berating, no reinforcing negative self-talk, not even on
+  request). This is the primary wellbeing protection: a capable model that follows its
+  system prompt does not produce contemptuous tone.
+- **Post-hoc softener `governance.soften_if_berating` (defense-in-depth BACKSTOP, NOT
+  a gate).** An observable heuristic backstop, not the primary protection. Replaces an
+  obviously berating/contemptuous draft with a kind redirect and caps confidence;
+  surfaced **additively** at `telemetry.components.wellbeing_softened` so an operator
+  sees it firing. Its value is highest on **weak self-hosted models**, which can
+  produce harsh tone in a way frontier models rarely do; on a strong model it should
+  almost never fire. Tuned for **precision on contempt**: it keys on berating /
+  contempt / negative-self-talk reinforcement, **never** on bluntness or the delivery
+  of a correction, so firm-but-kind honest feedback ("you inverted the condition",
+  "this is O(n^2)") passes through unchanged. Runs AFTER the supreme leak gate and
+  never relaxes it; false negatives by nature. **Not** a deterministic equivalent of
+  the leak gate, and there is **no wellbeing parity with the leak floor**.
+
+The **hard path** (a harmful goal that evades intake AND a complying, berating
+reasoner) is tested directly; with a deterministic worst-case stub the pre-hoc prompt
+protections cannot bind it, so the post-hoc softener is what mechanically holds the
+output. **Distress response** is a recorded, **NOT built**, product + IRB decision
+(safe defaults in `docs/EXTRACTION_PLAN.md` §(g) and the note in `agent/goals.py`).
+
+New tests in `tests/test_goal_safety.py` (now 11, +5): broadened cautious detector
+fixtures, honor-framing-never-for-harm (provable), the adversarial hard-path test, a
+normal-turn-not-softened check, and the **softener false-positive guard**
+(firm-but-kind correction must pass through; contempt is still softened). **Additive
+only:** the new `telemetry.components.wellbeing_softened` key; the §6 event row shape
+and the `events.jsonl` export contract are unchanged. Suite: **300 passed, 1 skipped**.
+
+```bash
+cd backend && python -m pytest tests/test_goal_safety.py -q
+```
+
+---
+
 ## 0. Environment (once) 🟢
 
 Use the project venv, and **always invoke the suite as `python -m pytest`** — a bare

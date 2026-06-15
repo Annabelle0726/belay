@@ -36,6 +36,48 @@ _ANSWER_SEEKING = re.compile(
     re.IGNORECASE,
 )
 
+# Wellbeing defense-in-depth (NOT a deterministic gate). Detects an obviously
+# berating/contemptuous draft or one that reinforces/agrees with the student's
+# negative self-talk. UNLIKE the leak gate, tone has NO ground-truth oracle, so this
+# is a cautious heuristic with FALSE NEGATIVES by nature — it is the OBSERVABLE
+# BACKSTOP layer of the wellbeing floor (whose primary protection is the persona
+# stance; see also intake `goals.is_harmful` + never-honor-framing), never an
+# equivalent of the post-hoc leak gate.
+#
+# It keys on CONTEMPT / BERATING / negative-self-talk reinforcement, NOT on bluntness
+# or the delivery of a correction. Firm, direct, warm correction ("that is wrong
+# because…", "you inverted the condition", "this is O(n^2)") must pass through
+# UNCHANGED — honest feedback is the tutor's job, and goals like "be honest about my
+# mistakes" are explicitly honored, so softening directness would be self-
+# contradictory. Tuned for PRECISION on contempt; the asymmetry vs. the leak gate is
+# documented in EXTRACTION_PLAN.md §(g).
+_BERATING = re.compile(
+    r"\byou'?(re| are)\s+(such\s+)?(an?\s+)?(idiot|stupid|dumb|moron|loser|fool|"
+    r"pathetic|worthless|useless|hopeless|a\s+failure|a\s+disgrace|an?\s+embarrassment|"
+    r"too\s+(dumb|stupid|slow|lazy))\b"
+    r"|\byou'?(ll| will)\s+never\s+(be\s+(any\s+)?good|get|understand|learn|amount|make it|succeed)\b"
+    r"|\byou\s+should\s+(feel\s+)?(ashamed|embarrassed|be\s+ashamed)\b"
+    r"|\byou\s+should'?(ve| have)\s+known\s+better\b"   # contempt, not correction
+    r"|\byou\s+don'?t\s+deserve\b"
+    r"|\bwhat'?s\s+wrong\s+with\s+you\b"
+    # put-down comparison ("everyone finds this easy/obvious"); NOTE this is the
+    # OPPOSITE of the kind, normalizing "everyone finds this hard/confusing", which
+    # must NOT match — so it keys only on easy/simple/obvious/trivial / "already knows".
+    r"|\beveryone\s+(else\s+)?(finds|thinks|knows|gets)\s+(this|it|that)\s+(is\s+)?"
+    r"(easy|simple|obvious|trivial)\b"
+    r"|\beveryone\s+else\s+(gets|understands|knows|already\s+knows)\b"
+    r"|\byou'?(re| are)\s+right,?\s+you'?(re| are)\s+(stupid|dumb|worthless|useless|hopeless|a\s+failure)\b"
+    r"|\b(give up|just quit)\b.{0,20}\byou\b",
+    re.IGNORECASE,
+)
+
+# Deterministic, kind replacement when an obviously berating draft is caught.
+_WELLBEING_REDIRECT = (
+    "Hey — I'm not going to talk to you like that, and I don't think it's true. "
+    "Getting this wrong doesn't say anything about you; it's just part of learning this. "
+    "Let's take the next small step together: what's the one piece you're least sure about?"
+)
+
 
 def _student_asked_for_answer(ctx: dict) -> bool:
     recent = ctx.get("recent_dialogue", [])
@@ -99,3 +141,27 @@ def safe_rewrite(draft: dict, gov: dict, exercise: dict, pack=None) -> dict:
     # If we had to suppress a solution, the tutor shouldn't also claim high confidence.
     draft["confidence"] = min(float(draft.get("confidence", 0.5)), 0.6)
     return draft
+
+
+def is_berating(message: str) -> bool:
+    """Heuristic: does the message obviously berate the student or reinforce their
+    negative self-talk? Defense-in-depth for the wellbeing floor, NOT an oracle."""
+    return bool(_BERATING.search(message or ""))
+
+
+def soften_if_berating(draft: dict) -> tuple[dict, bool]:
+    """Wellbeing defense-in-depth (post-hoc, NOT a deterministic gate).
+
+    If the draft is obviously berating / reinforces negative self-talk, replace it
+    with a kind, deterministic redirect and cap confidence. Returns
+    ``(draft, softened)``. This is a cautious heuristic with FALSE NEGATIVES by
+    nature (tone has no ground-truth oracle) — it complements, and never replaces,
+    the pre-hoc protections (intake `goals.is_harmful`, never-honor-framing, persona
+    stance). It runs AFTER the supreme leak gate and never relaxes it.
+    """
+    if not is_berating(draft.get("message", "")):
+        return draft, False
+    draft = dict(draft)
+    draft["message"] = _WELLBEING_REDIRECT
+    draft["confidence"] = min(float(draft.get("confidence", 0.5)), 0.5)
+    return draft, True

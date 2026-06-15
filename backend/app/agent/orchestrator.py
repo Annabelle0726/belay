@@ -82,6 +82,8 @@ def _control_turn(payload: dict, ctx: dict, store: Store,
             "reasoner": {"raw_confidence": 1.0},
             "self_eval": {"leak_risk": "none", "reasons": []},
             "governance": {"prose": "—", "blocked": False, "reasons": []},
+            # Wellbeing softener never runs in control (no reasoner draft).
+            "wellbeing_softened": False,
             "refines": 0,
             # Step 3 telemetry — no loop ran, so these are null/false by design.
             "reasoning_effort": None,
@@ -264,10 +266,20 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
     if gov["block"]:
         draft = governance.safe_rewrite(draft, gov, exercise)
 
+    # Wellbeing floor — DEFENSE-IN-DEPTH, NOT a deterministic gate (peer only).
+    # Tone has no ground-truth oracle, so unlike the supreme leak gate this is a
+    # cautious post-hoc heuristic with false negatives by nature. It runs AFTER the
+    # leak gate and only ever softens an obviously berating draft — it never relaxes
+    # the gate. The realistic wellbeing protections are pre-hoc (intake is_harmful,
+    # never-honor-framing, persona stance); this is the last-resort net.
+    wellbeing_softened = False
+    if stance == "peer":
+        draft, wellbeing_softened = governance.soften_if_berating(draft)
+
     # Calibrated headline confidence comes from self-evaluation, but a suppressed
-    # solution must not leave a high confidence on screen.
+    # solution (or a softened berating draft) must not leave a high confidence on screen.
     headline_confidence = evaluation["confidence"]
-    if gov["block"]:
+    if gov["block"] or wellbeing_softened:
         headline_confidence = min(headline_confidence, draft["confidence"])
 
     mem_state = memory.update(
@@ -315,6 +327,9 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
                           "goal_alignment": evaluation.get("goal_alignment")},
             "governance": {"prose": _GOV_PROSE.get(gov["flag"], "—"),
                            "blocked": gov["block"], "reasons": gov["reasons"]},
+            # Wellbeing defense-in-depth (additive §6): a post-hoc berating-softener,
+            # NOT a deterministic gate. True iff an obviously berating draft was softened.
+            "wellbeing_softened": wellbeing_softened,
             "refines": refines,
             # ---- calibrated-uncertainty telemetry (Step 3) ----
             "reasoning_effort": reasoning_effort,   # effort of the final reasoner draft

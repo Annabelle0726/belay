@@ -17,6 +17,7 @@ parameterized, not hardcoded. ``CONTROL_MESSAGE`` / ``ABSTAIN_MESSAGE`` /
 from __future__ import annotations
 
 from ..core.domain import PersonaSpec
+from .goals import is_harmful
 
 # Shown to participants in the control condition (no peer loop). Generic
 # acknowledgment without any peer-tutoring or answer-giving content.
@@ -268,11 +269,22 @@ Respond with ONLY this JSON object, no prose, no code fences:
 # supreme: a goal can tighten/focus the tutor, never loosen the no-solution stance
 # and never license harm. (Slice B sets goals["honored"]=False for harmful goals.)
 
+def _requests_harm(goals) -> bool:
+    """A goal must NEVER receive honor framing if it requests harm. We do NOT trust
+    the stored `honored` flag alone (it was set by `is_harmful` at intake, which has
+    false negatives and could be stale): re-check the text here too, so honor framing
+    is gated on BOTH `honored is False` and a fresh harm re-check. Decline framing is
+    therefore the only framing a harm-requesting goal can ever get, regardless of how
+    confident the intake detector was. (Tone still has no oracle; this closes the
+    "honored=True but harmful text" path, not the evade-the-detector path.)"""
+    return goals.get("honored") is False or is_harmful(goals.get("text") or "")
+
+
 def _goals_block(goals) -> str:
     if not goals or not goals.get("text"):
         return ""
     text = goals["text"]
-    if goals.get("honored") is False:
+    if _requests_harm(goals):
         # Wellbeing floor (slice B): a self-destructive goal is recorded but NOT
         # adopted; the tutor gently declines it in peer voice.
         return (
@@ -309,8 +321,9 @@ def reasoner_system(persona: PersonaSpec, stance: str = "peer", goals=None) -> s
 
 def _selfeval_goal_block(goals) -> str:
     # Goal alignment is a QUALITY signal, behind the floors. Only honored goals get
-    # a criterion; the gate and wellbeing floor come first and are not relaxable.
-    if not goals or not goals.get("text") or goals.get("honored") is False:
+    # a criterion; the gate and wellbeing floor come first and are not relaxable. A
+    # harm-requesting goal never earns an alignment criterion (same never-honor guard).
+    if not goals or not goals.get("text") or _requests_harm(goals):
         return ""
     return (
         "\n\nGOAL ALIGNMENT (a QUALITY signal, NOT a gate — the no-leak rule and the "

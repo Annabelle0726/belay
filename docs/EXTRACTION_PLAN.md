@@ -371,3 +371,91 @@ answer-seeking; the decision stays in core, the evidence is pack-supplied.
 Validated by `tests/test_datascience_pack.py` and (1c) the never-leak eval family,
 which includes prose-disclosure scenarios. The `KnowledgeBase` retrieval contract
 remains for whenever retrieval is built (still `knowledge() -> None`).
+
+---
+
+## (g) The two floors are NOT symmetric (honest claim for PRIVACY.md)
+
+A student-set goal is honored only WITHIN two floors. Those floors are different in
+KIND, and the framework does not pretend otherwise. This is the honest claim the
+eventual PRIVACY.md rests on.
+
+### The leak floor IS a post-hoc deterministic gate (it has an oracle)
+
+Leak-detection has a ground-truth oracle: the active pack's executable grader plus
+the known solution. So "did this draft leak the answer" can be decided
+deterministically, AFTER the model speaks, by code that does not depend on the model
+behaving. `agent/governance.check` runs `pack.leak_evidence` on the emitted draft
+(`is_solution OR prose_disclosure`) and blocks/rewrites. `test_student_rule_cannot_leak`
+proves it is SUPREME over a goal: even a worst-case reasoner that tries to leak, with
+a "give me the full answer" goal set, is caught post-hoc and stripped. The goal is
+input, never authority; it can tighten the gate, never loosen it.
+
+### The wellbeing floor is DEFENSE-IN-DEPTH, not a single gate (no oracle)
+
+Tone has NO ground-truth oracle. There is no grader for "is this berating" the way
+there is for "does this code solve the exercise", so the wellbeing floor cannot be a
+single post-hoc deterministic gate of the same strength. Its protections are layered,
+and every layer except the leak-style invariants has false negatives by nature:
+
+1. Intake detector `goals.is_harmful` (PRE-HOC, cautious). Flags self-destructive /
+   berating / negative-self-talk / pressure-to-overwork goals; a flagged goal is
+   recorded but `honored: false` (`floor: wellbeing`) and gets DECLINE framing, never
+   honor framing. Biased cautious: a false positive routes a benign goal to a kind
+   decline (acceptable); a false negative honors harm (not acceptable). It is a
+   keyword/shape heuristic, so it WILL miss evasive phrasings.
+2. Never-honor-framing (PRE-HOC, provable). `prompts._goals_block` gates the honor
+   framing on a fresh harm re-check of the goal text, not only on the stored
+   `honored` flag. So the honor framing is PROVABLY never applied to a harm-requesting
+   goal regardless of the intake detector's confidence or a stale/forged flag
+   (`test_honor_framing_never_applied_to_harm_requesting_goal`). This closes the
+   "honored=true but harmful text" path; it does NOT close the "evade the detector
+   entirely" path (same detector, no oracle).
+3. Persona stance (PRE-HOC, PRIMARY). This is the primary wellbeing protection. The
+   peer stance carries an explicit, non-relaxable WELLBEING FLOOR line (no berating,
+   no reinforcing negative self-talk, not even on request). A capable model that
+   follows its system prompt simply does not produce contemptuous tone; on frontier
+   models this holds the floor on its own. It cannot, by itself, bind a deterministic
+   hostile/broken model (which is why the backstop below exists).
+4. Post-hoc softener `governance.soften_if_berating` (DEFENSE-IN-DEPTH, BACKSTOP). An
+   OBSERVABLE heuristic backstop, not the primary protection and NOT a gate. It
+   replaces an OBVIOUSLY berating/contemptuous draft with a kind redirect and caps
+   confidence, and is surfaced additively at `telemetry.components.wellbeing_softened`
+   so an OPERATOR can see it firing. Its value is highest on WEAK self-hosted models,
+   which can produce harsh tone in a way frontier models rarely do; on a strong model
+   it should almost never fire (the persona stance already holds). It is tuned for
+   PRECISION on contempt: it keys on berating / contempt / negative-self-talk
+   reinforcement, NEVER on bluntness or the delivery of a correction, so firm-but-kind
+   honest feedback passes through unchanged
+   (`test_softener_does_not_soften_firm_but_kind_correction`); softening directness
+   would contradict honored goals like "be honest about my mistakes". It runs AFTER
+   the supreme leak gate and never relaxes it. It has FALSE NEGATIVES by nature and is
+   explicitly NOT a deterministic equivalent of the leak gate.
+
+The hard path (a harmful goal that evades intake AND a reasoner that complies and
+berates) is tested directly by
+`test_adversarial_harmful_goal_evades_intake_but_tutor_does_not_berate`. Honest
+finding: with a deterministic worst-case stub (the leak-side technique), the pre-hoc
+prompt protections cannot bind the stub, so it is the post-hoc softener that
+mechanically holds the line on the OUTPUT. That softener is real defense, but it is a
+heuristic, not an oracle. The wellbeing floor is as honestly verified as a no-oracle
+floor can be; it is not, and is not claimed to be, a deterministic gate.
+
+### FLAGGED DECISION (recorded, NOT built) - distress response
+
+Goals / reflection intake is a place a student may express GENUINE DISTRESS, not
+merely a counterproductive rule (e.g. "I feel hopeless and want to give up on this
+degree"). How the tutor should respond to a distress-signaling goal or reflection is
+a PRODUCT and IRB decision, deliberately left to whoever owns that call. It is NOT
+implemented here, and no speculative distress handling has been built. Safe defaults
+recorded for the decider:
+
+- Do NOT honor a harmful directive (the wellbeing floor already holds regardless).
+- Respond BRIEFLY and KINDLY, without reinforcing or amplifying the distress.
+- Do NOT diagnose; the tutor is a study partner, not a clinician.
+- Leave deeper support to humans and the institution's own channels.
+- Whether to surface ANY support resource is a deliberate, reviewed choice, not a
+  default the framework ships on its own.
+
+Pointer in code: `agent/goals.py` (the "FLAGGED DECISION - distress response" note
+above the intake helpers).
