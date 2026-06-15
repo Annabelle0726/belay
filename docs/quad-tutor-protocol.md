@@ -93,6 +93,43 @@ The response is the standard tutor-turn object (affect, intervention, governance
 flag, message, `components` telemetry) — identical to `POST /api/sol/turn`. The
 sidecar exposes the loop; it does not relitigate any decision.
 
+## Deployment as an EduCloud Registry agent object
+
+The framework ships as a cleanly deployable **agent object** — the deployment-layer
+half of the compute-agnostic story. (We build the framework's own deployability,
+**not** the Registry or the Coolify adapter — those are the EduCloud Registry
+workstream.)
+
+- **Container + one-command bring-up.** `backend/Dockerfile` + root
+  `docker-compose.yml` stand the tutor up with **SQLite by default** (no DB
+  service required) and **`PROVIDER=openai_compatible`**, ready to point at a local
+  or institutional model endpoint via `OPENAI_BASE_URL` — no lock-in:
+  ```bash
+  docker compose up --build          # SQLite + openai_compatible
+  docker compose --profile postgres up --build   # opt-in Postgres (for scale)
+  ```
+- **Preflight doctor.** `python -m app.preflight` verifies config, store
+  reachability, and provider-endpoint reachability before serving (the container
+  CMD runs it informationally).
+- **Registry agent object.** The running container registers as a Registry agent
+  object: its `GET /quad/v1/capabilities` IS the discovery document (protocol
+  version, pack, provider, identity scheme, grades posture, stances, license), and
+  `GET /quad/v1/health` is the liveness probe. The Registry deploys the object
+  **through the Coolify adapter**; the resulting **`deployed_url`** is recorded
+  back onto the Registry object, and Quad addresses `/quad/v1/turn` at that URL.
+  The framework exposes the object and its health/capabilities; the Registry +
+  Coolify adapter own the deploy mechanics.
+
+## FERPA posture
+
+With a **self-hosted provider** (`PROVIDER=openai_compatible` pointed at a local or
+institutional model endpoint), the deployed tutor keeps **student code and tutor
+prompts on institutional compute** — there is no external model API in the data
+path. Combined with the pseudonymous-only identity (no names/SIS/email ever reach
+the server) and the read-only grades firewall, the deployment keeps PII and
+student work inside the institution's boundary. Self-hosted inference is a privacy
+*strengthener*, not a new off-box data path.
+
 ## Versioning
 
 The protocol is versioned in the path (`/quad/v1`). §6 schema additions are

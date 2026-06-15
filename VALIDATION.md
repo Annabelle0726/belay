@@ -390,6 +390,46 @@ PROVIDER=openai_compatible OPENAI_BASE_URL=http://localhost:11434/v1 OPENAI_API_
 
 ---
 
+## Phase 6 — Slice 6c: deployability + embed demo
+
+The framework as a cleanly deployable EduCloud Registry **agent object** (the
+framework's own deployability — not the Registry or the Coolify adapter).
+
+- **Container + one-command bring-up.** `backend/Dockerfile` (now SQLite-default +
+  `PROVIDER=openai_compatible`, installs `requirements-packs.txt` for the sandbox
+  runner) and root `docker-compose.yml`:
+  ```bash
+  docker compose up --build                       # SQLite + openai_compatible, no lock-in
+  docker compose --profile postgres up --build    # Postgres opt-in (scale)
+  ```
+  Point `OPENAI_BASE_URL` at any local/institutional model endpoint. No external
+  API required.
+- **Preflight doctor** — `python -m app.preflight` verifies config, store
+  reachability, and provider-endpoint reachability before serving (the container
+  CMD runs it informationally). Verified locally: `[PASS] config`, `[PASS] store`.
+  ```bash
+  cd backend && python -m app.preflight            # add --skip-provider to skip the endpoint probe
+  ```
+- **Embed demo** — `frontend/embed-demo.html` exercises **one `/quad/v1/turn`**
+  against the `_skeleton` pack (`echo-1`), pseudonymous id only. Run the server with
+  `TUTOR_PACK=_skeleton`; a `control`-stance turn needs no model.
+- **Registry / Coolify / FERPA** documented in `docs/quad-tutor-protocol.md`:
+  the container registers as a Registry agent object (its `/quad/v1/capabilities`
+  is the discovery doc, `/quad/v1/health` the liveness probe), deploys through the
+  Coolify adapter, and the resulting `deployed_url` is recorded back onto the
+  object. With a self-hosted provider, student code + prompts stay on institutional
+  compute (FERPA).
+
+Tests: `tests/test_deploy.py` (6) — preflight (config/store pass, provider probe is
+non-raising), and the `/quad/v1` embed turn against `_skeleton` + the demo page
+targets `/quad/v1/turn`. Suite: **273 passed, 1 skipped**.
+
+```bash
+cd backend && python -m pytest tests/test_deploy.py -q && python -m app.preflight --skip-provider
+```
+
+---
+
 ## 0. Environment (once) 🟢
 
 Use the project venv, and **always invoke the suite as `python -m pytest`** — a bare
