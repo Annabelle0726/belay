@@ -56,7 +56,8 @@ class InMemoryStore:
         self._events: List[dict] = []
 
     def get_learner_state(self, participant_id: str) -> dict:
-        return self._state.get(participant_id, {"grasped": [], "shaky": [], "attempts": 0, "concepts": {}})
+        return self._state.get(participant_id, {"grasped": [], "shaky": [], "attempts": 0,
+                                                "concepts": {}, "goals": None, "reflections": []})
 
     def save_learner_state(self, participant_id: str, state: dict) -> None:
         self._state[participant_id] = state
@@ -91,12 +92,15 @@ class SqlStore:
         with self._Session() as s:
             row = s.get(LearnerState, participant_id)
             if not row:
-                return {"grasped": [], "shaky": [], "attempts": 0, "concepts": {}}
+                return {"grasped": [], "shaky": [], "attempts": 0, "concepts": {},
+                        "goals": None, "reflections": []}
             return {
                 "grasped": row.grasped or [],
                 "shaky": row.shaky or [],
                 "attempts": row.attempts,
                 "concepts": row.concepts or {},
+                "goals": row.goals,
+                "reflections": row.reflections or [],
             }
 
     def save_learner_state(self, participant_id: str, state: dict) -> None:
@@ -110,6 +114,11 @@ class SqlStore:
             row.shaky = state.get("shaky", [])
             row.attempts = state.get("attempts", row.attempts or 0)
             row.concepts = state.get("concepts", row.concepts or {})
+            # v3 opt-in goals/reflections (preserve existing when key absent).
+            if "goals" in state:
+                row.goals = state["goals"]
+            if "reflections" in state:
+                row.reflections = state["reflections"]
             s.commit()
 
     def append_event(self, event: dict) -> None:

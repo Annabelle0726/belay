@@ -96,7 +96,7 @@ def _rules_overlay(plan: dict, ctx: dict, stance: str = "peer") -> dict:
 
 def plan(ctx: dict, llm: LLMClient, stance: str = "peer") -> dict:
     persona = get_active_pack().persona
-    base = planner_system(persona, stance)
+    base = planner_system(persona, stance, goals=ctx.get("goals"))
     system = base + (("\n\n" + TEACH_ADDENDUM) if ctx["mode"] == "teach" else "")
     out = llm.json(role="planner", tier="fast", system=system,
                    user=ctx_mod.serialize(ctx), max_tokens=400)

@@ -452,6 +452,40 @@ a PII (email) payload with **422**.
 
 ---
 
+## Learner goals & reflection — Slice A: intake, storage, prompt injection
+
+Opt-in, single-learner. **With no goals set, behavior is exactly what it is today**
+(the injection is empty) — existing families/tests stay green.
+
+- **Storage (LearnerState v3):** two additive columns — `goals` (the student's own
+  artifact `{text, ts}`, or null) and `reflections` (a list, used in Slice C).
+  Pseudonymous, never PII, never ranked/compared, never to grades, routed by consent
+  like all learner state. `agent/goals.py` provides `set_goals`/`get_goals`/
+  `clear_goals` (read-modify-write; `memory.update` preserves goals across a turn).
+  Migration on a deployed DB: `ALTER TABLE learner_state ADD COLUMN goals JSON;
+  ALTER TABLE learner_state ADD COLUMN reflections JSON DEFAULT '[]';` (dev: recreate
+  `qimvp.db`).
+- **Intake:** `POST /api/goals` `{participant_id, text}` (empty text clears),
+  `GET /api/goals/{pid}`; and the sidecar `POST /quad/v1/goals` `{pseudo_id, text}`,
+  which passes the **same PII boundary** (email in a goal → 422) and is advertised in
+  `/quad/v1/capabilities`.
+- **Injection:** the active goals are injected into the persona-parameterized system
+  prompts (`reasoner_system`/`planner_system` gained a `goals=` arg) as the student's
+  self-set goals to honor **within** the stance — framed explicitly as NOT authority
+  over it (the no-solution stance still holds even if a goal asks for the answer).
+  `context` adds `ctx["goals"]` for non-control turns.
+
+Tests: `tests/test_goals.py` (8) — set/update/clear, per-learner pseudonymous
+storage, goals survive a turn, injection appears in the constructed reasoner prompt,
+no-goals leaves the prompt unchanged, HTTP + sidecar intake (PII-checked). Suite:
+**280 passed, 1 skipped**.
+
+```bash
+cd backend && python -m pytest tests/test_goals.py -q
+```
+
+---
+
 ## 0. Environment (once) 🟢
 
 Use the project venv, and **always invoke the suite as `python -m pytest`** — a bare

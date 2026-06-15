@@ -67,6 +67,16 @@ class SolTurnResponse(BaseModel):
     components: dict[str, Any] = {}
 
 
+class GoalRequest(BaseModel):
+    participant_id: str
+    text: str = ""          # the student's own words; empty clears the goals
+
+
+class ReflectionRequest(BaseModel):
+    participant_id: str
+    text: str               # the student's reflection, in their own words
+
+
 class ParticipantRequest(BaseModel):
     anon_code: str
     consent: bool = False

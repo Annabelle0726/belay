@@ -31,6 +31,19 @@ the misconception it judged the student to be exhibiting this turn; null when no
 match. This is an exploratory measure, NOT confirmatory. Pre-F6 rows have this
 field absent; downstream code must use .get("misconception_id") with a None
 default. Control turns carry null by construction (no reasoner runs).
+
+LearnerState schema v3 (goals/reflections): added two ADDITIVE columns — `goals`
+JSON (the student's own self-set goals artifact {text, ts, honored}, or null) and
+`reflections` JSON (a timestamped list of the student's reflections, each linked
+to the goal in force). Opt-in: with no goals/reflections set, both default to
+null/[] and behavior is unchanged. No PII; the student's own words only.
+MIGRATION (deployed DBs): ALTER TABLE learner_state ADD COLUMN goals JSON;
+ALTER TABLE learner_state ADD COLUMN reflections JSON DEFAULT '[]'; (dev: recreate).
+
+Event types are ADDITIVE: alongside `run` and `turn`, the goals/reflection layer
+emits `goal_set`, `goal_alignment_check`, `reflect`, and `reflection_recorded` —
+new event_type values only; the 8-field row shape and the events.jsonl export
+contract are unchanged. These only appear when a student opts in to goals.
 """
 from __future__ import annotations
 
@@ -67,6 +80,9 @@ class LearnerState(Base):
     shaky: Mapped[list] = mapped_column(JSON, default=list)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     concepts: Mapped[dict] = mapped_column(JSON, default=dict)
+    # v3 (opt-in goals/reflections): the student's own self-set goals + reflections.
+    goals: Mapped[dict | None] = mapped_column(JSON, nullable=True, default=None)
+    reflections: Mapped[list] = mapped_column(JSON, default=list)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow)
 
 

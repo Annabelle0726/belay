@@ -139,6 +139,7 @@ def test_no_grade_write_route_exists():
         ("/quad/v1/health", ("GET",)),
         ("/quad/v1/capabilities", ("GET",)),
         ("/quad/v1/turn", ("POST",)),
+        ("/quad/v1/goals", ("POST",)),
         ("/quad/v1/events", ("POST",)),
     }
 

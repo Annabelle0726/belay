@@ -85,6 +85,11 @@ def build_context(payload: dict, learner_state: dict, attempts: int) -> dict:
                          "shaky": learner_state.get("shaky", [])},
         "recent_dialogue": payload.get("recent", []),
     }
+    # Opt-in learner-authored goals (the student's own words). Injected into the
+    # persona-parameterized prompts (reasoner especially) as goals the tutor honors
+    # within its stance — never as authority over the stance. Absent for control.
+    if stance != "control":
+        ctx["goals"] = learner_state.get("goals")
     # Shared capability (F6): inject misconception expectations + signatures for
     # the peer and oracle stances so both arms have the same tutor knowledge.
     # Control short-circuits in the orchestrator before the reasoner runs, so

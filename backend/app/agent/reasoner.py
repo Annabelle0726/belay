@@ -23,7 +23,7 @@ def respond(ctx: dict, plan: dict, llm: LLMClient, critique: dict | None = None,
     higher effort when self-evaluation is under-confident (escalation). Applied
     identically for peer and oracle so capability is held constant across stances."""
     persona = get_active_pack().persona
-    base = reasoner_system(persona, stance)
+    base = reasoner_system(persona, stance, goals=ctx.get("goals"))
     system = base + (("\n\n" + TEACH_ADDENDUM) if ctx["mode"] == "teach" else "")
 
     user = (

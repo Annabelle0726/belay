@@ -24,6 +24,7 @@ from fastapi import APIRouter, Body, HTTPException
 from pydantic import ValidationError
 
 from ...agent import get_llm, run_turn
+from ...agent import goals as _goals
 from ...config import settings
 from ...core.domain import get_active_pack
 from ...store import ConsentRouter, InMemoryStore, SqlStore
@@ -69,7 +70,9 @@ def build_router(consent_router: ConsentRouter, pack, llm_factory: Callable[[], 
             "routes": [f"GET /{PROTOCOL_VERSION}/health",
                        f"GET /{PROTOCOL_VERSION}/capabilities",
                        f"POST /{PROTOCOL_VERSION}/turn",
+                       f"POST /{PROTOCOL_VERSION}/goals",
                        f"POST /{PROTOCOL_VERSION}/events"],
+            "learner_goals": "opt-in; the student's own words, pseudonymous, never to grades",
             "license": "Apache-2.0",
         }
 
@@ -109,6 +112,22 @@ def build_router(consent_router: ConsentRouter, pack, llm_factory: Callable[[], 
             return run_turn(turn_payload, _llm(), store)
         except Exception as e:  # surface a clean error
             raise HTTPException(502, f"tutor unavailable: {e}")
+
+    @api.post("/goals")
+    def goals(payload: dict = Body(...)):
+        """Set/update/clear the student's own goals (opt-in). Same PII boundary as
+        everything else; pseudonymous id only; never written to grades."""
+        try:
+            assert_no_pii(payload)
+        except PIIRejected as e:
+            raise HTTPException(422, f"PII rejected at boundary: {e}")
+        pid = payload.get("pseudo_id")
+        if not pid:
+            raise HTTPException(422, "pseudo_id required")
+        consent_router.register_participant(pid, pid, bool(payload.get("consent", False)))
+        store = consent_router.store_for(pid)
+        artifact = _goals.set_goals(store, pid, payload.get("text", ""))
+        return {"ok": True, "pseudo_id": pid, "goals": artifact}
 
     @api.post("/events")
     def events(payload: dict = Body(...)):

@@ -43,6 +43,9 @@ def update(
         "shaky": merged["shaky"],
         "attempts": prev.get("attempts", 0),
         "concepts": new_concepts,
+        # Preserve the opt-in goals/reflections across a turn (never clobbered here).
+        "goals": prev.get("goals"),
+        "reflections": prev.get("reflections", []),
     }
     store.save_learner_state(participant_id, state)
     return state

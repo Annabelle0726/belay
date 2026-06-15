@@ -31,9 +31,11 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from .agent import get_llm, run_turn
+from .agent import goals as goals_mod
 from .config import settings
 from .core.domain import get_active_pack
 from .schemas import (
+    GoalRequest,
     ParticipantRequest,
     ParticipantResponse,
     RunRequest,
@@ -138,3 +140,21 @@ def participant(req: ParticipantRequest):
 def export_events(pid: str):
     # Export reads ONLY the durable store; non-consenters have no trace by design.
     return Response(_router.durable.export_jsonl(pid), media_type="application/x-ndjson")
+
+
+# --- learner-authored goals (opt-in; pseudonymous, never PII, never to grades) --
+
+@app.post("/api/goals")
+def set_goals(req: GoalRequest):
+    """Set/update (empty text clears) the student's own goals. Stored
+    pseudonymously on the learner model, routed by consent like all learner state."""
+    store = _router.store_for(req.participant_id)
+    artifact = goals_mod.set_goals(store, req.participant_id, req.text)
+    return {"participant_id": req.participant_id, "goals": artifact}
+
+
+@app.get("/api/goals/{pid}")
+def get_goals(pid: str):
+    store = _router.store_for(pid)
+    return {"participant_id": pid,
+            "goals": goals_mod.get_goals(store.get_learner_state(pid))}
