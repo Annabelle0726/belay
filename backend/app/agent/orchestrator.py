@@ -43,6 +43,7 @@ from ..config import settings
 from ..core.domain import get_active_pack
 from ..store import Store, make_event
 from . import governance, memory, planner, reasoner, self_eval
+from . import telemetry as tel
 from .context import build_context
 from .llm import LLMClient
 from .prompts import ABSTAIN_MESSAGE, CONTROL_MESSAGE
@@ -94,6 +95,8 @@ def _control_turn(payload: dict, ctx: dict, store: Store,
             # Persistent learner model — null for control (no loop).
             "learner_model": None,
             "timings_ms": {},
+            # Per-component usage (additive §6): control runs no LLM calls.
+            "component_usage": {},
             "model_tiers": settings.model_tiers,
             # §6 pack-agnostic envelope: pack id + generic execution provider
             # (replaces the former domain-specific telemetry.quantum_backend).
@@ -130,6 +133,16 @@ def _abstain(draft: dict) -> dict:
 
 
 def run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
+    """Activate a per-turn usage meter, then run the loop. The meter collects
+    per-component latency/tokens/cost (additive §6 telemetry.component_usage)."""
+    token = tel.set_meter(tel.UsageMeter())
+    try:
+        return _run_turn(payload, llm, store)
+    finally:
+        tel.reset_meter(token)
+
+
+def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
     pid = payload["participant_id"]
     exercise = payload["exercise"]
     mode = payload.get("mode", "study")
@@ -313,6 +326,8 @@ def run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
             # ---- Persistent learner model telemetry ----
             "learner_model": lm_telemetry,
             "timings_ms": timings,
+            # Per-component usage (additive §6): latency, tokens, cost per component.
+            "component_usage": tel.current_meter().by_component(),
             "model_tiers": settings.model_tiers,
             # §6 pack-agnostic envelope: pack id + generic execution provider
             # (replaces the former domain-specific telemetry.quantum_backend).

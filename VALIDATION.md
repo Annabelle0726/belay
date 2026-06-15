@@ -220,6 +220,35 @@ stub satisfies the `Provider` protocol. **No network.**
 
 ---
 
+## Phase 2 — Workstream C: per-component telemetry (additive §6)
+
+Each component invocation (planner / reasoner / self_eval) now records **latency,
+prompt/completion tokens, and cost** into a per-turn `UsageMeter`
+(`app/agent/telemetry.py`, a ContextVar so the `Provider.json` signature is
+unchanged). The orchestrator folds it into the trace as an **additive** field
+`telemetry.component_usage`. Tokens come from the provider response
+(OpenAI-compatible `usage` / Anthropic `usage`); they are `null` when unreported
+(e.g. a stub). Cost = tokens × `COST_PER_1K_PROMPT`/`COST_PER_1K_COMPLETION`
+(default 0 — self-hosted is free).
+
+**Additive, not structural:** existing telemetry keys/types are unchanged and the
+`events.jsonl` export contract is intact; `component_usage` is a new key only.
+Control turns carry `component_usage: {}` (no LLM calls).
+
+Sample `telemetry.component_usage` (from a usage-reporting stub, cost demo at
+$0.002/$0.006 per 1k):
+```json
+{
+  "planner":   {"calls": 1, "latency_ms": 140.0, "prompt_tokens": 420, "completion_tokens": 60,  "cost": 0.0012},
+  "reasoner":  {"calls": 1, "latency_ms": 820.0, "prompt_tokens": 900, "completion_tokens": 180, "cost": 0.00288},
+  "self_eval": {"calls": 1, "latency_ms": 160.0, "prompt_tokens": 380, "completion_tokens": 50,  "cost": 0.00106}
+}
+```
+Test: `tests/test_telemetry.py` (6) — meter aggregation, null-when-unreported,
+additive presence, population from provider usage, control = empty, no cross-turn leak.
+
+---
+
 ## 0. Environment (once) 🟢
 
 Use the project venv, and **always invoke the suite as `python -m pytest`** — a bare

@@ -54,6 +54,11 @@ class Settings:
 
     llm_temperature: float = field(default_factory=lambda: float(_env("LLM_TEMPERATURE", "0.4")))
 
+    # Cost telemetry (Workstream C): provider-configurable USD per 1k tokens.
+    # Default 0 — self-hosted inference is free; set for a metered hosted provider.
+    cost_per_1k_prompt: float = field(default_factory=lambda: float(_env("COST_PER_1K_PROMPT", "0")))
+    cost_per_1k_completion: float = field(default_factory=lambda: float(_env("COST_PER_1K_COMPLETION", "0")))
+
     @property
     def model_tiers(self) -> Dict[str, str]:
         """Active provider's tier->concrete-model mapping ({fast, strong}). For a

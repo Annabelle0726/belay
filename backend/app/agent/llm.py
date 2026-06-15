@@ -26,9 +26,16 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from typing import Dict, Protocol, runtime_checkable
 
 from ..config import settings
+from . import telemetry as _tel
+
+
+def _cost(prompt_tokens, completion_tokens) -> float:
+    return round((prompt_tokens or 0) / 1000.0 * settings.cost_per_1k_prompt
+                 + (completion_tokens or 0) / 1000.0 * settings.cost_per_1k_completion, 6)
 
 
 @runtime_checkable
@@ -87,8 +94,16 @@ class OpenAICompatProvider:
                 or getattr(msg, "reasoning_content", "")
                 or "")
 
+    @staticmethod
+    def _usage(resp):
+        u = getattr(resp, "usage", None)
+        if u is None:
+            return None, None
+        return getattr(u, "prompt_tokens", None), getattr(u, "completion_tokens", None)
+
     def json(self, *, role: str, tier: str, system: str, user: str,
              max_tokens: int = 800, reasoning_effort: str | None = None) -> dict:
+        t0 = time.perf_counter()
         model = self.model_for(tier)
         kwargs: dict = dict(
             model=model,
@@ -132,6 +147,10 @@ class OpenAICompatProvider:
 
         if parsed is None:
             raise ValueError(f"{role}: model did not return parseable JSON")
+
+        ptok, ctok = self._usage(resp)
+        _tel.record(role, latency_ms=round((time.perf_counter() - t0) * 1000, 1),
+                    prompt_tokens=ptok, completion_tokens=ctok, cost=_cost(ptok, ctok))
         return parsed
 
 
@@ -153,6 +172,7 @@ class AnthropicProvider:
              max_tokens: int = 800, reasoning_effort: str | None = None) -> dict:
         # reasoning_effort is an open-weight knob; accepted for protocol
         # conformance and ignored here (Anthropic uses a different mechanism).
+        t0 = time.perf_counter()
         resp = self._client.messages.create(
             model=self.model_for(tier),
             max_tokens=max_tokens,
@@ -164,6 +184,11 @@ class AnthropicProvider:
         parsed = parse_json(text)
         if parsed is None:
             raise ValueError(f"{role}: model did not return parseable JSON")
+        u = getattr(resp, "usage", None)
+        ptok = getattr(u, "input_tokens", None) if u else None
+        ctok = getattr(u, "output_tokens", None) if u else None
+        _tel.record(role, latency_ms=round((time.perf_counter() - t0) * 1000, 1),
+                    prompt_tokens=ptok, completion_tokens=ctok, cost=_cost(ptok, ctok))
         return parsed
 
 

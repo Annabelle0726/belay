@@ -200,6 +200,14 @@ moved into `result.pack` for quantum. `measures` (`_metric`, `_fail_sig`) and
 `context._last_result` now read only pack-agnostic fields; `nontrivial_revision`
 delegates to the pack's parse-only `program_signature`. Export contract unchanged.
 
+**Phase 2 additive telemetry (no schema-version bump).** `telemetry.provider`
+now carries the inference provider id (`openai_compatible`/`anthropic`/`bedrock`).
+New additive `telemetry.component_usage` records per-component
+`{calls, latency_ms, prompt_tokens, completion_tokens, cost}` (tokens/cost null
+when the provider doesn't report them; control turns `{}`). These are **additive
+keys only** — existing event types, keys, version semantics, and the
+`events.jsonl` export contract are unchanged.
+
 ---
 
 ## (d) Deletion list — **EXECUTED in Phase 1d** ✅
