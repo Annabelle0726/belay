@@ -108,6 +108,79 @@ def test_openai_compatible_targets_configured_base_url(monkeypatch):
     assert str(prov._client.base_url).rstrip("/") == "http://localhost:11434/v1"
 
 
+# ── thinking is a model capability (default off for openai_compatible) ────────
+
+class _FakeMsg:
+    content = '{"ok": true}'
+
+
+class _FakeChoice:
+    message = _FakeMsg()
+
+
+class _FakeResp:
+    choices = [_FakeChoice()]
+    usage = None
+
+
+class _Completions:
+    def __init__(self, rec):
+        self._rec = rec
+
+    def create(self, **kwargs):
+        self._rec["kwargs"] = kwargs
+        return _FakeResp()
+
+
+class _Chat:
+    def __init__(self, rec):
+        self.completions = _Completions(rec)
+
+
+class _RecorderClient:
+    """Records the kwargs passed to chat.completions.create; no network."""
+
+    def __init__(self):
+        self.rec: dict = {}
+        self.chat = _Chat(self.rec)
+
+
+def _openai_provider_with_recorder(monkeypatch, settings_obj):
+    import app.agent.llm as llm_mod
+    monkeypatch.setattr(llm_mod, "settings", settings_obj)
+    prov = OpenAICompatProvider.__new__(OpenAICompatProvider)  # bypass real client init
+    prov._client = _RecorderClient()
+    return prov
+
+
+def test_openai_compatible_omits_thinking_by_default(monkeypatch):
+    """Default: NO thinking/reasoning param — works against ordinary non-reasoning
+    local models (llama3.2/mistral/qwen2.5)."""
+    import app.config as config_mod
+    s = config_mod.Settings()                      # OPENAI_REASONING unset -> False
+    prov = _openai_provider_with_recorder(monkeypatch, s)
+    # Even with a per-call reasoning_effort (the escalation lever), nothing is sent.
+    prov.json(role="reasoner", tier="strong", system="s", user="u", reasoning_effort="medium")
+    kwargs = prov._client.rec["kwargs"]
+    assert "extra_body" not in kwargs              # no reasoning/thinking parameter
+    assert "messages" in kwargs                    # (sanity: real create path recorded)
+
+
+def test_openai_compatible_sends_thinking_when_enabled(monkeypatch):
+    """Opt-in (OPENAI_REASONING=1): reasoning_effort is sent for a reasoning model."""
+    import app.config as config_mod
+    monkeypatch.setenv("OPENAI_REASONING", "1")
+    s = config_mod.Settings()
+    prov = _openai_provider_with_recorder(monkeypatch, s)
+    prov.json(role="reasoner", tier="strong", system="s", user="u", reasoning_effort="high")
+    assert prov._client.rec["kwargs"].get("extra_body") == {"reasoning_effort": "high"}
+
+
+def test_openai_compatible_capability_default_is_off():
+    import app.config as config_mod
+    assert config_mod.Settings().openai_reasoning is False
+
+
 def test_stub_satisfies_provider_protocol():
     class StubProvider:
         name = "stub"

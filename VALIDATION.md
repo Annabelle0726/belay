@@ -203,6 +203,15 @@ per-provider config (`settings.model_tiers`). `PROVIDER` selects the provider.
 | `anthropic` | live (hosted convenience) | Anthropic API | `ANTHROPIC_MODEL_FAST` (`claude-haiku-4-5-20251001`) | `ANTHROPIC_MODEL_STRONG` (`claude-sonnet-4-6`) | `ANTHROPIC_API_KEY` | n/a |
 | `bedrock` | **documented stub (not live)** | Amazon Bedrock | `BEDROCK_MODEL_FAST` (`amazon.nova-lite-v1:0`) | `BEDROCK_MODEL_STRONG` (`amazon.nova-pro-v1:0`) | AWS creds | n/a |
 
+- **Thinking / reasoning is a per-provider/model CAPABILITY, not sent
+  unconditionally.** `openai_compatible` sends **no** thinking/reasoning parameter
+  by default, so it works against ordinary non-reasoning local models
+  (llama3.2 / mistral / qwen2.5); opt in with `OPENAI_REASONING=1` (then
+  `REASONING_STRONG` / the per-call escalation effort is sent as `reasoning_effort`)
+  for an endpoint serving a reasoning model (e.g. gpt-oss). `anthropic` requests
+  **extended thinking** by default (`ANTHROPIC_THINKING`, budget
+  `ANTHROPIC_THINKING_BUDGET`). `bedrock` (stub) is unchanged. This gating touches
+  no governance logic — the inference choice never changes the leak gate.
 - A **single-model self-hosted endpoint** maps both tiers to one model
   (`MODEL_FAST == MODEL_STRONG`).
 - `openai_compatible` needs **no Anthropic dependency** — an institution can run

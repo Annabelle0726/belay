@@ -10,6 +10,13 @@ def _env(key: str, default: str) -> str:
     return os.environ.get(key, default)
 
 
+def _envbool(key: str, default: bool) -> bool:
+    v = os.environ.get(key)
+    if v is None:
+        return default
+    return v.strip().lower() in ("1", "true", "yes", "on")
+
+
 @dataclass
 class Settings:
     # --- Model/inference provider seam -------------------------------------
@@ -35,8 +42,19 @@ class Settings:
     openai_model_fast: str = field(default_factory=lambda: _env("MODEL_FAST", "llama3.2"))
     openai_model_strong: str = field(default_factory=lambda: _env("MODEL_STRONG", "llama3.2"))
     # Optional reasoning-effort knob (gpt-oss etc.); empty = not sent. Applied to
-    # the strong tier only.
+    # the strong tier only, and ONLY when openai_reasoning is enabled (below).
     reasoning_strong: str = field(default_factory=lambda: _env("REASONING_STRONG", ""))
+
+    # --- "Thinking"/reasoning is a per-provider/model CAPABILITY ------------
+    # Not sent unconditionally. openai_compatible defaults OFF so ordinary
+    # non-reasoning local models (llama3.2 / mistral / qwen2.5) work; opt in with
+    # OPENAI_REASONING=1 for an endpoint that serves a reasoning model (e.g.
+    # gpt-oss), which then receives reasoning_effort.
+    openai_reasoning: bool = field(default_factory=lambda: _envbool("OPENAI_REASONING", False))
+    # anthropic requests extended thinking by default (its capability).
+    anthropic_thinking: bool = field(default_factory=lambda: _envbool("ANTHROPIC_THINKING", True))
+    anthropic_thinking_budget: int = field(
+        default_factory=lambda: int(_env("ANTHROPIC_THINKING_BUDGET", "2048")))
 
     # anthropic
     anthropic_api_key: str = field(default_factory=lambda: _env("ANTHROPIC_API_KEY", ""))

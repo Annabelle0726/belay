@@ -112,11 +112,16 @@ class OpenAICompatProvider:
             temperature=settings.llm_temperature,
             max_tokens=max_tokens,
         )
-        # Per-call reasoning_effort (escalation lever) overrides the tier default;
-        # the strong-tier default comes from config (empty = not sent).
-        effort = reasoning_effort or (settings.reasoning_strong if tier == "strong" else "")
-        if effort:
-            kwargs["extra_body"] = {"reasoning_effort": effort}
+        # "Thinking" is a model CAPABILITY, not sent unconditionally. Default OFF
+        # for openai_compatible so ordinary non-reasoning local models
+        # (llama3.2/mistral/qwen2.5) work — they reject an unknown reasoning param.
+        # Opt in with OPENAI_REASONING=1 for an endpoint serving a reasoning model;
+        # the effort then comes from the per-call escalation lever or the strong-
+        # tier default. No governance logic is involved either way.
+        if settings.openai_reasoning:
+            effort = reasoning_effort or (settings.reasoning_strong if tier == "strong" else "")
+            if effort:
+                kwargs["extra_body"] = {"reasoning_effort": effort}
 
         # Prefer JSON mode; some endpoints reject it — fall back silently.
         kwargs_json = dict(kwargs, response_format={"type": "json_object"})
@@ -170,15 +175,23 @@ class AnthropicProvider:
 
     def json(self, *, role: str, tier: str, system: str, user: str,
              max_tokens: int = 800, reasoning_effort: str | None = None) -> dict:
-        # reasoning_effort is an open-weight knob; accepted for protocol
-        # conformance and ignored here (Anthropic uses a different mechanism).
+        # reasoning_effort is the open-weight knob; Anthropic uses extended
+        # thinking instead. Thinking is this provider's CAPABILITY (default on);
+        # openai_compatible defaults it off. No governance logic is involved.
         t0 = time.perf_counter()
-        resp = self._client.messages.create(
+        kwargs: dict = dict(
             model=self.model_for(tier),
             max_tokens=max_tokens,
             system=system,
             messages=[{"role": "user", "content": user}],
         )
+        if settings.anthropic_thinking:
+            budget = max(settings.anthropic_thinking_budget, 1024)  # Anthropic minimum
+            # max_tokens must exceed the thinking budget; extended thinking also
+            # requires the default temperature (so we omit temperature here).
+            kwargs["max_tokens"] = max(max_tokens, budget + 512)
+            kwargs["thinking"] = {"type": "enabled", "budget_tokens": budget}
+        resp = self._client.messages.create(**kwargs)
         text = "".join(b.text for b in resp.content
                        if getattr(b, "type", None) == "text").strip()
         parsed = parse_json(text)
