@@ -249,6 +249,48 @@ additive presence, population from provider usage, control = empty, no cross-tur
 
 ---
 
+## Phase 2 — Workstream D: zero-external-API deployment + behavioral evals 🔴(local)
+
+**Deployment mode (first-class): zero external API.** `PROVIDER=openai_compatible`
+pointed at a local Ollama or vLLM endpoint makes the tutor run entirely on
+institutional compute — **no external calls**. This is the default provider with
+a local `OPENAI_BASE_URL`.
+
+**FERPA framing.** In this mode, student code and tutor prompts **never leave
+institutional compute** — there is no external model API in the data path.
+Self-hosted inference is a privacy *strengthener*, not a new off-box path
+(consistent with the pseudonymous-only, no-new-identity invariant). Tokens/cost
+telemetry stays local; cost is 0 for self-hosted.
+
+**Wiring.** The behavioral evals (`tests/evals/sol_behavior_evals.py`) are gated
+by `RUN_LLM_EVALS` and call `get_llm()`, which returns the configured provider —
+so they run against whatever `PROVIDER` + `OPENAI_BASE_URL` point at. Verified:
+`get_provider()` targets the configured base URL with no network on construction
+(`tests/test_provider_seam.py::test_openai_compatible_targets_configured_base_url`).
+
+**One-command run against local Ollama** (the exact invocation):
+```bash
+ollama pull llama3.2          # one-time: install Ollama + pull a small model
+cd backend && \
+  PROVIDER=openai_compatible \
+  OPENAI_BASE_URL=http://localhost:11434/v1 \
+  OPENAI_API_KEY=ollama \
+  MODEL_FAST=llama3.2 MODEL_STRONG=llama3.2 \
+  RUN_LLM_EVALS=1 python -m pytest tests/evals/sol_behavior_evals.py -v
+```
+(Ollama serves the OpenAI-compatible API at `/v1` and ignores the key, but the SDK
+wants a non-empty string. vLLM: point `OPENAI_BASE_URL` at its `/v1` and set the
+served model name. For a larger reasoner, set `MODEL_STRONG` to a bigger pulled model.)
+
+**Status in this build:** no local OpenAI-compatible endpoint was reachable
+(`localhost:11434`/`8000`/`1234` all refused; no `ollama`/`vllm` installed) and a
+model server was **not** stood up unprompted. The evals therefore remain **skipped
+pending a local endpoint** — run the command above to execute the never-leak
+family (including the prose-bait fixture), stretch-after-success,
+reciprocate-in-teach, redirect-answer-seeking, calibration, encourage, and revisit.
+
+---
+
 ## 0. Environment (once) 🟢
 
 Use the project venv, and **always invoke the suite as `python -m pytest`** — a bare
@@ -351,28 +393,34 @@ IPv6 miss before connecting, use `127.0.0.1` in the DSN instead.
 
 ---
 
-## 3. Live model layer — Jetstream2 inference 🔴
+## 3. Live model layer — the provider seam 🔴
 
-Needs a Jetstream2/IU instance (direct, token-free) **or** an Open WebUI proxy token.
+The provider is selected by `PROVIDER` (see Phase 2 Workstream B for the matrix).
+The default `openai_compatible` targets any OpenAI-compatible endpoint via
+`OPENAI_BASE_URL` (local Ollama/vLLM → zero external API, Workstream D; or the
+Jetstream2 Open WebUI proxy). `smoke_inference.py` probes tier reachability,
+served model ids, per-role JSON reliability, reasoning_effort passthrough, and
+end-to-end turns:
 
 ```bash
-# on a JS2/IU instance: no token needed
-python backend/scripts/smoke_inference.py
-#   checks: tier reachability, served model ids, per-role JSON parse reliability,
-#   reasoning_effort passthrough, end-to-end peer+oracle turns, escalation, latency
+# local Ollama (zero external API):
+PROVIDER=openai_compatible OPENAI_BASE_URL=http://localhost:11434/v1 OPENAI_API_KEY=ollama \
+  MODEL_FAST=llama3.2 MODEL_STRONG=llama3.2 python backend/scripts/smoke_inference.py
 
-# off-instance: point at the proxy first
-export LLM_BASE_FAST=https://llm.jetstream-cloud.org/api \
-       LLM_BASE_STRONG=https://llm.jetstream-cloud.org/api \
-       LLM_API_KEY=<token-from-chat-ui>
-python backend/scripts/smoke_inference.py
+# Jetstream2 via the Open WebUI proxy:
+PROVIDER=openai_compatible OPENAI_BASE_URL=https://llm.jetstream-cloud.org/api \
+  OPENAI_API_KEY=<token> MODEL_FAST=llama-4-scout MODEL_STRONG=gpt-oss-120b \
+  REASONING_STRONG=high python backend/scripts/smoke_inference.py
 ```
 
-**Behavioral fidelity evals** (the 11 skipped in §1) — needs a reachable LLM:
+**Behavioral fidelity evals** (the 11 skipped in §1) — need a reachable LLM. The
+zero-external-API path (local Ollama) is the recommended way to run them; see
+Phase 2 Workstream D for the exact one-command invocation. In short:
 
 ```bash
-RUN_LLM_EVALS=1 python -m pytest backend/tests/evals/sol_behavior_evals.py
-#   never-leaks · just-solved→stretch · teach→reciprocate · answer-seeking→redirect ·
+# from backend/, with PROVIDER + OPENAI_BASE_URL pointed at a local model (Workstream D):
+RUN_LLM_EVALS=1 python -m pytest tests/evals/sol_behavior_evals.py
+#   never-leaks (incl. PROSE-bait) · just-solved→stretch · teach→reciprocate · answer-seeking→redirect ·
 #   frustration→encourage (deterministic invariant) ·
 #   disengaged→encourage (deterministic invariant) ·
 #   LLM-graded: grounded affirmation + concrete next step, no solution (frustrated) ·
@@ -388,9 +436,10 @@ deterministic planner overlay tests.
 
 New §5d worked-example verification measures (computed offline from trace):
 `worked_example_count`, `worked_example_verified_rate`, `worked_example_retry_rate` —
-all exercised by `tests/test_measures.py`. New module: `backend/app/quantum/worked_example.py`
-(pure verifier; no LLM, no network). NOTE: both `process_measures.md` copies
-(canonical `backend/app/analysis/` and root) must be updated together.
+all exercised by `tests/test_measures.py`. The worked-example verifier is now the
+active pack's `verify_worked_example` (DS: `packs/datascience`, runs in the
+sandbox). NOTE: both `process_measures.md` copies (canonical
+`backend/app/analysis/` and root) must be updated together.
 
 New §5e learner-model measures (computed cross-exercise from trace + end concepts snapshot):
 `concepts_ever_shaky`, `shaky_resolution_rate`, `revisit_count`,

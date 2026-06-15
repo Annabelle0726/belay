@@ -92,6 +92,22 @@ def test_bedrock_stub_raises_on_call():
 
 # ── the seam is a Protocol a stub satisfies (no network in the whole suite) ───
 
+def test_openai_compatible_targets_configured_base_url(monkeypatch):
+    """Zero-external-API wiring: PROVIDER=openai_compatible + OPENAI_BASE_URL routes
+    the client at the configured (local) endpoint. Construction only — no network."""
+    import app.config as config_mod
+    import app.agent.llm as llm_mod
+    monkeypatch.setenv("PROVIDER", "openai_compatible")
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:11434/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "ollama")
+    s = config_mod.Settings()
+    monkeypatch.setattr(config_mod, "settings", s)
+    monkeypatch.setattr(llm_mod, "settings", s)
+    prov = llm_mod.get_provider()
+    assert isinstance(prov, OpenAICompatProvider)
+    assert str(prov._client.base_url).rstrip("/") == "http://localhost:11434/v1"
+
+
 def test_stub_satisfies_provider_protocol():
     class StubProvider:
         name = "stub"
