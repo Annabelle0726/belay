@@ -300,6 +300,40 @@ reciprocate-in-teach, redirect-answer-seeking, calibration, encourage, and revis
 
 ---
 
+## Phase 6 — Slice 6a: Quad tutor-seam sidecar (`/quad/v1`)
+
+`backend/app/integrations/quad/` exposes the existing tutor loop to the EduCloud
+Quad control plane over a versioned HTTP/JSON sidecar. **Apache-2.0-compatible;
+imports core only** (never `packs.*`). Mounted on the main app and also buildable
+standalone via `build_router(consent_router, pack, llm_factory)`. Full protocol:
+`docs/quad-tutor-protocol.md`.
+
+- **Four routes:** `GET /quad/v1/health`, `GET /quad/v1/capabilities`,
+  `POST /quad/v1/turn` (one tutor turn over the existing loop), `POST /quad/v1/events`
+  (webhook ingress). `capabilities` advertises the identity scheme, grades posture,
+  stances, and license.
+- **Pseudonymous identity only:** `pseudo_id` = host numeric user id namespaced by
+  provider (`gh:12345`), which IS the participant anon-code namespace. **PII is
+  rejected at the boundary** (422): name/SIS/student/email/ssn/phone field keys
+  anywhere, plaintext email patterns (except in `source`), and non-pseudonymous ids.
+- **Grades firewall:** `gradingspec_result` is **read-only** turn context (the
+  gradingspec→§6 run-result convergence from Phase 1); there is **no grade-write
+  route and no write path**, and the tutor never writes grades.
+- **Import boundary:** `tests/test_import_boundaries.py` now scans `integrations/`
+  too — it imports core only, never a pack/quantum.
+- **Governance unchanged:** the sidecar adds no prompt-level decision; the
+  deterministic leak gate is untouched.
+
+Tests: `tests/test_quad_sidecar.py` (12) — the four routes; PII rejection (email,
+name, SIS, non-pseudonymous id); the grades firewall (read-only context, no
+write route, no grade-write tokens in source). Suite: **260 passed, 11 skipped**.
+
+```bash
+cd backend && python -m pytest tests/test_quad_sidecar.py tests/test_import_boundaries.py -q
+```
+
+---
+
 ## 0. Environment (once) 🟢
 
 Use the project venv, and **always invoke the suite as `python -m pytest`** — a bare

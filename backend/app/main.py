@@ -8,6 +8,7 @@ Routes
   POST /api/sol/turn                     the evaluation-first peer loop
   POST /api/participant                  create/record consent (anonymized)
   GET  /api/session/{pid}/events.jsonl   export the §6 trace for analysis
+  /quad/v1/*                             Quad tutor-seam sidecar (integrations/quad)
 
 The active domain pack (TUTOR_PACK), store (memory|sql), and LLM client are
 selected from config so the same app runs offline for dev or wired to the real
@@ -58,10 +59,16 @@ _pack    = get_active_pack()   # active DomainPack (TUTOR_PACK, default datascie
 
 def _llm():
     # Constructed per-process lazily; uses the configured provider
-    # (Jetstream2 inference by default). Raises a clear error if unreachable.
+    # (openai_compatible by default). Raises a clear error if unreachable.
     if not hasattr(_llm, "_inst"):
         _llm._inst = get_llm()  # type: ignore[attr-defined]
     return _llm._inst  # type: ignore[attr-defined]
+
+
+# Quad tutor-seam sidecar: a versioned /quad/v1 surface over the same tutor loop
+# (Apache-2.0; pseudonymous identity; grades firewall). See integrations/quad.
+from .integrations.quad import build_router as _build_quad_router  # noqa: E402
+app.include_router(_build_quad_router(_router, _pack, _llm))
 
 
 @app.get("/healthz")

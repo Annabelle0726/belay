@@ -1,9 +1,11 @@
 """
 Import-boundary tripwires.
 
-1. The framework core (core/, agent/, analysis/, store/) must not import a
-   concrete pack at module load — the dependency arrow points packs -> core.
-   The registry's pack imports are deliberately function-local (lazy) and so are
+1. The framework core (core/, agent/, analysis/, store/) AND the host integrations
+   (integrations/, e.g. the Apache-2.0 Quad sidecar) must not import a concrete
+   pack at module load — the dependency arrow points packs -> core, and an
+   integration is license-clean only if it imports core, never packs. The
+   registry's pack imports are deliberately function-local (lazy) and so are
    allowed; only MODULE-LEVEL imports are forbidden.
 
 2. No Classiq dependency may creep into core or the packs (the quantum/Classiq
@@ -16,8 +18,9 @@ import os
 
 _APP = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "app"))
 
-_CORE_DIRS = ["core", "agent", "analysis", "store"]
-_SCAN_DIRS = ["core", "agent", "analysis", "store", "packs"]
+# integrations/ must import core only (never packs) — same rule as core itself.
+_CORE_DIRS = ["core", "agent", "analysis", "store", "integrations"]
+_SCAN_DIRS = ["core", "agent", "analysis", "store", "packs", "integrations"]
 
 
 def _py_files(*subdirs):
@@ -69,3 +72,15 @@ def test_core_does_not_import_quantum():
             if mod.split(".")[0] == "quantum" or ".quantum" in mod:
                 offenders.append((os.path.relpath(path, _APP), mod))
     assert not offenders, f"core modules import quantum at module level: {offenders}"
+
+
+def test_integrations_import_core_only():
+    """The Quad sidecar (and any host integration) is Apache-2.0-clean: it imports
+    framework CORE only, never a pack."""
+    offenders = []
+    for path in _py_files("integrations"):
+        for mod in _module_level_imports(path):
+            parts = mod.split(".")
+            if "packs" in parts or "quantum" in parts:
+                offenders.append((os.path.relpath(path, _APP), mod))
+    assert not offenders, f"integration modules import a pack/quantum: {offenders}"
