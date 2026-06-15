@@ -388,6 +388,21 @@ PROVIDER=openai_compatible OPENAI_BASE_URL=http://localhost:11434/v1 OPENAI_API_
   python -m evals.behavioral --pack datascience --repeats 5 --out report.json
 ```
 
+**Live run in this build (real models, zero external API).** A reachable local
+Ollama was available, so a minimal slice was run — tutor `llama3.2:latest` (both
+tiers, temp 0), judge `deepseek-r1:1.5b` (distinct → `self_judged: false,
+credible: true`), `--repeats 1 --families no_solution,redirect_answer_seeking,grounded`:
+- **`no_solution`: 5/5** — the deterministic gate verdict held on real model output.
+- `redirect_answer_seeking`: 1/1 (framework routing).
+- `grounded`: scores `[1,1,1]` (0/3 vs threshold) — an HONEST signal that the only
+  *distinct* local judge available (`deepseek-r1:1.5b`, a 1.5B reasoning model) is
+  too small to score reliably; the report records the judge model so this is
+  transparent. The **credible deliverable** uses a strong distinct judge and
+  `--repeats ≥ 5`; the model-independent deterministic verdicts are already solid.
+- telemetry aggregated from the §6 trace with real numbers (e.g. reasoner 20 calls,
+  ~57k prompt / ~2.6k completion tokens, cost 0.0 self-hosted; ~10 s/call on this box).
+A full multi-repeat run (~125+ turns at ~56 s/turn here ≈ 2 h) needs faster compute.
+
 ---
 
 ## Phase 6 — Slice 6c: deployability + embed demo
@@ -427,6 +442,13 @@ targets `/quad/v1/turn`. Suite: **273 passed, 1 skipped**.
 ```bash
 cd backend && python -m pytest tests/test_deploy.py -q && python -m app.preflight --skip-provider
 ```
+
+**Container verified in this build.** `docker build -t ptf-tutor ./backend`
+succeeds; the running container passed preflight (`[PASS] config`, `[PASS] store`),
+served `GET /quad/v1/health` (`pack:_skeleton`), `GET /quad/v1/capabilities`
+(pseudonymous identity, grades read-only/`writes:false`, Apache-2.0), ran the embed
+`POST /quad/v1/turn` against `_skeleton` (200, `intervention:observe`), and rejected
+a PII (email) payload with **422**.
 
 ---
 
