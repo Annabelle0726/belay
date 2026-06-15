@@ -310,7 +310,9 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
                         "confidence": confidence_trajectory["planner"]},
             "reasoner": {"raw_confidence": round(reasoner_conf, 2),
                          "misconception_id": draft.get("misconception_id")},
-            "self_eval": {"leak_risk": evaluation["leak_risk"], "reasons": evaluation["reasons"]},
+            "self_eval": {"leak_risk": evaluation["leak_risk"], "reasons": evaluation["reasons"],
+                          # Goal-alignment quality signal (additive §6; None without goals).
+                          "goal_alignment": evaluation.get("goal_alignment")},
             "governance": {"prose": _GOV_PROSE.get(gov["flag"], "—"),
                            "blocked": gov["block"], "reasons": gov["reasons"]},
             "refines": refines,

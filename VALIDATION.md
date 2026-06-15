@@ -486,6 +486,47 @@ cd backend && python -m pytest tests/test_goals.py -q
 
 ---
 
+## Learner goals & reflection — Slice B: goal alignment inside the floors (safety-critical)
+
+**Precedence is fixed: the governance gate and the wellbeing floor FIRST, then goal
+alignment.** A student goal is input, never authority: it can tighten/shape the
+tutor but never loosen the leak gate or the persona/wellbeing floor.
+
+- **Goal alignment (quality signal):** `selfeval_system` gains a goal-alignment
+  criterion **only for honored goals**; `self_eval` returns a `goal_alignment`
+  signal (`aligned|partial|off`) that feeds the existing refine loop (a poorly
+  aligned draft → `needs_revision`). It is surfaced additively at
+  `telemetry.self_eval.goal_alignment`. Governance remains the final deterministic
+  gate regardless.
+- **Floor 1 — the governance gate (supreme).** A "give me the answer" goal is
+  honored as *input* but does NOT cause a leak: the gate runs as today
+  (`is_solution OR prose_disclosure OR` answer-seeking) and blocks/rewrites. The
+  reasoner prompt frames goals as honored *within* the no-solution stance.
+- **Floor 2 — the persona/wellbeing floor.** A self-destructive/berating goal
+  (`agent/goals.is_harmful`, a cautious deterministic detector) is **recorded but
+  marked `honored: false` (`floor: wellbeing`)** and is NOT injected as a directive;
+  the reasoner prompt instead instructs the tutor to gently decline it in peer voice
+  ("hold them to constructive goals, but won't be unkind"). A student goal cannot
+  override the stance.
+
+Required safety tests (`tests/test_goal_safety.py`, 6):
+- **`test_student_rule_cannot_leak`** — with a "give me the full answer" goal set and
+  a worst-case leaking reasoner, `governance == withholding_solution` and the
+  solution is stripped from the message. Also added to the **never-leak benchmark
+  family** (`families.never_leak` runs each answer-seeking fixture with the goal set).
+- **`test_harmful_goal_not_adopted`** — a berating self-rule is `honored:false`; the
+  reasoner prompt contains the decline framing (`do NOT adopt`, not `SELF-SET GOALS`)
+  and the tutor does not berate. Plus: harmful-goal detection, honored-only alignment
+  criterion, and the alignment signal threading to telemetry.
+
+Suite: **286 passed, 1 skipped**.
+
+```bash
+cd backend && python -m pytest tests/test_goal_safety.py -q
+```
+
+---
+
 ## 0. Environment (once) 🟢
 
 Use the project venv, and **always invoke the suite as `python -m pytest`** — a bare

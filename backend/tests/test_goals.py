@@ -71,8 +71,10 @@ def test_goals_stored_per_learner_no_pii():
     store = InMemoryStore()
     goals_mod.set_goals(store, "gh:42", "go slowly")
     state = store.get_learner_state("gh:42")
-    # The artifact is just the student's words + a timestamp; no identity fields.
-    assert set(state["goals"]) == {"text", "ts"}
+    # The artifact is the student's words + a timestamp + the wellbeing-floor flag;
+    # no identity fields, no PII.
+    assert set(state["goals"]) <= {"text", "ts", "honored", "floor"}
+    assert state["goals"]["honored"] is True
     assert store.get_learner_state("gh:99")["goals"] is None   # isolated per learner
 
 

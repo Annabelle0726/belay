@@ -296,8 +296,26 @@ def reasoner_system(persona: PersonaSpec, stance: str = "peer", goals=None) -> s
     return stance_text + body + _goals_block(goals)
 
 
-def selfeval_system(persona: PersonaSpec, stance: str = "peer") -> str:
+def _selfeval_goal_block(goals) -> str:
+    # Goal alignment is a QUALITY signal, behind the floors. Only honored goals get
+    # a criterion; the gate and wellbeing floor come first and are not relaxable.
+    if not goals or not goals.get("text") or goals.get("honored") is False:
+        return ""
+    return (
+        "\n\nGOAL ALIGNMENT (a QUALITY signal, NOT a gate — the no-leak rule and the "
+        "wellbeing floor come FIRST and are never yours to relax to satisfy a goal): "
+        "the student set their own goals below. Also judge whether the draft honors "
+        "them — does it shape the help the way they asked, WITHIN the no-solution "
+        "stance? If the draft clearly ignores or works against their stated goals, set "
+        "needs_revision=true and name the goal in `reasons`. Never disclose the "
+        "solution to satisfy a goal.\n"
+        f"student goals: \"{goals['text']}\"\n"
+        'Add a field "goal_alignment": "aligned" | "partial" | "off" to your JSON.'
+    )
+
+
+def selfeval_system(persona: PersonaSpec, stance: str = "peer", goals=None) -> str:
     name = persona.display_name
     if stance == "oracle":
-        return _SELFEVAL_ORACLE_HEAD + name + _SELFEVAL_ORACLE_TAIL
-    return _SELFEVAL_PEER_HEAD + name + _SELFEVAL_PEER_TAIL
+        return _SELFEVAL_ORACLE_HEAD + name + _SELFEVAL_ORACLE_TAIL + _selfeval_goal_block(goals)
+    return _SELFEVAL_PEER_HEAD + name + _SELFEVAL_PEER_TAIL + _selfeval_goal_block(goals)

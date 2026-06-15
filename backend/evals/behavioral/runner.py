@@ -73,13 +73,16 @@ class Harness:
         self.fixtures = fixtures
         self.telemetry = _Telemetry()
 
-    def tutor_turn(self, name: str) -> dict:
+    def tutor_turn(self, name: str, goals: str | None = None) -> dict:
         from app.agent import run_turn
         store = InMemoryStore()
         payload = self.fixtures[name]
         prepop = REVISIT_PREPOP.get(name)
         if prepop:
             store.save_learner_state(payload["participant_id"], prepop)
+        if goals:  # opt-in: set a learner goal before the turn (student-rule-cannot-leak)
+            from app.agent.goals import set_goals
+            set_goals(store, payload["participant_id"], goals)
         out = run_turn(payload, self.tutor, store)
         self.telemetry.add(out)
         return out

@@ -23,7 +23,9 @@ from .prompts import selfeval_system
 
 def evaluate(ctx: dict, plan: dict, draft: dict, llm: LLMClient,
              stance: str = "peer") -> dict:
-    system = selfeval_system(get_active_pack().persona, stance)
+    # Goal alignment is a QUALITY signal behind the floors; only honored goals get
+    # a criterion (the gate + wellbeing floor remain supreme and run regardless).
+    system = selfeval_system(get_active_pack().persona, stance, goals=ctx.get("goals"))
     user = json.dumps({
         "exercise": ctx["exercise"],
         "student_state": {
@@ -45,4 +47,6 @@ def evaluate(ctx: dict, plan: dict, draft: dict, llm: LLMClient,
         "leak_risk": out.get("leak_risk", "none"),
         "self_critique": out.get("self_critique", ""),
         "reasons": out.get("reasons", []) or [],
+        # Goal-alignment quality signal (None when no honored goals are set).
+        "goal_alignment": out.get("goal_alignment"),
     }
