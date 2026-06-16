@@ -1,0 +1,74 @@
+[
+  {
+    "id": "found-split-apply-combine",
+    "module": "wrangling-eda",
+    "concept": "group-by and aggregation",
+    "title": "Split-apply-combine",
+    "text": "A great deal of tabular analysis follows one pattern: split the rows into groups defined by some key column, apply a summary to each group, and combine the summaries back into a single table or mapping. The split key is usually a categorical column; the summary is a reduction such as a count, a sum, or an average. Thinking in this split-apply-combine shape, rather than writing explicit loops, keeps the intent clear and the code vectorized.",
+    "source": "peer-tutor-framework course concept notes (CC-BY 4.0)"
+  },
+  {
+    "id": "found-summary-statistics",
+    "module": "wrangling-eda",
+    "concept": "group-by and aggregation",
+    "title": "Per-group summary statistics",
+    "text": "Once rows are grouped, you choose a reduction that answers your question. A count tells you how many rows fall in each group; a sum totals a numeric column; an average (the arithmetic mean) describes a typical value per group. Picking the right reduction is a modeling choice, not a mechanical one: an average hides spread, so pair it with a measure of variation when the groups differ in size or skew.",
+    "source": "peer-tutor-framework course concept notes (CC-BY 4.0)"
+  },
+  {
+    "id": "found-tidy-tables",
+    "module": "wrangling-eda",
+    "concept": "tidy tabular data",
+    "title": "Tidy tables and reading CSVs",
+    "text": "Tidy data puts one observation per row and one variable per column, which is what makes grouping and aggregation straightforward. When you read a CSV, check the column names, the data types, and whether a header row was parsed correctly before doing anything else. Most wrangling bugs trace back to a column read as text when you expected a number, or a stray index column.",
+    "source": "peer-tutor-framework course concept notes (CC-BY 4.0)"
+  },
+  {
+    "id": "reg-least-squares",
+    "module": "regression-classification",
+    "concept": "linear regression with held-out evaluation",
+    "title": "Fitting a line by least squares",
+    "text": "Linear regression assumes the target is approximately a weighted sum of the inputs plus an intercept. Least squares chooses the weights that minimize the total squared error between predictions and observed targets on the training data. Adding an intercept term (a constant feature) lets the line sit away from the origin. The fitted weights are interpretable: each one is the change in the prediction per unit change in its input, holding the others fixed.",
+    "source": "peer-tutor-framework course concept notes (CC-BY 4.0)"
+  },
+  {
+    "id": "reg-held-out-eval",
+    "module": "regression-classification",
+    "concept": "held-out evaluation",
+    "title": "Held-out evaluation and R-squared",
+    "text": "A model that is only scored on the data it was fit to will look better than it is. Held-out evaluation keeps a separate test split that the model never sees during fitting, and reports a metric there. For regression, the coefficient of determination (R-squared) summarizes how much of the target's variation the model explains on that unseen split; values near one are strong, values near zero mean the model barely beats predicting the average.",
+    "source": "peer-tutor-framework course concept notes (CC-BY 4.0)"
+  },
+  {
+    "id": "reg-data-leakage",
+    "module": "model-evaluation",
+    "concept": "data leakage",
+    "title": "Data leakage and train/test discipline",
+    "text": "Leakage is any way information from the test split sneaks into fitting, making held-out scores optimistic and the model worse in the wild. Common forms: fitting a scaler or imputer on the full dataset before splitting, choosing features by looking at the test labels, or tuning until the test score is high. The discipline is simple to state and easy to violate: decide the split first, then treat the test split as if it does not exist until the very end.",
+    "source": "peer-tutor-framework course concept notes (CC-BY 4.0)"
+  },
+  {
+    "id": "mlp-architecture",
+    "module": "optimization-nn-fundamentals",
+    "concept": "multilayer perceptron",
+    "title": "What a one-hidden-layer network is",
+    "text": "A perceptron computes a weighted sum of its inputs and passes it through a nonlinear activation function. Stacking a layer of these units (the hidden layer) in front of an output unit gives a multilayer perceptron, which can represent curved decision boundaries that a single linear unit cannot. The hidden width is a capacity knob: too few units underfit, too many can overfit a small dataset.",
+    "source": "peer-tutor-framework course concept notes (CC-BY 4.0)"
+  },
+  {
+    "id": "mlp-training-loss",
+    "module": "optimization-nn-fundamentals",
+    "concept": "training loss and learning rate",
+    "title": "Training loss and the learning rate",
+    "text": "Training minimizes a loss that measures how far predictions are from targets; for regression-style outputs the mean squared error is common. The learning rate scales each update: too large and the loss bounces or diverges, too small and training crawls. Watch the loss curve over iterations rather than a single number, and seed your random initialization so a run is reproducible.",
+    "source": "peer-tutor-framework course concept notes (CC-BY 4.0)"
+  },
+  {
+    "id": "mlp-descent-intuition",
+    "module": "optimization-nn-fundamentals",
+    "concept": "optimization by local search",
+    "title": "Descending a loss surface",
+    "text": "Optimization here is local search on a loss surface: from the current weights, take a small step in the direction that most reduces the loss, then repeat. Because the surface is not convex for these networks, where you start and how big your steps are both matter, and you may settle in different basins on different seeds. Convergence is a property to check empirically, by watching the loss flatten, not to assume.",
+    "source": "peer-tutor-framework course concept notes (CC-BY 4.0)"
+  }
+]

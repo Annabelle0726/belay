@@ -674,6 +674,15 @@ cd backend && python -m pytest tests/test_overlay.py -q
 
 ---
 
+## Slice F baseline — first real KnowledgeBase + leak-over-retrieval gate
+
+**Baseline floor (pre-Slice-F, off HEAD `3ea3a98`): `312 passed, 1 skipped`.** Coverage
+may not dip below this at any sub-step; the new gate test is net-additive. The Slice F
+runbook entry (retrieval gate, corpus, the leak-over-retrieval test) is appended below
+once the slice lands.
+
+---
+
 ## 0. Environment (once) 🟢
 
 Use the project venv, and **always invoke the suite as `python -m pytest`** — a bare
