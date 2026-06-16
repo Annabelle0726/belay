@@ -20,13 +20,18 @@ from typing import Dict, List, Protocol
 def make_event(participant_id: str, exercise_id: str, mode: str, event_type: str,
                payload: dict, note: str = "",
                stance: str | None = None) -> dict:
-    """Canonical trace-event record (the §6 row shape, schema v2)."""
+    """Canonical trace-event record (the stable eight-field §6 row shape; schema v6).
+
+    The row shape is fixed; event_type values are ADDITIVE and adding a new one does
+    not change the row shape or the events.jsonl export contract.
+    """
     return {
         "participant_id": participant_id,
         "ts": datetime.now(timezone.utc).isoformat(),
         "exercise_id": exercise_id,
         "mode": mode,
-        "event_type": event_type,  # run | turn
+        # run | turn | goal_set | goal_alignment_check | reflect | reflection_recorded
+        "event_type": event_type,
         "stance": stance,           # peer | oracle | control | None (run events)
         "payload": payload,
         "note": note,
