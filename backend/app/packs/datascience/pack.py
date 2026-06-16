@@ -76,6 +76,7 @@ class DataSciencePack:
     def __init__(self) -> None:
         self.taxonomy: Taxonomy = build_taxonomy()
         self._misconceptions = _DSMisconceptions()
+        self._kb = None   # lazily built on first knowledge() call
 
     # -- curriculum -----------------------------------------------------------
     def curriculum(self) -> Sequence[Module]:
@@ -149,6 +150,12 @@ class DataSciencePack:
             snippets=tuple(candidates),
         )
 
-    # -- knowledge (no retrieval surface yet) ---------------------------------
+    # -- knowledge (lexical retrieval over the shipped corpus) ----------------
     def knowledge(self) -> Optional[object]:
-        return None
+        """Return the pack's KnowledgeBase (built + cached on first use). Retrieved
+        passages are NOT pre-screened here; core governance screens them via
+        `pack.leak_evidence` before any can enter tutor context (Slice F)."""
+        if self._kb is None:
+            from .knowledge.kb import DataScienceKB
+            self._kb = DataScienceKB()
+        return self._kb

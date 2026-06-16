@@ -224,8 +224,10 @@ class LeakEvidence:
 
 @dataclass(frozen=True)
 class Passage:
-    """A retrieved passage. Carries text, a source citation, and a locator so a
-    citation can be rendered and traced back to its source."""
+    """A retrieved passage. Carries a stable id, text, a source citation, and a
+    locator so a citation can be rendered and traced back to its source. The ``id``
+    is what governance records when it drops a leaking passage (never the text)."""
+    id: str         # stable passage id (used in the retrieval trace / drop records)
     text: str
     citation: str   # source citation (e.g. document title / id)
     locator: str    # where in the source (page / section / line span)
