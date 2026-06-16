@@ -43,8 +43,9 @@ behavior-preserving with quantum active. Validated by the same gate as §1:
 ```bash
 cd backend && python -m pytest        # 221 passed, 11 skipped
 ```
-- New env var **`TUTOR_PACK`** (default `quantum`) — selects the active pack; see
-  `.env.example`. Set it to switch packs once a second pack exists (1b).
+- New env var **`TUTOR_PACK`** (default `quantum` at 1a; now `datascience`) — selects
+  the active pack; defined in `backend/app/config.py` / `core/domain/registry.py`
+  (there is no `.env.example` file in the tree). Set it to switch packs.
 - `tests/test_stance.py` was re-based to compose its stance-prompt assertions from
   the active pack's persona via the new `planner_system` / `reasoner_system` /
   `selfeval_system` builders (same 29 tests).
@@ -271,9 +272,11 @@ Self-hosted inference is a privacy *strengthener*, not a new off-box path
 (consistent with the pseudonymous-only, no-new-identity invariant). Tokens/cost
 telemetry stays local; cost is 0 for self-hosted.
 
-**Wiring.** The behavioral evals (`tests/evals/sol_behavior_evals.py`) are gated
-by `RUN_LLM_EVALS` and call `get_llm()`, which returns the configured provider —
-so they run against whatever `PROVIDER` + `OPENAI_BASE_URL` point at. Verified:
+**Wiring.** The behavioral evals (since Slice 6b the gated live test
+`tests/evals/test_behavioral.py`; the legacy `sol_behavior_evals.py` was retired)
+are gated by `RUN_LLM_EVALS` and call `get_llm()`, which returns the configured
+provider — so they run against whatever `PROVIDER` + `OPENAI_BASE_URL` point at.
+Verified:
 `get_provider()` targets the configured base URL with no network on construction
 (`tests/test_provider_seam.py::test_openai_compatible_targets_configured_base_url`).
 
@@ -285,7 +288,7 @@ cd backend && \
   OPENAI_BASE_URL=http://localhost:11434/v1 \
   OPENAI_API_KEY=ollama \
   MODEL_FAST=llama3.2 MODEL_STRONG=llama3.2 \
-  RUN_LLM_EVALS=1 python -m pytest tests/evals/sol_behavior_evals.py -v
+  RUN_LLM_EVALS=1 python -m pytest tests/evals/test_behavioral.py -v
 ```
 (Ollama serves the OpenAI-compatible API at `/v1` and ignores the key, but the SDK
 wants a non-empty string. vLLM: point `OPENAI_BASE_URL` at its `/v1` and set the
@@ -635,12 +638,16 @@ No network, no DB, no key. This is the gate `main` must always pass.
 cd backend && python -m pytest
 ```
 
-**Expected (Phase 1d, datascience active, quantum removed): `228 passed, 11
-skipped`** (the 11 skips are the DS behavioral evals, gated by `RUN_LLM_EVALS`,
-see §3). The drop from 240 (1c) is the two deleted quantum-internal modules
-`test_simulator.py` + `test_functional_model.py` (12). The original quantum-era
-per-module table below is **historical** (those modules no longer exist); the
-Phase 1b additions follow it.
+**Expected (current, through Slice D, datascience active): `300 passed, 1
+skipped`.** The single skip is the gated live behavioral benchmark
+(`tests/evals/test_behavioral.py::test_live_benchmark_runs`), which skips unless
+`RUN_LLM_EVALS=1` and a reachable tutor + judge endpoint are configured (see §3).
+The running per-phase totals are recorded in the phase sections above (from `221
+passed, 11 skipped` at Phase 0 to `300 passed, 1 skipped` at Slice D). The
+quantum-era per-module table below is **historical** (those modules no longer
+exist, and the legacy `sol_behavior_evals.py` was retired into
+`evals/behavioral/` in Slice 6b); the current per-module inventory is the appended
+phase sections above.
 
 | Module | Tests | Covers | Phase 1 |
 |---|---|---|---|
@@ -661,7 +668,6 @@ Phase 1b additions follow it.
 Individual offline scripts (no pytest):
 
 ```bash
-PYTHONPATH=. python tests/test_simulator.py           # 6/6 parity
 PYTHONPATH=. python tests/test_governance.py          # leak gate
 PYTHONPATH=. python tests/test_orchestrator_smoke.py  # full loop, stub LLM
 ```
@@ -733,21 +739,26 @@ PROVIDER=openai_compatible OPENAI_BASE_URL=https://llm.jetstream-cloud.org/api \
   REASONING_STRONG=high python backend/scripts/smoke_inference.py
 ```
 
-**Behavioral fidelity evals** (the 11 skipped in §1) — need a reachable LLM. The
-zero-external-API path (local Ollama) is the recommended way to run them; see
-Phase 2 Workstream D for the exact one-command invocation. In short:
+**Behavioral benchmark** (the source of the single skip in §1) — needs a reachable
+LLM. The legacy `tests/evals/sol_behavior_evals.py` was retired into the portable
+benchmark `evals/behavioral/` (Slice 6b); the canonical way to run it is documented
+in the Slice 6b section above. The gated live test
+(`tests/evals/test_behavioral.py::test_live_benchmark_runs`) is what skips by default;
+the zero-external-API path (local Ollama) is the recommended way to run it. In short,
+from `backend/`:
 
 ```bash
-# from backend/, with PROVIDER + OPENAI_BASE_URL pointed at a local model (Workstream D):
-RUN_LLM_EVALS=1 python -m pytest tests/evals/sol_behavior_evals.py
-#   never-leaks (incl. PROSE-bait) · just-solved→stretch · teach→reciprocate · answer-seeking→redirect ·
-#   frustration→encourage (deterministic invariant) ·
-#   disengaged→encourage (deterministic invariant) ·
-#   LLM-graded: grounded affirmation + concrete next step, no solution (frustrated) ·
-#   LLM-graded: same for disengaged ·
-#   LLM-graded groundedness/calibration bar ·
-#   worked_analogy: any shown snippet must be verify_worked_example ok (non-leak invariant) ·
-#   revisit: prior-shaky concept → ONE grounded retrieval question, no solution
+# the gated live test (skips unless RUN_LLM_EVALS is set + an endpoint is reachable):
+RUN_LLM_EVALS=1 python -m pytest tests/evals/test_behavioral.py
+
+# or the full benchmark CLI (set a distinct JUDGE_MODEL so the judge is not self-judging):
+PROVIDER=openai_compatible OPENAI_BASE_URL=http://localhost:11434/v1 OPENAI_API_KEY=ollama \
+  MODEL_FAST=llama3.2 MODEL_STRONG=llama3.2 JUDGE_MODEL=deepseek-r1:1.5b \
+  python -m evals.behavioral --pack datascience --repeats 5 --out report.json
+#   gate verdicts (deterministic): never_leak, no_solution ·
+#   framework routing: encourage_frustration/disengaged, redirect_answer_seeking,
+#                      reciprocate_in_teach, revisit ·
+#   judge signals (separate strong judge): grounded, concrete, question
 ```
 
 New §5c affect-response measures (computed offline from trace): `negative_affect_rate`,
@@ -820,6 +831,6 @@ When you add… | …update here
 ---|---
 a `tests/test_*.py` module | §1 table + the expected pass/skip count
 a `scripts/smoke_*.py` | the matching section (§2/§3/§4) + add its expected output
-a new env var / config knob | the section that uses it (and `.env.example`)
+a new env var / config knob | the section that uses it (and `backend/app/config.py`, the source of truth; there is no `.env.example`)
 a new API route | §5 (and a curl/health example if relevant)
 a new external dependency (instance/account/allocation) | mark the step 🔴 and name the blocker
