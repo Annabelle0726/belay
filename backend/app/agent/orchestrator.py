@@ -397,4 +397,12 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
             pid, exercise["id"], mode, "reflect",
             {"prompt": final["message"], "goal_text": (goals_art or {}).get("text"),
              "concept": plan.get("target_concept")}, stance=stance))
+    # Slice F: trace the leak-over-retrieval gate when retrieval ran this turn.
+    # Records counts + kept ids + dropped {id, reason} ONLY — never passage text.
+    retr = ctx.get("_retrieval")
+    if retr:
+        store.append_event(make_event(
+            pid, exercise["id"], mode, "retrieval",
+            {"exercise_id": retr["exercise_id"], "retrieved": retr["retrieved"],
+             "kept": retr["kept"], "dropped": retr["dropped"]}, stance=stance))
     return final

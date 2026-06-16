@@ -674,12 +674,47 @@ cd backend && python -m pytest tests/test_overlay.py -q
 
 ---
 
-## Slice F baseline — first real KnowledgeBase + leak-over-retrieval gate
+## Slice F — first real KnowledgeBase + leak-over-retrieval gate (safety-critical)
 
 **Baseline floor (pre-Slice-F, off HEAD `3ea3a98`): `312 passed, 1 skipped`.** Coverage
-may not dip below this at any sub-step; the new gate test is net-additive. The Slice F
-runbook entry (retrieval gate, corpus, the leak-over-retrieval test) is appended below
-once the slice lands.
+may not dip below this; the gate test is net-additive.
+
+`knowledge()` stops returning `None` for datascience: it returns a hermetic, lexical
+KnowledgeBase over a curated CC-BY corpus, and every retrieved passage passes through
+the core governance leak gate before it can enter tutor context.
+
+- **Corpus** (`packs/datascience/knowledge/corpus/corpus.json`, license in
+  `knowledge/README.md`): 9 conceptual passages keyed to the three exercises. No passage
+  contains a solution; a test screens all of them against all exercises and asserts none
+  are dropped.
+- **Retriever** (`packs/datascience/knowledge/kb.py`): pure-Python TF-IDF cosine,
+  deterministic, stable tie-break by passage id. **Hermetic** — no network, model,
+  embeddings, or secrets. A dumb retriever: it does not screen for leaks.
+- **The gate** (`agent/governance.screen_passages`): the decision is core's, the
+  evidence is the pack's. Each candidate runs through `pack.leak_evidence(passage_text,
+  exercise)`; any `is_solution`/`prose_disclosure` passage is dropped. Same oracle as the
+  draft gate, single chokepoint — no parallel prompt-only screen.
+- **Wiring** (`agent/context.py`): peer/oracle only, and only when the pack ships a KB
+  AND the student has asked something (the query signal). Survivors land in
+  `ctx["knowledge"]`; the screening summary rides in `ctx["_retrieval"]`. **When
+  `knowledge()` is None (e.g. `_skeleton`) or there is no student query, no retrieval
+  runs and the context/trace is byte-identical to before.**
+- **Trace** (additive): a new `retrieval` event records `retrieved`/`kept`/`dropped`
+  counts and, per drop, the passage **id + reason only — never the leaking text**. The
+  §6 row stays the fixed 8 fields; `make_event`'s event-type list now includes
+  `overlay_set` and `retrieval`.
+
+Tests: `tests/test_knowledge.py` — retrieval relevance + determinism + hermetic; the
+corpus discloses no solution; the **leak-over-retrieval block** (a solution-bearing
+passage is dropped, never enters context, and the drop event carries id+reason with no
+text — the retrieval analogue of `test_student_rule_cannot_leak`); a benign passage is
+retained and reaches context; the None-path no-op. `tests/test_import_boundaries.py`
+stays green (KB in the pack, protocol in `core/domain`). Suite: **324 passed, 1
+skipped**.
+
+```bash
+cd backend && python -m pytest tests/test_knowledge.py tests/test_import_boundaries.py -q
+```
 
 ---
 

@@ -143,6 +143,32 @@ def safe_rewrite(draft: dict, gov: dict, exercise: dict, pack=None) -> dict:
     return draft
 
 
+def screen_passages(passages, exercise: dict, pack=None) -> dict:
+    """Leak-over-retrieval gate: the same deterministic leak decision the draft gate
+    makes, applied to RETRIEVED reference passages before any can enter tutor context.
+
+    The decision is core's; the evidence is the pack's. Each candidate passage is run
+    through ``pack.leak_evidence(passage.text, exercise)`` (the exact oracle the draft
+    gate uses) and dropped if it ``is_solution`` or ``prose_disclosure``. This is a
+    single chokepoint — it does NOT introduce a parallel, prompt-only passage screen,
+    and the KnowledgeBase stays a dumb retriever.
+
+    Returns ``{"kept": [Passage...], "dropped": [{"id","reason"}...], "retrieved": int}``.
+    A dropped passage is recorded by id + reason ONLY; its text is never returned here
+    and must never be written to the trace.
+    """
+    pack = pack or get_active_pack()
+    kept, dropped = [], []
+    for p in passages:
+        ev = pack.leak_evidence(p.text, exercise)
+        if ev.is_solution or ev.prose_disclosure:
+            dropped.append({"id": p.id,
+                            "reason": "is_solution" if ev.is_solution else "prose_disclosure"})
+        else:
+            kept.append(p)
+    return {"kept": kept, "dropped": dropped, "retrieved": len(passages)}
+
+
 def is_berating(message: str) -> bool:
     """Heuristic: does the message obviously berate the student or reinforce their
     negative self-talk? Defense-in-depth for the wellbeing floor, NOT an oracle."""

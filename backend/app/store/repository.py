@@ -31,6 +31,7 @@ def make_event(participant_id: str, exercise_id: str, mode: str, event_type: str
         "exercise_id": exercise_id,
         "mode": mode,
         # run | turn | goal_set | goal_alignment_check | reflect | reflection_recorded
+        #     | overlay_set | retrieval
         "event_type": event_type,
         "stance": stance,           # peer | oracle | control | None (run events)
         "payload": payload,

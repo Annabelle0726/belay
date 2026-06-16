@@ -331,11 +331,17 @@ via `get_active_pack()`; none import `quantum/*` or `curriculum/*`):
 - (`agent/main.py` HTTP edge also re-homed onto the pack — curriculum / run /
   get_exercise — though it is not one of the five "core" consumers.)
 
-**KnowledgeBase seam (declared, not built):** `search(query, k) -> [Passage]`;
-`Passage` carries text + source citation + locator. Its docstring fixes the
-load-bearing contract: **governance treats exercise solutions as leak-gated
-regardless of whether they arrive via generation or retrieval.** No retrieval is
-implemented; quantum's `knowledge()` returns `None`.
+**KnowledgeBase seam (IMPLEMENTED + TESTED in Slice F):** `search(query, k) ->
+[Passage]`; `Passage` carries id + text + source citation + locator. Its docstring
+fixes the load-bearing contract: **governance treats exercise solutions as leak-gated
+regardless of whether they arrive via generation or retrieval.** That contract is now
+enforced and tested: the datascience pack ships a hermetic lexical KnowledgeBase
+(`packs/datascience/knowledge/`), and core governance screens every retrieved passage
+through `pack.leak_evidence` (`governance.screen_passages`) before any can enter tutor
+context — a solution-bearing passage is dropped exactly as a solution-bearing draft is
+(`tests/test_knowledge.py`, the retrieval analogue of `test_student_rule_cannot_leak`).
+Packs that ship no corpus (e.g. `_skeleton`) still return `knowledge() -> None` and run
+no retrieval path (byte-identical).
 
 **Persona injection:** `SOL_STANCE` / `ORACLE_STANCE` and the "Quantum Software
 Engineering" wording moved out of `agent/prompts.py` into `QUANTUM_PERSONA`

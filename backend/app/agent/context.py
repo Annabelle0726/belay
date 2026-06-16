@@ -32,6 +32,18 @@ def _student_wants_reflect(recent: list) -> bool:
     return False
 
 
+# Retrieval-augmented context (Slice F): how many candidates to pull per turn.
+_RETRIEVAL_K = 4
+
+
+def _latest_student_message(recent: list) -> str:
+    """The most recent student utterance (the retrieval query signal), or ''."""
+    for turn in reversed(recent or []):
+        if turn.get("who") == "student":
+            return (turn.get("text") or "").strip()
+    return ""
+
+
 def _last_result(result: Optional[dict]) -> object:
     if not result:
         return "no run yet"
@@ -129,6 +141,33 @@ def build_context(payload: dict, learner_state: dict, attempts: int) -> dict:
         shaky_cids = [cid for cid, v in concepts.items() if v.get("state") == "shaky"]
         grasped_cids = [cid for cid, v in concepts.items() if v.get("state") == "grasped"]
         ctx["concept_model"] = {"n_shaky": len(shaky_cids), "n_grasped": len(grasped_cids)}
+
+    # Retrieval-augmented context (Slice F) — peer/oracle only, and ONLY when the
+    # pack ships a KnowledgeBase AND the student has actually asked something (the
+    # query signal). Every candidate passage is screened by the CORE governance leak
+    # gate (reusing pack.leak_evidence) BEFORE it can enter the prompt; only survivors
+    # land in ctx["knowledge"]. The screening summary (counts + dropped ids/reasons,
+    # never passage text) rides in ctx["_retrieval"] for the orchestrator to trace.
+    # When knowledge() is None or there is no student query, no retrieval runs and the
+    # context is byte-identical to before.
+    if stance != "control":
+        kb = get_active_pack().knowledge()
+        student_msg = _latest_student_message(payload.get("recent", []))
+        if kb is not None and student_msg:
+            from . import governance as _gov
+            query = " ".join(s for s in (student_msg, ex.get("concept", ""),
+                                         ex.get("title", "")) if s)
+            screen = _gov.screen_passages(kb.search(query, _RETRIEVAL_K), ex)
+            ctx["knowledge"] = [
+                {"id": p.id, "text": p.text, "citation": p.citation, "locator": p.locator}
+                for p in screen["kept"]
+            ]
+            ctx["_retrieval"] = {
+                "exercise_id": ex.get("id", ""),
+                "retrieved": screen["retrieved"],
+                "kept": [p.id for p in screen["kept"]],
+                "dropped": screen["dropped"],   # [{id, reason}] — never passage text
+            }
 
     return ctx
 
