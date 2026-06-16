@@ -75,7 +75,7 @@ Target layout: `backend/app/core/{agent,domain,runner,store,measures}`,
 | `backend/tests/evals/*` | pack evals | `fixtures.py` + `sol_behavior_evals.py` are quantum/Sol-specific → §d. |
 | *(none)* | `backend/app/packs/_skeleton/` | New: template pack. |
 | *(none)* | `backend/app/integrations/` | New: empty; Quad integration lands here (Apache-2.0, core-only imports). |
-| `frontend/` (quantum React app) | pack/app UI (later phase) | The `quantum-inventioneers-peer-tutor.jsx` UI is domain-specific; see §e5. |
+| `frontend/` (quantum React app) | pack/app UI (later phase) | The quantum React client was **removed in 1d**; current UIs are dependency-light HTML (`dev-client.html`, `embed-demo.html`, `widget.html`). |
 
 ---
 
@@ -245,8 +245,9 @@ keys only** — existing event types, keys, version semantics, and the
    (both copies) and core comments (§b3).
 7. **Quantum HTTP/runner wiring:** `from .quantum import ...` in `main.py:35`; quantum
    fields in `RunResult` (`schemas.py:26`); `telemetry.quantum_backend`.
-8. **Quantum frontend** (deferred, flagged in §e5): `frontend/quantum-inventioneers-peer-tutor.jsx`
-   and the quantum-named client artifacts.
+8. **Quantum frontend** (REMOVED in 1d): the `quantum-inventioneers-peer-tutor.jsx`
+   React client and quantum-named client artifacts were deleted; the current UIs are the
+   dependency-light HTML clients (`dev-client.html`, `embed-demo.html`, `widget.html`).
 
 ---
 

@@ -708,9 +708,9 @@ Tests: `tests/test_knowledge.py` — retrieval relevance + determinism + hermeti
 corpus discloses no solution; the **leak-over-retrieval block** (a solution-bearing
 passage is dropped, never enters context, and the drop event carries id+reason with no
 text — the retrieval analogue of `test_student_rule_cannot_leak`); a benign passage is
-retained and reaches context; the None-path no-op. `tests/test_import_boundaries.py`
-stays green (KB in the pack, protocol in `core/domain`). Suite: **324 passed, 1
-skipped**.
+retained and reaches context; the None-path no-op (and the no-student-query no-op).
+`tests/test_import_boundaries.py` stays green (KB in the pack, protocol in
+`core/domain`). Suite: **325 passed, 1 skipped** (+13 from `tests/test_knowledge.py`).
 
 ```bash
 cd backend && python -m pytest tests/test_knowledge.py tests/test_import_boundaries.py -q
@@ -742,12 +742,12 @@ No network, no DB, no key. This is the gate `main` must always pass.
 cd backend && python -m pytest
 ```
 
-**Expected (current, through Slice E, datascience active): `312 passed, 1
+**Expected (current, through Slice F, datascience active): `325 passed, 1
 skipped`.** The single skip is the gated live behavioral benchmark
 (`tests/evals/test_behavioral.py::test_live_benchmark_runs`), which skips unless
 `RUN_LLM_EVALS=1` and a reachable tutor + judge endpoint are configured (see §3).
 The running per-phase totals are recorded in the phase sections above (from `221
-passed, 11 skipped` at Phase 0 to `312 passed, 1 skipped` at Slice E). The
+passed, 11 skipped` at Phase 0 to `325 passed, 1 skipped` at Slice F). The
 quantum-era per-module table below is **historical** (those modules no longer
 exist, and the legacy `sol_behavior_evals.py` was retired into
 `evals/behavioral/` in Slice 6b); the current per-module inventory is the appended
@@ -910,9 +910,10 @@ curl -s http://localhost:8000/healthz                    # {"ok": true, ...}
 Then open `frontend/dev-client.html` and point its backend field at
 `http://localhost:8000`. **Note:** `dev-client.html` routes entirely through the
 backend (no browser-side key), but it uses a **hardcoded `PID = "p_dev"`** without
-consent registration — **dev only; do not use it for a pilot session.** The React app
-(`frontend/quantum-inventioneers-peer-tutor.jsx`) has full onboarding and no
-hardcoded PID.
+consent registration — **dev only; do not use it for a pilot session.** For a
+host-embed surface that takes an already-authenticated pseudonymous id (no hardcoded
+PID), use `frontend/widget.html` (the Slice E/F reference widget). (The origin quantum
+React client was removed in Phase 1d.)
 
 Opt-in learner-customization intake (pseudonymous; PII-checked): `POST /api/goals`,
 `POST /api/reflection`, and `POST /api/overlay` (Slice E), mirrored on the sidecar as
@@ -926,13 +927,6 @@ Optional — analysis pipeline (offline, from an exported trace):
 ```bash
 python backend/scripts/extract_measures.py <path/to/trace.jsonl>   # writes the three §6 outputs
 ```
-
----
-
-### Frontend follow-up (not in this brief)
-
-Add `"revisit"` to the UI `INTERV` map in `frontend/quantum-inventioneers-peer-tutor.jsx`
-so the move renders with a chip (like `encourage`). Fold into the next frontend touch.
 
 ---
 
