@@ -43,9 +43,11 @@ def update(
         "shaky": merged["shaky"],
         "attempts": prev.get("attempts", 0),
         "concepts": new_concepts,
-        # Preserve the opt-in goals/reflections across a turn (never clobbered here).
+        # Preserve the opt-in goals/reflections/overlay across a turn (never clobbered
+        # here): they are per-learner customization, not concept memory this turn touches.
         "goals": prev.get("goals"),
         "reflections": prev.get("reflections", []),
+        "overlay": prev.get("overlay"),
     }
     store.save_learner_state(participant_id, state)
     return state

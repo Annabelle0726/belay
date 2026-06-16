@@ -25,6 +25,7 @@ from pydantic import ValidationError
 
 from ...agent import get_llm, run_turn
 from ...agent import goals as _goals
+from ...agent import overlay as _overlay
 from ...config import settings
 from ...core.domain import get_active_pack
 from ...store import ConsentRouter, InMemoryStore, SqlStore
@@ -72,8 +73,25 @@ def build_router(consent_router: ConsentRouter, pack, llm_factory: Callable[[], 
                        f"POST /{PROTOCOL_VERSION}/turn",
                        f"POST /{PROTOCOL_VERSION}/goals",
                        f"POST /{PROTOCOL_VERSION}/reflection",
+                       f"POST /{PROTOCOL_VERSION}/overlay",
                        f"POST /{PROTOCOL_VERSION}/events"],
             "learner_goals": "opt-in; the student's own words, pseudonymous, never to grades",
+            # Bounded, enumerated per-learner customization. Input, never authority:
+            # it shapes HOW the tutor helps and can NEVER loosen the leak gate or the
+            # wellbeing floor (no dial yields more of the answer).
+            "customization": {
+                "scheme": "bounded-enumerated-overlay",
+                "fields": {
+                    "persona": {"tone": ["warm", "neutral", "direct"],
+                                "verbosity": ["brief", "balanced", "detailed"],
+                                "framing": ["peer", "coach"]},
+                    "pedagogy": {"scaffolding": ["more", "default", "less"],
+                                 "stretch": ["low", "default", "high"]},
+                    "accommodation": {"reading_level": ["plain", "default", "advanced"],
+                                      "language": "short locale token (e.g. en, es)"},
+                },
+                "floors": "leak gate + wellbeing floor are supreme and NOT customizable",
+            },
             "license": "Apache-2.0",
         }
 
@@ -106,6 +124,8 @@ def build_router(consent_router: ConsentRouter, pack, llm_factory: Callable[[], 
             "recent": [t.model_dump() for t in req.recent],
             "signals": req.signals,
             "request": payload.get("request"),   # e.g. "reflect" (student-initiated)
+            # Optional per-learner customization overlay; floor-checked in run_turn.
+            "overlay": req.overlay,
         }
         # 5. pseudo_id IS the anon-code namespace; no PII is stored.
         consent_router.register_participant(req.pseudo_id, req.pseudo_id, req.consent)
@@ -146,6 +166,23 @@ def build_router(consent_router: ConsentRouter, pack, llm_factory: Callable[[], 
         store = consent_router.store_for(pid)
         refl = _goals.add_reflection(store, pid, payload.get("text", ""))
         return {"ok": True, "pseudo_id": pid, "reflection": refl}
+
+    @api.post("/overlay")
+    def overlay(payload: dict = Body(...)):
+        """Set/replace the learner's customization overlay (opt-in; null/empty clears).
+        Same PII boundary; pseudonymous id only. Input, never authority: the overlay is
+        floor-checked and normalized server-side and can never loosen a floor."""
+        try:
+            assert_no_pii(payload)
+        except PIIRejected as e:
+            raise HTTPException(422, f"PII rejected at boundary: {e}")
+        pid = payload.get("pseudo_id")
+        if not pid:
+            raise HTTPException(422, "pseudo_id required")
+        consent_router.register_participant(pid, pid, bool(payload.get("consent", False)))
+        store = consent_router.store_for(pid)
+        artifact = _overlay.set_overlay(store, pid, payload.get("overlay"))
+        return {"ok": True, "pseudo_id": pid, "overlay": artifact}
 
     @api.post("/events")
     def events(payload: dict = Body(...)):

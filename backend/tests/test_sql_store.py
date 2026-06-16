@@ -71,7 +71,7 @@ class TestGetLearnerStateUnknown:
     def test_unknown_pid_returns_defaults(self):
         state = _mk_store().get_learner_state("no_such_pid_" + uuid.uuid4().hex)
         assert state == {"grasped": [], "shaky": [], "attempts": 0, "concepts": {},
-                         "goals": None, "reflections": []}
+                         "goals": None, "reflections": [], "overlay": None}
 
 
 # ── 4. save + get round-trips all fields including concepts ───────────────────

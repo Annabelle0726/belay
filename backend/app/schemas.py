@@ -46,6 +46,7 @@ class SolTurnRequest(BaseModel):
     recent: List[DialogueTurn] = []
     signals: Optional[dict] = None
     request: Optional[str] = None   # e.g. "reflect" — student-initiated reflect
+    overlay: Optional[dict] = None  # opt-in per-learner customization overlay (bounded)
 
 
 class Memory(BaseModel):
@@ -76,6 +77,13 @@ class GoalRequest(BaseModel):
 class ReflectionRequest(BaseModel):
     participant_id: str
     text: str               # the student's reflection, in their own words
+
+
+class OverlayRequest(BaseModel):
+    participant_id: str
+    # bounded knobs (persona/pedagogy/accommodation); null/empty clears. Floor-checked
+    # and normalized server-side; input only, never authority over a floor.
+    overlay: Optional[dict] = None
 
 
 class ParticipantRequest(BaseModel):

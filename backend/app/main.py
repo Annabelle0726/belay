@@ -32,10 +32,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .agent import get_llm, run_turn
 from .agent import goals as goals_mod
+from .agent import overlay as overlay_mod
 from .config import settings
 from .core.domain import get_active_pack
 from .schemas import (
     GoalRequest,
+    OverlayRequest,
     ParticipantRequest,
     ParticipantResponse,
     ReflectionRequest,
@@ -118,6 +120,7 @@ def sol_turn(req: SolTurnRequest):
         "recent": [t.model_dump() for t in req.recent],
         "signals": req.signals,
         "request": req.request,
+        "overlay": req.overlay,
     }
     # Route events + learner-state writes to durable or ephemeral by consent.
     store = _router.store_for(req.participant_id)
@@ -169,3 +172,14 @@ def add_reflection(req: ReflectionRequest):
     store = _router.store_for(req.participant_id)
     reflection = goals_mod.add_reflection(store, req.participant_id, req.text)
     return {"participant_id": req.participant_id, "reflection": reflection}
+
+
+@app.post("/api/overlay")
+def set_overlay(req: OverlayRequest):
+    """Set/replace the learner's customization overlay (opt-in; null/empty clears).
+    Bounded knobs only; floor-checked and normalized server-side. Input, never
+    authority: it shapes HOW the tutor helps, never loosens a floor. Pseudonymous,
+    routed by consent like all learner state; never to grades."""
+    store = _router.store_for(req.participant_id)
+    artifact = overlay_mod.set_overlay(store, req.participant_id, req.overlay)
+    return {"participant_id": req.participant_id, "overlay": artifact}

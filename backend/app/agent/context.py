@@ -103,6 +103,10 @@ def build_context(payload: dict, learner_state: dict, attempts: int) -> dict:
     # within its stance — never as authority over the stance. Absent for control.
     if stance != "control":
         ctx["goals"] = learner_state.get("goals")
+        # Per-learner customization overlay (bounded knobs). Injected into the
+        # persona-parameterized prompts as preferences honored WITHIN the stance,
+        # never as authority over it. Absent for control.
+        ctx["overlay"] = learner_state.get("overlay")
         ctx["reflections"] = (learner_state.get("reflections") or [])[-3:]  # recent, for the tutor's read
         # Student-initiated reflect: an explicit `request: "reflect"` or a dialogue cue.
         ctx["reflect_requested"] = bool(

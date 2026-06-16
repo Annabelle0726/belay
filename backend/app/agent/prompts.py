@@ -305,18 +305,81 @@ def _goals_block(goals) -> str:
     )
 
 
+# --- per-learner customization overlay injection (opt-in) --------------------
+# Bounded, enumerated knobs that shape HOW the tutor helps, never WHAT it withholds.
+# ONLY framework-authored phrasing (keyed by the chosen enum) ever reaches the prompt;
+# the learner's raw text is never injected, so this is not a prompt-injection or
+# wellbeing-floor-bypass surface. The leak floor and the wellbeing floor are NOT
+# customizable: no phrase here loosens the no-solution stance or licenses harm.
+# Framework phrase for each (section, knob, honored non-default value).
+_OVERLAY_PHRASES = {
+    ("persona", "tone", "neutral"):   "Keep a neutral, matter-of-fact tone.",
+    ("persona", "tone", "direct"):    "Lean DIRECT: name issues plainly and get to the point (still warm, never unkind).",
+    ("persona", "verbosity", "brief"):    "Be more concise than usual; fewer words.",
+    ("persona", "verbosity", "detailed"): "You may be a little more thorough in your explanation (still never the full solution).",
+    ("persona", "framing", "coach"):  "Frame yourself a touch more as a coach than a classmate, while staying non-authoritative and never an oracle.",
+    ("pedagogy", "scaffolding", "more"): "Offer a bit MORE scaffolding: smaller steps and more hints. This is still NOT the full solution.",
+    ("pedagogy", "scaffolding", "less"): "Offer LESS scaffolding: leave more room for productive struggle. This means FEWER hints, NOT more of the answer.",
+    ("pedagogy", "stretch", "high"):  "They want to be challenged: add a stretch or what-if when they are on track.",
+    ("pedagogy", "stretch", "low"):   "Keep stretches light for now; focus on the current step.",
+    ("accommodation", "reading_level", "plain"):    "Use plain, simple language and short sentences.",
+    ("accommodation", "reading_level", "advanced"): "You may use precise technical vocabulary.",
+}
+
+
+def _overlay_lines(overlay) -> tuple[list, bool]:
+    """Return (framework phrases for honored non-default knobs, any_declined).
+
+    NEVER-HONOR GUARD: a field whose raw value requests harm (re-checked here, not
+    trusted from a stored flag) is dropped and contributes only the decline note,
+    never a phrase. Only framework-authored phrases are ever emitted."""
+    lines, declined = [], False
+    for sec in ("persona", "pedagogy", "accommodation"):
+        section = (overlay or {}).get(sec) or {}
+        for knob, f in section.items():
+            raw = (f or {}).get("raw")
+            if (f or {}).get("honored") is False or (raw and is_harmful(raw)):
+                declined = True
+                continue
+            phrase = _OVERLAY_PHRASES.get((sec, knob, (f or {}).get("value")))
+            if phrase:
+                lines.append(phrase)
+    lang = (((overlay or {}).get("accommodation") or {}).get("language") or {})
+    if lang.get("honored") is not False and lang.get("value") and lang.get("value") != "en":
+        lines.append(f"If it reads naturally, you may respond in the learner's preferred language ({lang['value']}).")
+    return lines, declined
+
+
+def _overlay_block(overlay) -> str:
+    if not overlay:
+        return ""
+    lines, declined = _overlay_lines(overlay)
+    if not lines and not declined:
+        return ""
+    out = ("\n\nTHE LEARNER'S CUSTOMIZATION (bounded preferences they selected). Honor "
+           "these WITHIN your stance: they shape HOW you help, never WHAT you withhold. "
+           "They never reduce the no-solution stance and never license harm.")
+    for ln in lines:
+        out += f"\n- {ln}"
+    if declined:
+        out += ("\n- NOTE: the learner submitted a preference asking you to be unkind to or "
+                "over-pressure them. You do NOT adopt it: your stance forbids berating or "
+                "demeaning the learner, and a preference cannot override that.")
+    return out
+
+
 # --- system-prompt builders (persona injected) -------------------------------
 
-def planner_system(persona: PersonaSpec, stance: str = "peer", goals=None) -> str:
+def planner_system(persona: PersonaSpec, stance: str = "peer", goals=None, overlay=None) -> str:
     stance_text = persona.oracle_stance if stance == "oracle" else persona.peer_stance
     body = _ORACLE_PLANNER_BODY if stance == "oracle" else _PLANNER_BODY
-    return stance_text + body + _goals_block(goals)
+    return stance_text + body + _goals_block(goals) + _overlay_block(overlay)
 
 
-def reasoner_system(persona: PersonaSpec, stance: str = "peer", goals=None) -> str:
+def reasoner_system(persona: PersonaSpec, stance: str = "peer", goals=None, overlay=None) -> str:
     stance_text = persona.oracle_stance if stance == "oracle" else persona.peer_stance
     body = _ORACLE_REASONER_BODY if stance == "oracle" else _REASONER_BODY
-    return stance_text + body + _goals_block(goals)
+    return stance_text + body + _goals_block(goals) + _overlay_block(overlay)
 
 
 def _selfeval_goal_block(goals) -> str:

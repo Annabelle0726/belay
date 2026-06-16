@@ -42,7 +42,7 @@ import time
 from ..config import settings
 from ..core.domain import get_active_pack
 from ..store import Store, make_event
-from . import governance, memory, planner, reasoner, self_eval
+from . import governance, memory, overlay as overlay_mod, planner, reasoner, self_eval
 from . import telemetry as tel
 from .context import build_context
 from .llm import LLMClient
@@ -84,6 +84,8 @@ def _control_turn(payload: dict, ctx: dict, store: Store,
             "governance": {"prose": "—", "blocked": False, "reasons": []},
             # Wellbeing softener never runs in control (no reasoner draft).
             "wellbeing_softened": False,
+            # No overlay is consulted in control (no reasoner); nothing declined here.
+            "overlay_declined": [],
             "refines": 0,
             # Step 3 telemetry — no loop ran, so these are null/false by design.
             "reasoning_effort": None,
@@ -151,6 +153,12 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
     stance = payload.get("stance", "peer")
 
     pack = get_active_pack()
+    # A turn MAY carry a per-learner customization overlay (the turn path accepts it
+    # as input). Route it through the single floor-checking path and persist it where
+    # goals ride, before the context is built, so it shapes this turn. Absent overlay
+    # leaves any stored overlay untouched (behavior unchanged when not provided).
+    if payload.get("overlay") is not None:
+        overlay_mod.set_overlay(store, pid, payload.get("overlay"))
     learner = store.get_learner_state(pid)
     attempts = store.attempts(pid, exercise["id"])
     ctx = build_context(payload, learner, attempts)
@@ -330,6 +338,9 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
             # Wellbeing defense-in-depth (additive §6): a post-hoc berating-softener,
             # NOT a deterministic gate. True iff an obviously berating draft was softened.
             "wellbeing_softened": wellbeing_softened,
+            # Per-learner customization overlay (additive §6): which submitted fields the
+            # floor check DECLINED this turn (observable; never the raw declined value).
+            "overlay_declined": (ctx.get("overlay") or {}).get("declined", []),
             "refines": refines,
             # ---- calibrated-uncertainty telemetry (Step 3) ----
             "reasoning_effort": reasoning_effort,   # effort of the final reasoner draft

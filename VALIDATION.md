@@ -614,6 +614,66 @@ cd backend && python -m pytest tests/test_goal_safety.py -q
 
 ---
 
+## Customization overlay + embed - Slice E: per-learner seam, reference widget
+
+A bounded, opt-in per-learner customization overlay (the seam a host customizes the
+tutor through) plus a documented embed contract and a replaceable reference widget.
+With no overlay set, behavior is exactly what it was (defaults are mastery-friendly),
+so existing families/tests stay green.
+
+- **Overlay contract (`agent/overlay.py`).** Bounded, ENUMERATED knobs only:
+  `persona` (tone / verbosity / framing), `pedagogy` (scaffolding / stretch),
+  `accommodation` (reading_level / language). Not a free-form stance string (that is a
+  wellbeing-floor bypass + prompt-injection surface). `normalize_overlay` validates
+  each value against its enum, falls back to the mastery-friendly default for unknown
+  values, and routes every submitted value through the **same `goals.is_harmful`
+  detector**. Goals and reflection are the same per-learner surface and keep riding on
+  the learner state.
+- **One floor-checking path (the load-bearing piece).** A harm-requesting overlay
+  field ("be harsh with me", "never let me rest") is DECLINED exactly like a harmful
+  goal: recorded, dropped to its default, never honor-framed. `prompts._overlay_block`
+  injects ONLY framework-authored phrases keyed by the chosen enum (never the learner's
+  raw text) and re-checks each raw value (never-honor guard). The leak gate and the
+  wellbeing floor stay **supreme and un-customizable**: no knob yields more of the
+  answer (`scaffolding: less` = more independence, NOT more solution), and a worst-case
+  stub that tries to honor a harmful overlay is still caught on the OUTPUT by the
+  post-hoc softener (Slice D defense-in-depth; EXTRACTION_PLAN §(g)).
+- **Carried where goals ride.** The overlay rides on the learner state (additive
+  `LearnerState.overlay` JSON column, v4; migration `ALTER TABLE learner_state ADD
+  COLUMN overlay JSON;`, dev: recreate `qimvp.db`) and is injected into the
+  persona-parameterized prompts via context, exactly like goals. `memory.update` now
+  preserves `overlay` across a turn alongside goals/reflections. **Additive only:** a
+  new `overlay_set` event type and the `telemetry.components.overlay_declined` /
+  `overlay`-carrying turn fields; the 8-field §6 row shape and the `events.jsonl`
+  export contract are unchanged.
+- **Routes (new).** `POST /quad/v1/overlay` and `POST /api/overlay` (set/clear,
+  pseudonymous, PII-checked 422); `/quad/v1/turn` and `/api/sol/turn` accept an inline
+  `overlay`. `capabilities.customization` advertises the bounded vocabulary and that
+  the floors are not customizable. No new env var.
+- **Embed contract + reference widget.** `docs/quad-tutor-protocol.md` documents the
+  request/response shape, the floor guarantees, the PII boundary, and that the embed
+  never authenticates. `frontend/widget.html` is a single-file, dependency-light,
+  replaceable widget: three panes (chat / goals + reflection / trace + signals) plus
+  one customization knob (scaffolding), rendering **signals, not verdicts** (a withheld
+  solution shows as "held back, with a nudge") and **no grades or rankings**. The host
+  owns auth, roster, and persistence.
+
+Tests: `tests/test_overlay.py` (12) - contract bounds/defaults, the floor-routing
+(harmful declined like a goal, benign firm overlays honored), the provable never-honor
+guard, leak-floor-not-customizable, the adversarial hard path (harmful overlay evading
+intake + a berating stub -> not berating, held by the softener), the additive
+`overlay_set` event with a stable row shape, the sidecar overlay route + PII 422, and
+the widget contract (targets the sidecar, signals-not-verdicts, no grades/rankings,
+never authenticates). Two existing exact-shape assertions were extended for the
+additive route/column (`test_quad_sidecar.test_no_grade_write_route_exists`,
+`test_sql_store.test_unknown_pid_returns_defaults`). Suite: **312 passed, 1 skipped**.
+
+```bash
+cd backend && python -m pytest tests/test_overlay.py -q
+```
+
+---
+
 ## 0. Environment (once) 🟢
 
 Use the project venv, and **always invoke the suite as `python -m pytest`** — a bare
@@ -638,12 +698,12 @@ No network, no DB, no key. This is the gate `main` must always pass.
 cd backend && python -m pytest
 ```
 
-**Expected (current, through Slice D, datascience active): `300 passed, 1
+**Expected (current, through Slice E, datascience active): `312 passed, 1
 skipped`.** The single skip is the gated live behavioral benchmark
 (`tests/evals/test_behavioral.py::test_live_benchmark_runs`), which skips unless
 `RUN_LLM_EVALS=1` and a reachable tutor + judge endpoint are configured (see §3).
 The running per-phase totals are recorded in the phase sections above (from `221
-passed, 11 skipped` at Phase 0 to `300 passed, 1 skipped` at Slice D). The
+passed, 11 skipped` at Phase 0 to `312 passed, 1 skipped` at Slice E). The
 quantum-era per-module table below is **historical** (those modules no longer
 exist, and the legacy `sol_behavior_evals.py` was retired into
 `evals/behavioral/` in Slice 6b); the current per-module inventory is the appended
@@ -809,6 +869,13 @@ backend (no browser-side key), but it uses a **hardcoded `PID = "p_dev"`** witho
 consent registration — **dev only; do not use it for a pilot session.** The React app
 (`frontend/quantum-inventioneers-peer-tutor.jsx`) has full onboarding and no
 hardcoded PID.
+
+Opt-in learner-customization intake (pseudonymous; PII-checked): `POST /api/goals`,
+`POST /api/reflection`, and `POST /api/overlay` (Slice E), mirrored on the sidecar as
+`POST /quad/v1/{goals,reflection,overlay}`. The host-embeddable **reference widget**
+is `frontend/widget.html` (single-file, dependency-light; three panes + one
+customization knob; signals-not-verdicts; never authenticates) — point its sidecar
+field at `http://localhost:8000`. The minimal one-turn smoke is `frontend/embed-demo.html`.
 
 Optional — analysis pipeline (offline, from an exported trace):
 

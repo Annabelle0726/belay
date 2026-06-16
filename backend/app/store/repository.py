@@ -62,7 +62,8 @@ class InMemoryStore:
 
     def get_learner_state(self, participant_id: str) -> dict:
         return self._state.get(participant_id, {"grasped": [], "shaky": [], "attempts": 0,
-                                                "concepts": {}, "goals": None, "reflections": []})
+                                                "concepts": {}, "goals": None, "reflections": [],
+                                                "overlay": None})
 
     def save_learner_state(self, participant_id: str, state: dict) -> None:
         self._state[participant_id] = state
@@ -98,7 +99,7 @@ class SqlStore:
             row = s.get(LearnerState, participant_id)
             if not row:
                 return {"grasped": [], "shaky": [], "attempts": 0, "concepts": {},
-                        "goals": None, "reflections": []}
+                        "goals": None, "reflections": [], "overlay": None}
             return {
                 "grasped": row.grasped or [],
                 "shaky": row.shaky or [],
@@ -106,6 +107,7 @@ class SqlStore:
                 "concepts": row.concepts or {},
                 "goals": row.goals,
                 "reflections": row.reflections or [],
+                "overlay": row.overlay,
             }
 
     def save_learner_state(self, participant_id: str, state: dict) -> None:
@@ -124,6 +126,9 @@ class SqlStore:
                 row.goals = state["goals"]
             if "reflections" in state:
                 row.reflections = state["reflections"]
+            # v4 opt-in per-learner customization overlay (preserve when key absent).
+            if "overlay" in state:
+                row.overlay = state["overlay"]
             s.commit()
 
     def append_event(self, event: dict) -> None:

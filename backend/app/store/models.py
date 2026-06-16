@@ -40,10 +40,16 @@ null/[] and behavior is unchanged. No PII; the student's own words only.
 MIGRATION (deployed DBs): ALTER TABLE learner_state ADD COLUMN goals JSON;
 ALTER TABLE learner_state ADD COLUMN reflections JSON DEFAULT '[]'; (dev: recreate).
 
+LearnerState schema v4 (per-learner customization overlay): added one ADDITIVE
+column `overlay` JSON (bounded persona/pedagogy/accommodation knobs, or null).
+Opt-in: null overlay leaves behavior unchanged. No PII; enumerated values only.
+MIGRATION (deployed DBs): ALTER TABLE learner_state ADD COLUMN overlay JSON; (dev: recreate).
+
 Event types are ADDITIVE: alongside `run` and `turn`, the goals/reflection layer
-emits `goal_set`, `goal_alignment_check`, `reflect`, and `reflection_recorded` —
-new event_type values only; the 8-field row shape and the events.jsonl export
-contract are unchanged. These only appear when a student opts in to goals.
+emits `goal_set`, `goal_alignment_check`, `reflect`, and `reflection_recorded`, and
+the customization overlay emits `overlay_set` (new event_type values only; the
+8-field row shape and the events.jsonl export contract are unchanged). These only
+appear when a student opts in to goals or a customization overlay.
 """
 from __future__ import annotations
 
@@ -83,6 +89,9 @@ class LearnerState(Base):
     # v3 (opt-in goals/reflections): the student's own self-set goals + reflections.
     goals: Mapped[dict | None] = mapped_column(JSON, nullable=True, default=None)
     reflections: Mapped[list] = mapped_column(JSON, default=list)
+    # v4 (opt-in per-learner customization overlay): bounded, enumerated knobs
+    # (persona/pedagogy/accommodation) that shape HOW the tutor helps. Null = today.
+    overlay: Mapped[dict | None] = mapped_column(JSON, nullable=True, default=None)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow)
 
 

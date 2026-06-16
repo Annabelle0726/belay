@@ -16,6 +16,9 @@ seam.
 | GET | `/quad/v1/health` | liveness + protocol/pack/provider |
 | GET | `/quad/v1/capabilities` | declared identity scheme, grades posture, stances, routes, license |
 | POST | `/quad/v1/turn` | run **one** tutor turn over the existing loop |
+| POST | `/quad/v1/goals` | set/clear the learner's own goals (opt-in; pseudonymous) |
+| POST | `/quad/v1/reflection` | record a learner reflection (opt-in; pseudonymous) |
+| POST | `/quad/v1/overlay` | set/clear the per-learner customization overlay (opt-in) |
 | POST | `/quad/v1/events` | webhook ingress (e.g. an async gradingspec result / workspace event); PII-checked, acked |
 
 `GET /quad/v1/capabilities` is the discovery document; it advertises
@@ -81,6 +84,11 @@ layer. Governance is unaffected: the deterministic leak gate reads the pack's
   "stance": "peer",                 // peer | oracle | control
   "recent": [{"who": "student", "text": "..."}],
   "signals": { "attempts": 2, "repeatedError": false },
+  "overlay": {                      // OPTIONAL per-learner customization (bounded)
+    "persona":  {"tone": "direct", "verbosity": "balanced", "framing": "peer"},
+    "pedagogy": {"scaffolding": "less", "stretch": "high"},
+    "accommodation": {"reading_level": "plain", "language": "en"}
+  },
   "gradingspec_result": {           // OPTIONAL, READ-ONLY context
     "ok": true, "goalMet": false, "metric": 0.4,
     "pack": {"id": "datascience", "summary": "r2=0.40"}
@@ -92,6 +100,71 @@ layer. Governance is unaffected: the deterministic leak gate reads the pack's
 The response is the standard tutor-turn object (affect, intervention, governance
 flag, message, `components` telemetry) — identical to `POST /api/sol/turn`. The
 sidecar exposes the loop; it does not relitigate any decision.
+
+## Per-learner customization overlay — input, never authority
+
+A host (or a learner-facing control) may shape **how** the tutor helps via a
+**bounded, enumerated** overlay. It may be sent inline on a `/quad/v1/turn` or set
+once via `POST /quad/v1/overlay` (and is persisted on the learner state alongside
+goals). It is **input, never authority**: it is floor-checked and normalized
+server-side and can never loosen a floor. Fields (each defaults mastery-friendly, so
+an absent overlay reproduces today's behavior):
+
+| Section | Knob | Values (default first) |
+|---|---|---|
+| persona | tone | `warm`, `neutral`, `direct` |
+| persona | verbosity | `balanced`, `brief`, `detailed` |
+| persona | framing | `peer`, `coach` |
+| pedagogy | scaffolding | `default`, `more`, `less` |
+| pedagogy | stretch | `default`, `low`, `high` |
+| accommodation | reading_level | `default`, `plain`, `advanced` |
+| accommodation | language | short locale token, e.g. `en`, `es` |
+
+**Why enumerated, not a free-form stance string.** A free-form stance is a
+wellbeing-floor bypass risk and a prompt-injection surface; enumerated knobs are safe
+by construction, because only a **framework-authored phrase keyed by the chosen enum**
+ever reaches the prompt — never the learner's raw text. Floor guarantees a host can
+rely on:
+
+- **The leak floor is not customizable.** No knob yields more of the answer or trades
+  mastery for answers; `scaffolding: less` means *more independence / fewer hints*, not
+  more solution. The deterministic leak gate is supreme over any overlay, exactly as
+  over a goal (`tests/test_overlay.py::test_leak_floor_not_customizable_by_overlay`).
+- **The wellbeing floor binds the overlay.** Every submitted value is run through the
+  same `goals.is_harmful` detector; a harm-requesting field ("be harsh with me",
+  "never let me rest") is **declined** (recorded, dropped to default, never honor-framed)
+  exactly like a harmful goal, and a value that is not a recognized safe token is
+  dropped to the default — so harmful text never reaches the prompt as instruction. A
+  worst-case model that tries to honor a harmful overlay is still caught on the OUTPUT
+  by the post-hoc berating softener (`telemetry.components.wellbeing_softened`), the
+  same defense-in-depth as goals (EXTRACTION_PLAN §(g)).
+- **Declines are observable.** `telemetry.components.overlay_declined` lists which
+  submitted fields the floor check declined this turn (never the raw value).
+
+`POST /quad/v1/overlay` accepts `{pseudo_id, overlay, consent?}`, holds the same PII
+boundary (422), and returns the normalized artifact. `capabilities.customization`
+advertises the field vocabulary and that the floors are not customizable.
+
+## Embed contract — drop-in, never authenticates
+
+A host mounts the tutor with an already-authenticated pseudonymous learner id; the
+embed **never performs auth and never handles PII**. The framework owns the contract
+and a **replaceable reference rendering**; the host owns auth, roster, and persistence.
+
+- **Reference widget:** `frontend/widget.html` — a single-file, dependency-light,
+  drop-in (or iframe-able) widget that points at the sidecar with host-supplied
+  pseudonymous context. Three panes (chat, goals + reflection, trace + signals) plus
+  one customization knob (scaffolding). It renders **signals, not verdicts** (a withheld
+  solution shows as "held back, with a nudge"; self-eval and the wellbeing softener are
+  observable indicators) and shows **no grades and no rankings**. Replace it wholesale
+  with the host's own shell against the same `/quad/v1` contract.
+- **Minimal demo:** `frontend/embed-demo.html` — one `/quad/v1/turn` against the
+  `_skeleton` pack, for a no-model smoke.
+- **What the host supplies:** `pseudo_id` (pseudonymous, e.g. `gh:12345`),
+  `exercise_id`, `stance`, dialogue `recent`, and optionally an `overlay`. **What the
+  host must not send:** names, SIS ids, email, or any PII (refused at the boundary,
+  422). The host renders nothing it is not given; there is no grade or rank in the
+  response to render.
 
 ## Deployment as an EduCloud Registry agent object
 

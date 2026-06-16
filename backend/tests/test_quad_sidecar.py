@@ -130,8 +130,8 @@ def test_gradingspec_result_is_read_only_context():
 
 
 def test_no_grade_write_route_exists():
-    """The sidecar exposes exactly health/capabilities/turn/events — no grade-write
-    route exists (the tutor never writes grades)."""
+    """The sidecar exposes exactly health/capabilities/turn/goals/reflection/overlay/
+    events — none of which write a grade (the tutor never writes grades)."""
     api = build_router(ConsentRouter(InMemoryStore()), get_active_pack(), lambda: None)
     paths = {(r.path, tuple(sorted(set(r.methods) - {"HEAD", "OPTIONS"})))
              for r in api.routes}
@@ -141,6 +141,7 @@ def test_no_grade_write_route_exists():
         ("/quad/v1/turn", ("POST",)),
         ("/quad/v1/goals", ("POST",)),
         ("/quad/v1/reflection", ("POST",)),
+        ("/quad/v1/overlay", ("POST",)),
         ("/quad/v1/events", ("POST",)),
     }
 

@@ -25,6 +25,10 @@ class QuadTurnRequest(BaseModel):
     stance: str = "peer"
     recent: List[QuadDialogueTurn] = []
     signals: Optional[dict] = None
+    # OPTIONAL per-learner customization overlay (bounded knobs). Input, never
+    # authority: floor-checked + normalized like goals; cannot loosen the leak or
+    # wellbeing floor. Carried on the turn and persisted where goals ride.
+    overlay: Optional[dict] = None
     # READ-ONLY context. A Quad gradingspec run result maps onto the pack's run
     # result (the §1 gradingspec convergence). There is NO write path back.
     gradingspec_result: Optional[dict] = None
