@@ -7,10 +7,13 @@
 
 pytest>=8.0
 
-# CI quality gate (Slice H) — DEV-ONLY, no runtime dependency. Pinned for a
+# CI quality gate (Slice H/I) — DEV-ONLY, no runtime dependency. Pinned for a
 # reproducible gate (ruff lint + format, mypy type-check); run in CI on py3.12.
 ruff==0.8.6
 mypy==1.14.1
+# Slice I: real type stubs for pandas (the one stubless-by-default lib mypy flagged
+# once the global ignore_missing_imports was removed). Preferred over an ignore.
+pandas-stubs==3.0.3.260530
 
 # Only needed to run the behavioral evals (RUN_LLM_EVALS=1) against the Anthropic
 # provider, or for an Anthropic ceiling comparison. The default Jetstream2 path

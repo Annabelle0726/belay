@@ -45,11 +45,10 @@ python_version = "3.12"
 warn_unused_ignores = true
 warn_redundant_casts = true
 no_implicit_optional = true
-# Third-party libs (fastapi, sqlalchemy, numpy, pandas, openai, ...) are not OUR types;
-# do not fail on their missing stubs. This is a baseline knob, not `ignore_errors`.
-ignore_missing_imports = true
-# Scope: the core packages (see the per-module note below). `tests`/`evals` are a
-# documented ratchet item, not yet under the gate.
+# Slice I: the GLOBAL `ignore_missing_imports` is removed so a missing/mistyped
+# FIRST-PARTY import now errors (teeth). Genuinely stubless third-party libs get a
+# narrow per-module override below; libs that ship stubs get `types-*` in
+# requirements-dev.txt instead.
 files = ["app"]
 # `_child.py` is the sandbox child harness: it deliberately monkeypatches `socket`
 # (assign-to-a-type) to disable the network, which is not meaningfully type-checkable

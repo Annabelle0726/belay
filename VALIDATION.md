@@ -814,6 +814,15 @@ cd backend && python -m pytest tests/test_distress.py -q   # incl. the startup-w
 
 ---
 
+## Slice I — mypy + lint tightening ratchet (gate gets stronger, not just greener)
+
+**Baseline floor (pre-Slice-I, off HEAD `e7bbbdb`): `336 passed, 1 skipped`; mypy scope
+`app/` (52 files, `_child.py` excluded), `ignore_missing_imports=true` (global).** Slice I
+strengthens the gate with **zero behavior change** (the only runtime-adjacent edits are
+B904 raise-from); the unchanged suite is the proof. Full runbook appended in the docs step.
+
+---
+
 ## 0. Environment (once) 🟢
 
 Use the project venv, and **always invoke the suite as `python -m pytest`** — a bare
