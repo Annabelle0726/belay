@@ -48,7 +48,7 @@ no_implicit_optional = true
 # FIRST-PARTY import now errors (teeth). Genuinely stubless third-party libs get a
 # narrow per-module override below; libs that ship stubs get `types-*` in
 # requirements-dev.txt instead.
-files = ["app"]
+files = ["app", "tests", "evals"]
 # `_child.py` is the sandbox child harness: it deliberately monkeypatches `socket`
 # (assign-to-a-type) to disable the network, which is not meaningfully type-checkable
 # and has no in-process callers to type against. Excluded with reason (narrow, not

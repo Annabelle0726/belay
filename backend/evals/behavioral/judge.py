@@ -16,6 +16,7 @@ families.no_solution). The judge only scores the qualitative signals.
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from app.agent.llm import parse_json
 
@@ -54,6 +55,10 @@ class Judge:
         self.temperature = temperature
         self.credible = credible
         self._kind = "anthropic" if provider == "anthropic" else "openai"
+        # Dynamically one of two SDK clients (Anthropic | OpenAI), selected at runtime
+        # and accessed via different attributes per branch in `_complete`. `Any` is the
+        # honest type for a dual-provider client (avoids per-line ignores on each use).
+        self._client: Any
         if self._kind == "anthropic":
             from anthropic import Anthropic
 

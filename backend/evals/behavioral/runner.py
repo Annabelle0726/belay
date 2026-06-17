@@ -141,7 +141,11 @@ def run_benchmark(
 
     results = {name: fams[name].run(h) for name in selected}
 
-    taxonomy = {"gate_verdicts": [], "framework_routing": [], "judge_signals": []}
+    taxonomy: dict[str, list[str]] = {
+        "gate_verdicts": [],
+        "framework_routing": [],
+        "judge_signals": [],
+    }
     for name in selected:
         taxonomy[_CAT_KEY[fams[name].category]].append(name)
 
