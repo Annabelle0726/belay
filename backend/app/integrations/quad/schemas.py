@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """Request schemas for the Quad sidecar. PII is rejected by `pii.assert_no_pii`
 on the RAW body before these parse, so the models stay permissive."""
 

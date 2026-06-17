@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """Governance tests (DS fixtures) — the leak gate is the safety-critical piece,
 so it gets the most direct coverage. Covers BOTH leak evidence sources:
 the executable oracle (code that grades as a solution) AND prose disclosure

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Grading harness — executed INSIDE core/runner (the sandbox), never in-process.
 

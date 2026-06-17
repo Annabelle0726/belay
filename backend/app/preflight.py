@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Preflight doctor — verify config, store reachability, and provider endpoint
 reachability BEFORE serving.

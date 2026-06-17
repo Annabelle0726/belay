@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Core domain CONTRACT (Apache-2.0): the protocols and value types a pack/runner
 must satisfy. This package is the base of the dependency graph — it imports nothing
 app-internal (only stdlib + typing). The active-pack registry that SELECTS and loads

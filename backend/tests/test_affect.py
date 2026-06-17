@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Affect-adaptive planner overlay tests — deterministic, no LLM.
 

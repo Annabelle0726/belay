@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 FastAPI surface for the peer-tutor framework.
 

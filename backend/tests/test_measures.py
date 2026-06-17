@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Process-measure unit tests (pure offline, no LLM/network).
 

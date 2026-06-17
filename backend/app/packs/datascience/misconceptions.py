@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 DS misconception / expectation library (v0) — EMT dialogue input for the
 Peer-Reasoner, in the same shape the context layer consumes for quantum.

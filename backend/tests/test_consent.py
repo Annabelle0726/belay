@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Consent-gated logging tests (DMP §3 / IRB).
 

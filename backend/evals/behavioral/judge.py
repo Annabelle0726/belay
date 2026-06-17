@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 The benchmark judge — a SEPARATE, strong model that scores the genuinely
 qualitative rubrics (grounded, concrete, question). Configured through the same

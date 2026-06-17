@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Behavioral benchmark — offline credibility tests (stub tutor + judge, no network)
 plus a RUN_LLM_EVALS-gated live run. Replaces the retired sol_behavior_evals.py.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 §6 Process-measure extraction (pure, offline, no model/network).
 

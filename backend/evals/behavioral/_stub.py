@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Offline stub tutor + judge so the benchmark CLI/tests run with no network.
 

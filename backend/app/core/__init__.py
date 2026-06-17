@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """Domain-agnostic core of the peer-tutor framework.
 
 `core/domain` defines the seam (protocols + value types) that the agent loop,

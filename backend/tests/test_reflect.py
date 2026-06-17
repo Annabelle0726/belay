@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Slice C — the reflect intervention, reflection storage, and additive §6 events.
 

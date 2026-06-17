@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Quad tutor-seam sidecar tests (/quad/v1): the four routes, the PII boundary, and
 the grades firewall. Uses an InMemoryStore-backed wiring + control stance so no

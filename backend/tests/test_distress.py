@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Slice G — distress-routing layer of the wellbeing floor (safety-critical, hermetic).
 

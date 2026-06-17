@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """
 The core domain seam: `DomainPack` and `KnowledgeBase` protocols.
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Slice F — the datascience KnowledgeBase and the leak-over-retrieval gate.
 

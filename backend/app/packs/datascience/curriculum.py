@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 DS curriculum v0 — one module per taxonomy stratum (thin), with three exercises
 that run end to end through `run` (grade + leak paths):

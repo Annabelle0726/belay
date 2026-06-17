@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 SqlStore integration tests against the configured DATABASE_URL.
 

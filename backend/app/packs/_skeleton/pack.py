@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Minimal echo pack — a dependency-free `DomainPack` for core-only tests.
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Data-science `DomainPack` — "Robin", a peer a few weeks ahead in a DS course.
 

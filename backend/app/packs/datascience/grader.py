@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Spec-driven grader. Stages the exercise's declarative spec + data fixtures, runs
 the student source through the `_harness` driver INSIDE core/runner (sandboxed),

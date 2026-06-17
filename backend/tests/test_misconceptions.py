@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 F6 misconception-tailored peer dialogue — offline tests (DS fixtures).
 

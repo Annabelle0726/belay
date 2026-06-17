@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Quad tutor-seam sidecar — a versioned /quad/v1 HTTP/JSON surface over the
 framework's existing evaluation-first tutor loop.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 DS leak detection — code extraction, redaction, and the prose-leak heuristic.
 

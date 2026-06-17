@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Domain-seam test: the dependency-free `_skeleton` pack plus a stub LLM completes
 one full orchestrated turn. Proves the core loop (context → planner → reasoner →

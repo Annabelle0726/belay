@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Slice A — learner-authored goals: intake, pseudonymous storage, prompt injection.
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Provider seam: provider selection + per-provider tier mapping (no network).
 

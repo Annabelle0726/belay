@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 core/runner — the single restricted execution path for untrusted student code.
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """End-to-end loop test with a stub LLM (DS fixtures) — proves Planner ->
 Reasoner -> Self-Eval -> (refine) -> Governance -> Memory wires together, with no
 network and no database. Also covers the control bypass and stance telemetry."""

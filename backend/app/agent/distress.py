@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Distress-routing layer of the wellbeing floor (Slice G).
 

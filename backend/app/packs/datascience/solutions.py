@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Reference solutions, starters, and prose-leak answer tokens, per exercise.
 

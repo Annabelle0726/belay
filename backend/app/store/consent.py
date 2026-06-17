@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Consent-gated store router (DMP §3 / IRB).
 

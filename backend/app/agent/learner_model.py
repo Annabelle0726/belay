@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Deterministic per-concept learner-model update and due-review logic.
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """
 Supporting value types for the core domain seam.
 

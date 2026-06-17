@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Behavioral-benchmark scenario fixtures, parameterized by pack.
 

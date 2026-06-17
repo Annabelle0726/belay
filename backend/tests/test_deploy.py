@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Deployability tests (6c): the preflight doctor + the minimal /quad/v1 embed turn
 against the _skeleton pack. No network (control stance; provider probe skipped).

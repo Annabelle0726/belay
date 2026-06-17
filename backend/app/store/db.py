@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """SQLAlchemy engine + session.
 
 SQLite is the zero-config durable DEFAULT (`settings.database_url`); set

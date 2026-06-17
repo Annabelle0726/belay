@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Host integrations (Apache-2.0-compatible seams).
 

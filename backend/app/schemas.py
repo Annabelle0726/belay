@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """Pydantic schemas for the HTTP edge. Internals use plain dicts; validation
 lives here at the boundary."""
 

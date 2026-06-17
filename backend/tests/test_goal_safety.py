@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Slice B — goal alignment INSIDE the two non-overridable floors.
 

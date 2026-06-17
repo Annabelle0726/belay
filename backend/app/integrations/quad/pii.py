@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 PII boundary for the Quad sidecar (privacy is the hard constraint).
 

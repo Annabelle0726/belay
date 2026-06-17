@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Deterministic tests for the persistent learner model (DS fixtures):
   - packs/datascience taxonomy: mappings + relevant_concepts (prereq edges)
