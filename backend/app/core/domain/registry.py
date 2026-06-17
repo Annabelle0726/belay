@@ -57,7 +57,9 @@ def get_active_pack() -> DomainPack:
         try:
             factory = _FACTORIES[pid]
         except KeyError:
-            raise ValueError(f"unknown TUTOR_PACK={pid!r}; known packs: {sorted(_FACTORIES)}")
+            raise ValueError(
+                f"unknown TUTOR_PACK={pid!r}; known packs: {sorted(_FACTORIES)}"
+            ) from None
         _active = factory()
         _active_id = pid
     return _active

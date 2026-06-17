@@ -295,7 +295,7 @@ def provider_class(provider_id: str) -> type:
     try:
         return _PROVIDERS[provider_id]
     except KeyError:
-        raise ValueError(f"unknown PROVIDER={provider_id!r}; known: {sorted(_PROVIDERS)}")
+        raise ValueError(f"unknown PROVIDER={provider_id!r}; known: {sorted(_PROVIDERS)}") from None
 
 
 def get_provider() -> Provider:

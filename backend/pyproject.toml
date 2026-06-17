@@ -28,9 +28,8 @@ ignore = [
     # B008 (call in default arg): FastAPI's `= Body(...)` / `= Depends(...)` route idiom
     # uses callable defaults by design; this is a known false positive for FastAPI.
     "B008",
-    # B904 (raise ... from): adding exception chaining touches raise sites (a runtime,
-    # __cause__-observable edit). Deferred as a ratchet item; no behavior change here.
-    "B904",
+    # B904 (raise ... from) is ENFORCED as of Slice I — each raise inside an except now
+    # chains (`from err`) or deliberately suppresses (`from None`), per site.
     # UP031 (printf %-format) and UP038 (isinstance union) rewrite RUNTIME expressions at
     # logic sites; excluded to keep the autofix strictly to annotations/imports/layout.
     "UP031",

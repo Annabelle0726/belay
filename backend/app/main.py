@@ -104,7 +104,7 @@ def run(req: RunRequest):
     try:
         ex = _pack.get_exercise(req.exercise_id)
     except KeyError:
-        raise HTTPException(404, f"unknown exercise: {req.exercise_id}")
+        raise HTTPException(404, f"unknown exercise: {req.exercise_id}") from None
     result = _pack.run(req.source, ex)
     # Route the trace event to durable or ephemeral based on consent.
     store = _router.store_for(req.participant_id)
@@ -125,7 +125,7 @@ def sol_turn(req: SolTurnRequest):
     try:
         ex = _pack.get_exercise(req.exercise_id)
     except KeyError:
-        raise HTTPException(404, f"unknown exercise: {req.exercise_id}")
+        raise HTTPException(404, f"unknown exercise: {req.exercise_id}") from None
     payload = {
         "participant_id": req.participant_id,
         "exercise": ex,
@@ -144,7 +144,7 @@ def sol_turn(req: SolTurnRequest):
     try:
         return run_turn(payload, _llm(), store)
     except Exception as e:  # surface a clean error; the front-end shows a graceful note
-        raise HTTPException(502, f"tutor unavailable: {e}")
+        raise HTTPException(502, f"tutor unavailable: {e}") from e
 
 
 @app.post("/api/participant", response_model=ParticipantResponse)

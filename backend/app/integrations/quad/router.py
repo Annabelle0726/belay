@@ -123,17 +123,17 @@ def build_router(
         try:
             assert_no_pii(payload)
         except PIIRejected as e:
-            raise HTTPException(422, f"PII rejected at boundary: {e}")
+            raise HTTPException(422, f"PII rejected at boundary: {e}") from e
         # 2. Validate the turn shape.
         try:
             req = QuadTurnRequest(**payload)
         except ValidationError as e:
-            raise HTTPException(422, f"invalid quad turn request: {e}")
+            raise HTTPException(422, f"invalid quad turn request: {e}") from e
         # 3. Resolve the exercise via the active pack (core registry).
         try:
             ex = pack.get_exercise(req.exercise_id)
         except KeyError:
-            raise HTTPException(404, f"unknown exercise: {req.exercise_id}")
+            raise HTTPException(404, f"unknown exercise: {req.exercise_id}") from None
 
         # 4. Build the tutor-loop payload. gradingspec_result is READ-ONLY context
         #    mapped onto the turn's run-result slot — never written back anywhere.
@@ -157,7 +157,7 @@ def build_router(
         try:
             return run_turn(turn_payload, _llm(), store)
         except Exception as e:  # surface a clean error
-            raise HTTPException(502, f"tutor unavailable: {e}")
+            raise HTTPException(502, f"tutor unavailable: {e}") from e
 
     @api.post("/goals")
     def goals(payload: dict = Body(...)):
@@ -166,7 +166,7 @@ def build_router(
         try:
             assert_no_pii(payload)
         except PIIRejected as e:
-            raise HTTPException(422, f"PII rejected at boundary: {e}")
+            raise HTTPException(422, f"PII rejected at boundary: {e}") from e
         pid = payload.get("pseudo_id")
         if not pid:
             raise HTTPException(422, "pseudo_id required")
@@ -185,7 +185,7 @@ def build_router(
         try:
             assert_no_pii(payload)
         except PIIRejected as e:
-            raise HTTPException(422, f"PII rejected at boundary: {e}")
+            raise HTTPException(422, f"PII rejected at boundary: {e}") from e
         pid = payload.get("pseudo_id")
         if not pid:
             raise HTTPException(422, "pseudo_id required")
@@ -205,7 +205,7 @@ def build_router(
         try:
             assert_no_pii(payload)
         except PIIRejected as e:
-            raise HTTPException(422, f"PII rejected at boundary: {e}")
+            raise HTTPException(422, f"PII rejected at boundary: {e}") from e
         pid = payload.get("pseudo_id")
         if not pid:
             raise HTTPException(422, "pseudo_id required")
@@ -222,7 +222,7 @@ def build_router(
         try:
             assert_no_pii(payload)
         except PIIRejected as e:
-            raise HTTPException(422, f"PII rejected at boundary: {e}")
+            raise HTTPException(422, f"PII rejected at boundary: {e}") from e
         return {"ok": True, "protocol": PROTOCOL_VERSION, "received": payload.get("type", "event")}
 
     return api
