@@ -7,8 +7,6 @@ Deterministic tests for the persistent learner model (DS fixtures):
 """
 from __future__ import annotations
 
-import pytest
-
 from app.agent import learner_model as lm
 from app.agent.planner import _rules_overlay
 from app.packs.datascience.taxonomy import (

@@ -35,8 +35,6 @@ Usage (in main.py):
 """
 from __future__ import annotations
 
-from typing import Dict
-
 from .repository import InMemoryStore, SqlStore
 
 
@@ -54,10 +52,10 @@ class ConsentRouter:
     def __init__(self, durable: SqlStore | InMemoryStore) -> None:
         self._durable = durable
         # Per-pid ephemeral stores for non-consenting / unregistered participants.
-        self._ephemeral: Dict[str, InMemoryStore] = {}
+        self._ephemeral: dict[str, InMemoryStore] = {}
         # In-process consent cache: populated by register_participant and
         # (for SqlStore) lazily by _lookup_consent on cross-session lookups.
-        self._consent_cache: Dict[str, bool] = {}
+        self._consent_cache: dict[str, bool] = {}
 
     # ── participant registration (ALWAYS durable) ─────────────────────────────
 

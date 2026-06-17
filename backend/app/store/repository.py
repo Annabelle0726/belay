@@ -13,8 +13,8 @@ testable with no database and no network.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
-from typing import Dict, List, Protocol
+from datetime import UTC, datetime
+from typing import Protocol
 
 
 def make_event(participant_id: str, exercise_id: str, mode: str, event_type: str,
@@ -27,7 +27,7 @@ def make_event(participant_id: str, exercise_id: str, mode: str, event_type: str
     """
     return {
         "participant_id": participant_id,
-        "ts": datetime.now(timezone.utc).isoformat(),
+        "ts": datetime.now(UTC).isoformat(),
         "exercise_id": exercise_id,
         "mode": mode,
         # run | turn | goal_set | goal_alignment_check | reflect | reflection_recorded
@@ -58,8 +58,8 @@ class Store(Protocol):
 
 class InMemoryStore:
     def __init__(self) -> None:
-        self._state: Dict[str, dict] = {}
-        self._events: List[dict] = []
+        self._state: dict[str, dict] = {}
+        self._events: list[dict] = []
 
     def get_learner_state(self, participant_id: str) -> dict:
         return self._state.get(participant_id, {"grasped": [], "shaky": [], "attempts": 0,
@@ -148,6 +148,7 @@ class SqlStore:
 
     def attempts(self, participant_id: str, exercise_id: str) -> int:
         from sqlalchemy import func, select
+
         from .models import Event
         with self._Session() as s:
             stmt = select(func.count()).select_from(Event).where(
@@ -159,6 +160,7 @@ class SqlStore:
 
     def export_jsonl(self, participant_id: str | None = None) -> str:
         from sqlalchemy import select
+
         from .models import Event
         with self._Session() as s:
             stmt = select(Event).order_by(Event.ts)

@@ -22,7 +22,6 @@ The sample turn used throughout:
 """
 from __future__ import annotations
 
-import json
 import os
 import statistics
 import sys
@@ -32,12 +31,12 @@ from typing import Any
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, ".."))
 
-from app.agent import run_turn
 from app.agent import planner as planner_mod
 from app.agent import reasoner as reasoner_mod
+from app.agent import run_turn
 from app.agent import self_eval as selfeval_mod
 from app.agent.context import build_context, serialize
-from app.agent.llm import OpenAICompatLLM, get_llm, parse_json
+from app.agent.llm import OpenAICompatLLM, get_llm
 from app.config import settings
 from app.core.domain import get_active_pack
 from app.store import InMemoryStore

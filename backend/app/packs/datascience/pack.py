@@ -8,7 +8,7 @@ verify, the leak executable oracle) routes through `core/runner` via `grader`.
 from __future__ import annotations
 
 import ast
-from typing import List, Optional, Sequence
+from collections.abc import Sequence
 
 from ...core.domain import (
     Exercise,
@@ -151,7 +151,7 @@ class DataSciencePack:
         )
 
     # -- knowledge (lexical retrieval over the shipped corpus) ----------------
-    def knowledge(self) -> Optional[object]:
+    def knowledge(self) -> object | None:
         """Return the pack's KnowledgeBase (built + cached on first use). Retrieved
         passages are NOT pre-screened here; core governance screens them via
         `pack.leak_evidence` before any can enter tutor context (Slice F)."""

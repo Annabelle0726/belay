@@ -1,0 +1,38 @@
+# Tooling config for the peer-tutor-framework backend (Slice H CI quality gate).
+# This file configures DEV TOOLING ONLY (ruff, mypy). It declares no build system and
+# adds no runtime dependency; the package is still run/tested as today.
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = [".venv", "build"]
+
+[tool.ruff.lint]
+# A pragmatic, low-churn rule set: pyflakes (F), pycodestyle errors/warnings (E, W),
+# import sorting (I), pyupgrade (UP), and a subset of bugbear (B).
+select = ["E", "F", "W", "I", "UP", "B"]
+# Each ignore below is a NARROW, documented exclusion (Slice H: no behavior change, no
+# logic edits to satisfy the linter). The gate still catches new lint going forward.
+ignore = [
+    # E501 (line length): the codebase deliberately uses long persona/prompt string
+    # literals and explanatory comments that are not safely auto-wrappable, and
+    # `ruff format` does not split string literals. Enforcing it would force rewrites.
+    "E501",
+    # E402 (import not at top): a few modules import deliberately late — e.g. main.py
+    # mounts the Quad router AFTER constructing `app`, and the registry/orchestrator use
+    # intentional function-local-then-module imports. Reordering would change semantics.
+    "E402",
+    # E741 (ambiguous name `l`): occurs only as throwaway comprehension bindings in
+    # tests; renaming is cosmetic and out of this slice's no-edit scope.
+    "E741",
+    # B008 (call in default arg): FastAPI's `= Body(...)` / `= Depends(...)` route idiom
+    # uses callable defaults by design; this is a known false positive for FastAPI.
+    "B008",
+    # B904 (raise ... from): adding exception chaining touches raise sites (a runtime,
+    # __cause__-observable edit). Deferred as a ratchet item; no behavior change here.
+    "B904",
+    # UP031 (printf %-format) and UP038 (isinstance union) rewrite RUNTIME expressions at
+    # logic sites; excluded to keep the autofix strictly to annotations/imports/layout.
+    "UP031",
+    "UP038",
+]

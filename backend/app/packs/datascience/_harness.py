@@ -18,7 +18,7 @@ import numpy as np
 
 
 def _load(name):
-    with open(name, "r", encoding="utf-8") as fh:
+    with open(name, encoding="utf-8") as fh:
         return fh.read()
 
 

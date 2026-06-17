@@ -13,8 +13,7 @@ governance leak gate is always supreme and is unaffected by goals.)
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from ..config import settings
 from ..store import make_event
@@ -86,7 +85,7 @@ def is_harmful(text: str) -> bool:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _emit(store, participant_id: str, event_type: str, payload: dict) -> None:
@@ -107,12 +106,12 @@ def _emit_distress(store, participant_id: str) -> None:
                "routed": settings.distress_configured})
 
 
-def get_goals(state: dict) -> Optional[dict]:
+def get_goals(state: dict) -> dict | None:
     """The current goals artifact ({text, ts, ...}) or None."""
     return (state or {}).get("goals")
 
 
-def set_goals(store, participant_id: str, text: str) -> Optional[dict]:
+def set_goals(store, participant_id: str, text: str) -> dict | None:
     """Set/update the student's goals (empty text clears). Returns the artifact.
 
     Read-modify-write the full learner state so the goals column is updated
@@ -155,7 +154,7 @@ def clear_goals(store, participant_id: str) -> None:
 
 
 def add_reflection(store, participant_id: str, text: str,
-                   concept: Optional[str] = None) -> Optional[dict]:
+                   concept: str | None = None) -> dict | None:
     """Store a student reflection (their own words), timestamped and LINKED to the
     goal currently in force. Reflections feed the tutor's read of the student (the
     learner model) and are never surfaced to an instructor."""

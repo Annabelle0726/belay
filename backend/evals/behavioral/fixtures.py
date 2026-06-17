@@ -8,12 +8,10 @@ families in `families.py`. Pack-keyed so a second pack slots in later; only
 """
 from __future__ import annotations
 
-from typing import Dict
-
 from app.core.domain import get_active_pack
 
 
-def _ds_fixtures() -> Dict[str, dict]:
+def _ds_fixtures() -> dict[str, dict]:
     pack = get_active_pack()
     reg = pack.get_exercise("ds-regression")
     found = pack.get_exercise("ds-foundations")
@@ -98,7 +96,7 @@ REVISIT_PREPOP = {
 }
 
 
-def get_fixtures(pack_id: str) -> Dict[str, dict]:
+def get_fixtures(pack_id: str) -> dict[str, dict]:
     if pack_id == "datascience":
         return _ds_fixtures()
     raise ValueError(f"no behavioral fixtures for pack {pack_id!r} (datascience only today)")

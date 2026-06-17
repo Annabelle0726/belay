@@ -31,36 +31,35 @@ import sys
 import tempfile
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Union
 
 _CHILD = os.path.join(os.path.dirname(__file__), "_child.py")
 
 # Defaults sized for a tutoring grader (numpy/pandas import + a tiny model).
 DEFAULT_CPU_SECONDS = 10
 DEFAULT_WALL_SECONDS = 20.0
-DEFAULT_MEMORY_MB: Optional[int] = None   # opt-in; see threat model (macOS caveat)
+DEFAULT_MEMORY_MB: int | None = None   # opt-in; see threat model (macOS caveat)
 
 
 @dataclass
 class RunnerResult:
     """Structured outcome of a sandboxed execution."""
     ok: bool                       # process completed with exit code 0, no timeout
-    exit_code: Optional[int]
+    exit_code: int | None
     stdout: str
     stderr: str
     timed_out: bool
     wall_ms: float
-    error: Optional[str]           # runner-level error (timeout / spawn failure)
-    artifacts: Dict[str, str] = field(default_factory=dict)
+    error: str | None           # runner-level error (timeout / spawn failure)
+    artifacts: dict[str, str] = field(default_factory=dict)
 
 
 def run_python(
     program: str,
     *,
-    files: Optional[Dict[str, Union[str, bytes]]] = None,
-    artifacts: Optional[List[str]] = None,
+    files: dict[str, str | bytes] | None = None,
+    artifacts: list[str] | None = None,
     cpu_seconds: int = DEFAULT_CPU_SECONDS,
-    memory_mb: Optional[int] = DEFAULT_MEMORY_MB,
+    memory_mb: int | None = DEFAULT_MEMORY_MB,
     wall_seconds: float = DEFAULT_WALL_SECONDS,
 ) -> RunnerResult:
     """Execute ``program`` (Python source) in the restricted sandbox.
@@ -101,14 +100,14 @@ def run_python(
 
         t0 = time.perf_counter()
         timed_out = False
-        error: Optional[str] = None
+        error: str | None = None
         try:
             proc = subprocess.run(
                 [sys.executable, "-I", _CHILD, prog_path],
                 cwd=workdir, env=env, capture_output=True, text=True,
                 timeout=wall_seconds, start_new_session=True,
             )
-            exit_code: Optional[int] = proc.returncode
+            exit_code: int | None = proc.returncode
             stdout, stderr = proc.stdout, proc.stderr
         except subprocess.TimeoutExpired as exc:
             timed_out = True
@@ -122,12 +121,12 @@ def run_python(
             error = f"wall timeout after {wall_seconds}s"
         wall_ms = round((time.perf_counter() - t0) * 1000, 1)
 
-        collected: Dict[str, str] = {}
+        collected: dict[str, str] = {}
         for name in (artifacts or []):
             path = os.path.join(workdir, name)
             if os.path.exists(path):
                 try:
-                    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+                    with open(path, encoding="utf-8", errors="replace") as fh:
                         collected[name] = fh.read()
                 except OSError:
                     pass

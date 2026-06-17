@@ -35,8 +35,6 @@ All accessors use ``(x or {})`` to guard against None.
 """
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Tuple
-
 from ..core.domain import get_active_pack
 
 # ── constants -----------------------------------------------------------------
@@ -78,7 +76,7 @@ def _source(run_event: dict) -> str:
     return (run_event.get("payload") or {}).get("source") or ""
 
 
-def _linear_slope(values: List[float]) -> Optional[float]:
+def _linear_slope(values: list[float]) -> float | None:
     """Slope of a simple OLS fit of values vs index.  Returns None for <2 points."""
     n = len(values)
     if n < 2:
@@ -87,7 +85,7 @@ def _linear_slope(values: List[float]) -> Optional[float]:
     sx = sum(xs)
     sy = sum(values)
     sxx = sum(x * x for x in xs)
-    sxy = sum(x * y for x, y in zip(xs, values))
+    sxy = sum(x * y for x, y in zip(xs, values, strict=False))
     denom = n * sxx - sx * sx
     if denom == 0:
         return 0.0
@@ -216,7 +214,7 @@ def _repeated_error_count(run_events: list) -> int:
 # ── §4b outcome computation ---------------------------------------------------
 
 def _outcome_for_turn(turn_event: dict, run_events: list,
-                      window: int = HANDOFF_WINDOW) -> Optional[bool]:
+                      window: int = HANDOFF_WINDOW) -> bool | None:
     """True/False outcome for a guiding turn; None if no subsequent run exists.
 
     outcome = any run within the next `window` runs (after this turn's ts)
@@ -244,11 +242,11 @@ def _outcome_for_turn(turn_event: dict, run_events: list,
 
 # ── §4b/4c calibration stats -------------------------------------------------
 
-def ece(pairs: List[Tuple[float, int]], n_bins: int = ECE_BINS) -> float:
+def ece(pairs: list[tuple[float, int]], n_bins: int = ECE_BINS) -> float:
     """Expected Calibration Error (equal-width bins)."""
     if not pairs:
         return 0.0
-    bins: List[List[Tuple[float, int]]] = [[] for _ in range(n_bins)]
+    bins: list[list[tuple[float, int]]] = [[] for _ in range(n_bins)]
     for conf, out in pairs:
         b = min(int(conf * n_bins), n_bins - 1)
         bins[b].append((conf, out))
@@ -262,7 +260,7 @@ def ece(pairs: List[Tuple[float, int]], n_bins: int = ECE_BINS) -> float:
     return err / total
 
 
-def brier_score(pairs: List[Tuple[float, int]]) -> float:
+def brier_score(pairs: list[tuple[float, int]]) -> float:
     """Mean squared error of confidence vs binary outcome."""
     if not pairs:
         return 0.0
@@ -271,7 +269,7 @@ def brier_score(pairs: List[Tuple[float, int]]) -> float:
 
 # ── §5 struggle span classification ------------------------------------------
 
-def _span_class(run_events: list, tvd_slope: Optional[float],
+def _span_class(run_events: list, tvd_slope: float | None,
                 repeated_error_count: int) -> str:
     """productive / unproductive_stuck / neutral (per §5)."""
     n = len(run_events)
@@ -359,7 +357,7 @@ def compute_attempt_measures(
     run_tvds = [_metric(r) for r in runs]
     run_goals = [_goal_met(r) for r in runs]
 
-    best_so_far: List[float] = []
+    best_so_far: list[float] = []
     cur_best = float("inf")
     for tvd in run_tvds:
         cur_best = min(cur_best, tvd)
@@ -403,10 +401,10 @@ def compute_attempt_measures(
     lp_list = [predicted_leak(t) for t in turns]
     lp_strict_list = [predicted_leak_strict(t) for t in turns]
     la_list = [actual_leak(t) for t in turns]
-    leak_tp = sum(p and a for p, a in zip(lp_list, la_list))
-    leak_fp = sum(p and not a for p, a in zip(lp_list, la_list))
-    leak_fn = sum(not p and a for p, a in zip(lp_list, la_list))
-    leak_tn = sum(not p and not a for p, a in zip(lp_list, la_list))
+    leak_tp = sum(p and a for p, a in zip(lp_list, la_list, strict=False))
+    leak_fp = sum(p and not a for p, a in zip(lp_list, la_list, strict=False))
+    leak_fn = sum(not p and a for p, a in zip(lp_list, la_list, strict=False))
+    leak_tn = sum(not p and not a for p, a in zip(lp_list, la_list, strict=False))
     n_actual_leak = leak_tp + leak_fn
     leak_miss_rate = leak_fn / n_actual_leak if n_actual_leak else None
     n_predicted_leak = sum(lp_list)
@@ -421,7 +419,7 @@ def compute_attempt_measures(
 
     sources = [_source(r) for r in runs]
     nr_count = sum(
-        1 for a, b in zip(sources, sources[1:])
+        1 for a, b in zip(sources, sources[1:], strict=False)
         if nontrivial_revision(a, b)
     )
 
@@ -545,14 +543,14 @@ def compute_calibration_pairs(
     exercise_meta: dict,
     sim=None,
     window: int = HANDOFF_WINDOW,
-) -> List[dict]:
+) -> list[dict]:
     """One row per turn combining §4a, §4b, §4c raw signals.
 
     Rows for non-guiding turns (observe) have outcome=None and are excluded
     from §4b ECE/Brier but retained for §4a (leak self-detection).
     """
-    target = exercise_meta.get("target", {})
-    tol = exercise_meta.get("tol", GOAL_TOL)
+    target = exercise_meta.get("target", {})  # noqa: F841  quantum-era leftover, unused here; pure dict read (ratchet cleanup, not Slice H)
+    tol = exercise_meta.get("tol", GOAL_TOL)  # noqa: F841  (same; kept verbatim to avoid a logic edit this slice)
 
     turns = [e for e in events if e["event_type"] == "turn"]
     runs = [e for e in events if e["event_type"] == "run"]
@@ -576,7 +574,7 @@ def compute_calibration_pairs(
     return rows
 
 
-def aggregate_participant(pid: str, attempt_rows: List[dict]) -> dict:
+def aggregate_participant(pid: str, attempt_rows: list[dict]) -> dict:
     """Aggregate all (pid, exercise) rows into a per-participant summary."""
 
     def _mean(vals):

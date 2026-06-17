@@ -85,10 +85,10 @@ def test_skeleton_knowledge_is_none():
 
 # ── the leak-over-retrieval gate (the safety core of Slice F) ─────────────────
 
-from app.agent import governance
-from app.agent import run_turn
-from app.store import InMemoryStore
 import json
+
+from app.agent import governance, run_turn
+from app.store import InMemoryStore
 
 # A reference passage that DISCLOSES the ds-foundations solution in prose (imperative
 # + the essential operation tokens). No code fence, so it trips prose_disclosure

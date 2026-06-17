@@ -12,9 +12,9 @@ data-science). A concrete domain fills these in via its `DomainPack`.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, FrozenSet, List, Mapping, Optional, Sequence, TypedDict
-
+from typing import Any, TypedDict
 
 # ── Persona ──────────────────────────────────────────────────────────────────
 
@@ -71,11 +71,11 @@ class Taxonomy:
         misconception_concept: Mapping[str, str],
         exercise_prereqs: Mapping[str, Sequence[str]],
     ) -> None:
-        self._concepts: List[Concept] = list(concepts)
-        self._by_id: Dict[str, Concept] = {c.id: c for c in self._concepts}
-        self._exercise_concept: Dict[str, str] = dict(exercise_concept)
-        self._misconception_concept: Dict[str, str] = dict(misconception_concept)
-        self._exercise_prereqs: Dict[str, List[str]] = {
+        self._concepts: list[Concept] = list(concepts)
+        self._by_id: dict[str, Concept] = {c.id: c for c in self._concepts}
+        self._exercise_concept: dict[str, str] = dict(exercise_concept)
+        self._misconception_concept: dict[str, str] = dict(misconception_concept)
+        self._exercise_prereqs: dict[str, list[str]] = {
             k: list(v) for k, v in exercise_prereqs.items()
         }
 
@@ -91,7 +91,7 @@ class Taxonomy:
 
     # -- lookups (taxonomy edges) ---------------------------------------------
     @property
-    def labels(self) -> Dict[str, str]:
+    def labels(self) -> dict[str, str]:
         """{concept_id: human_label} — the former ``CONCEPTS`` map."""
         return {c.id: c.label for c in self._concepts}
 
@@ -99,13 +99,13 @@ class Taxonomy:
         c = self._by_id.get(concept_id)
         return c.label if c else concept_id
 
-    def concept_for_exercise(self, exercise_id: str) -> Optional[str]:
+    def concept_for_exercise(self, exercise_id: str) -> str | None:
         return self._exercise_concept.get(exercise_id)
 
-    def concept_for_misconception(self, misconception_id: str) -> Optional[str]:
+    def concept_for_misconception(self, misconception_id: str) -> str | None:
         return self._misconception_concept.get(misconception_id)
 
-    def relevant_concepts(self, exercise_id: str) -> FrozenSet[str]:
+    def relevant_concepts(self, exercise_id: str) -> frozenset[str]:
         """Concept ids relevant to an exercise, for spaced revisit:
           - the exercise's own concept,
           - that concept's direct prerequisite concepts (Concept.prereqs edges),
@@ -136,16 +136,16 @@ class Exercise(TypedDict, total=False):
     concept: str
     goalText: str
     prompt: str
-    target: Dict[str, float]   # grading target (pack-interpreted)
+    target: dict[str, float]   # grading target (pack-interpreted)
     tol: float                 # goal tolerance
     starter: str
-    prereqs: List[str]
+    prereqs: list[str]
 
 
 class Module(TypedDict, total=False):
     id: str
     title: str
-    exercises: List[Exercise]
+    exercises: list[Exercise]
 
 
 # ── Run result (pack-agnostic envelope) ──────────────────────────────────────
@@ -168,23 +168,23 @@ class RunResult(TypedDict, total=False):
     """
     ok: bool
     goalMet: bool
-    metric: Optional[float]
-    error: Optional[str]
-    pack: Dict[str, Any]  # {"id": <pack id>, ...domain-specific fields}
+    metric: float | None
+    error: str | None
+    pack: dict[str, Any]  # {"id": <pack id>, ...domain-specific fields}
 
 
 # ── Worked-example verification ──────────────────────────────────────────────
 
 class WorkedExample(TypedDict, total=False):
     source: str
-    expected_dist: Optional[Dict[str, float]]
+    expected_dist: dict[str, float] | None
 
 
 class VerifyResult(TypedDict, total=False):
     ok: bool
     reason: str
-    dist: Optional[Dict[str, float]]
-    claim_ok: Optional[bool]
+    dist: dict[str, float] | None
+    claim_ok: bool | None
 
 
 # ── Governance leak evidence ─────────────────────────────────────────────────

@@ -11,12 +11,11 @@ from __future__ import annotations
 
 import argparse
 import urllib.request
-from typing import List, Tuple
 
 from .config import settings
 
 
-def check_config() -> Tuple[bool, str]:
+def check_config() -> tuple[bool, str]:
     issues = []
     from .agent.llm import provider_class
     try:
@@ -37,9 +36,10 @@ def check_config() -> Tuple[bool, str]:
                   f"store={settings.store_backend} db={settings.database_url}")
 
 
-def check_store() -> Tuple[bool, str]:
+def check_store() -> tuple[bool, str]:
     try:
         from sqlalchemy import text
+
         from .store.db import engine
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
@@ -49,7 +49,7 @@ def check_store() -> Tuple[bool, str]:
         return False, f"store unreachable: {e}"
 
 
-def check_provider(timeout: float = 3.0) -> Tuple[bool, str]:
+def check_provider(timeout: float = 3.0) -> tuple[bool, str]:
     if settings.provider == "openai_compatible":
         url = settings.openai_base_url.rstrip("/") + "/models"
         req = urllib.request.Request(url, headers={
@@ -67,8 +67,8 @@ def check_provider(timeout: float = 3.0) -> Tuple[bool, str]:
     return False, f"unknown provider {settings.provider!r}"
 
 
-def run(probe_provider: bool = True) -> List[Tuple[str, Tuple[bool, str]]]:
-    checks: List[Tuple[str, Tuple[bool, str]]] = [
+def run(probe_provider: bool = True) -> list[tuple[str, tuple[bool, str]]]:
+    checks: list[tuple[str, tuple[bool, str]]] = [
         ("config", check_config()),
         ("store", check_store()),
     ]

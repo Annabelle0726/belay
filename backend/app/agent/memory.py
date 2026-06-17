@@ -10,8 +10,6 @@ support to a student over time (and supply the longitudinal signal §5e needs).
 """
 from __future__ import annotations
 
-from typing import Optional
-
 from ..store import Store, merge_memory
 from . import learner_model as lm_mod
 
@@ -23,7 +21,7 @@ def update(
     *,
     exercise_id: str,
     result: dict,
-    misconception_id: Optional[str],
+    misconception_id: str | None,
     repeated_error: bool,
     plan: dict,
 ) -> dict:

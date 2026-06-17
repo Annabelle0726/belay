@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import Dict
 
 
 def _env(key: str, default: str) -> str:
@@ -78,7 +77,7 @@ class Settings:
     cost_per_1k_completion: float = field(default_factory=lambda: float(_env("COST_PER_1K_COMPLETION", "0")))
 
     @property
-    def model_tiers(self) -> Dict[str, str]:
+    def model_tiers(self) -> dict[str, str]:
         """Active provider's tier->concrete-model mapping ({fast, strong}). For a
         single-model self-hosted endpoint, fast and strong map to the same model."""
         if self.provider == "anthropic":

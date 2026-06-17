@@ -2,7 +2,7 @@
 lives here at the boundary."""
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -29,10 +29,10 @@ class RunResult(BaseModel):
     model_config = {"extra": "allow"}
 
     ok: bool
-    goalMet: Optional[bool] = None
-    metric: Optional[float] = None
-    error: Optional[str] = None
-    pack: Optional[dict] = None   # {"id": <pack id>, ...domain-specific fields}
+    goalMet: bool | None = None
+    metric: float | None = None
+    error: str | None = None
+    pack: dict | None = None   # {"id": <pack id>, ...domain-specific fields}
 
 
 class SolTurnRequest(BaseModel):
@@ -42,16 +42,16 @@ class SolTurnRequest(BaseModel):
     mode: str = Field("study", pattern="^(study|teach)$")
     stance: str = Field("peer", pattern="^(peer|oracle|control)$")
     source: str = ""
-    result: Optional[dict] = None
-    recent: List[DialogueTurn] = []
-    signals: Optional[dict] = None
-    request: Optional[str] = None   # e.g. "reflect" — student-initiated reflect
-    overlay: Optional[dict] = None  # opt-in per-learner customization overlay (bounded)
+    result: dict | None = None
+    recent: list[DialogueTurn] = []
+    signals: dict | None = None
+    request: str | None = None   # e.g. "reflect" — student-initiated reflect
+    overlay: dict | None = None  # opt-in per-learner customization overlay (bounded)
 
 
 class Memory(BaseModel):
-    grasped: List[str] = []
-    shaky: List[str] = []
+    grasped: list[str] = []
+    shaky: list[str] = []
 
 
 class SolTurnResponse(BaseModel):
@@ -64,8 +64,8 @@ class SolTurnResponse(BaseModel):
     governance: str
     memory: Memory
     message: str
-    check_question: Optional[str] = None
-    worked_example: Optional[dict] = None   # telemetry only; UI may ignore
+    check_question: str | None = None
+    worked_example: dict | None = None   # telemetry only; UI may ignore
     components: dict[str, Any] = {}
 
 
@@ -83,7 +83,7 @@ class OverlayRequest(BaseModel):
     participant_id: str
     # bounded knobs (persona/pedagogy/accommodation); null/empty clears. Floor-checked
     # and normalized server-side; input only, never authority over a floor.
-    overlay: Optional[dict] = None
+    overlay: dict | None = None
 
 
 class ParticipantRequest(BaseModel):

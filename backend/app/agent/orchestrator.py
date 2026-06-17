@@ -43,7 +43,8 @@ from ..config import settings
 from ..core.domain import get_active_pack
 from ..store import Store, make_event
 from . import distress as distress_mod
-from . import governance, memory, overlay as overlay_mod, planner, reasoner, self_eval
+from . import governance, memory, planner, reasoner, self_eval
+from . import overlay as overlay_mod
 from . import telemetry as tel
 from .context import _latest_student_message, build_context
 from .llm import LLMClient

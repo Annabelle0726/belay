@@ -12,12 +12,11 @@ precedence order:
 from __future__ import annotations
 
 from app.agent.planner import (
-    NEEDS_SUPPORT,
     _ORACLE_INTERVENTIONS,
     _VALID_INTERVENTIONS,
+    NEEDS_SUPPORT,
     _rules_overlay,
 )
-
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 

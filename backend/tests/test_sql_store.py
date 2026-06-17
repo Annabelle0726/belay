@@ -15,14 +15,11 @@ All helpers below call _mk_participant() before any dependent write.
 from __future__ import annotations
 
 import json
-import os
 import uuid
 
 from app.store import SqlStore, make_event
-from app.store.consent import ConsentRouter
 from app.store.db import DATABASE_URL, SessionLocal, engine, init_db
-from app.store.models import Event, LearnerState, Participant
-
+from app.store.models import LearnerState, Participant
 
 # ── shared helpers ────────────────────────────────────────────────────────────
 

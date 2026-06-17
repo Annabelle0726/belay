@@ -27,7 +27,7 @@ from __future__ import annotations
 import json
 import re
 import time
-from typing import Dict, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from ..config import settings
 from . import telemetry as _tel
@@ -231,7 +231,7 @@ class BedrockProvider:
 
 
 # Provider id -> class. New providers register here; core selects by PROVIDER.
-_PROVIDERS: Dict[str, type] = {
+_PROVIDERS: dict[str, type] = {
     "openai_compatible": OpenAICompatProvider,
     "anthropic": AnthropicProvider,
     "bedrock": BedrockProvider,

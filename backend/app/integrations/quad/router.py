@@ -18,13 +18,13 @@ Hard constraints (EduCloud privacy posture):
 """
 from __future__ import annotations
 
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from fastapi import APIRouter, Body, HTTPException
 from pydantic import ValidationError
 
-from ...agent import get_llm, run_turn
 from ...agent import distress as _distress
+from ...agent import get_llm, run_turn
 from ...agent import goals as _goals
 from ...agent import overlay as _overlay
 from ...config import settings

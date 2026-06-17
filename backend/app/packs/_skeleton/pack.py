@@ -7,7 +7,7 @@ be exercised without any concrete domain. Template for authoring new packs.
 """
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 from ...core.domain import (
     Concept,
@@ -93,5 +93,5 @@ class SkeletonPack:
         return LeakEvidence(is_solution=False, redacted_message=draft,
                             prose_disclosure=False, snippets=())
 
-    def knowledge(self) -> Optional[object]:
+    def knowledge(self) -> object | None:
         return None

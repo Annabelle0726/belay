@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Iterable, Optional
+from collections.abc import Iterable
 
 log = logging.getLogger("peer_tutor.distress")
 
@@ -48,7 +48,7 @@ _DEFAULT_TERMS = (
 _DISTRESS = re.compile("|".join(_DEFAULT_TERMS), re.IGNORECASE)
 
 
-def has_distress_signal(text: str, extra_terms: Optional[Iterable[str]] = None) -> bool:
+def has_distress_signal(text: str, extra_terms: Iterable[str] | None = None) -> bool:
     """True iff ``text`` carries an explicit distress signal (a routing trigger, not a
     judgment). ``extra_terms`` are institution-configured additional whole-text patterns
     (IRB-owned), matched case-insensitively as literals."""

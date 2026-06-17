@@ -2,8 +2,6 @@
 on the RAW body before these parse, so the models stay permissive."""
 from __future__ import annotations
 
-from typing import List, Optional
-
 from pydantic import BaseModel, ConfigDict
 
 
@@ -23,13 +21,13 @@ class QuadTurnRequest(BaseModel):
     event: str = "chat"
     mode: str = "study"
     stance: str = "peer"
-    recent: List[QuadDialogueTurn] = []
-    signals: Optional[dict] = None
+    recent: list[QuadDialogueTurn] = []
+    signals: dict | None = None
     # OPTIONAL per-learner customization overlay (bounded knobs). Input, never
     # authority: floor-checked + normalized like goals; cannot loosen the leak or
     # wellbeing floor. Carried on the turn and persisted where goals ride.
-    overlay: Optional[dict] = None
+    overlay: dict | None = None
     # READ-ONLY context. A Quad gradingspec run result maps onto the pack's run
     # result (the §1 gradingspec convergence). There is NO write path back.
-    gradingspec_result: Optional[dict] = None
+    gradingspec_result: dict | None = None
     consent: bool = False                # DMP §3 event-trace gating; default ephemeral

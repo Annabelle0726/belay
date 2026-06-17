@@ -35,8 +35,7 @@ for a berating OUTPUT, exactly as for goals; tone has no oracle (EXTRACTION_PLAN
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from ..store import make_event
 from .goals import is_harmful
@@ -69,7 +68,7 @@ def _valid_language(v: str) -> bool:
     return 0 < len(v) <= 12 and all(c.isalpha() or c == "-" for c in v)
 
 
-def is_harmful_overlay(overlay: Optional[dict]) -> bool:
+def is_harmful_overlay(overlay: dict | None) -> bool:
     """True iff any raw value anywhere in a raw overlay requests harm (same detector
     as goals). Used at intake to route to decline; defensive, has false negatives."""
     if not overlay:
@@ -99,7 +98,7 @@ def _normalize_field(field: str, raw, allowed, default) -> dict:
     return {"value": value, "raw": raw_str, "honored": not harmful}
 
 
-def normalize_overlay(raw: Optional[dict]) -> Optional[dict]:
+def normalize_overlay(raw: dict | None) -> dict | None:
     """Validate a raw overlay into a bounded artifact, routing every value through the
     wellbeing floor. Returns None for an empty overlay (so no-overlay == today).
 
@@ -129,7 +128,7 @@ def normalize_overlay(raw: Optional[dict]) -> Optional[dict]:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _emit(store, participant_id: str, event_type: str, payload: dict) -> None:
@@ -141,12 +140,12 @@ def _emit(store, participant_id: str, event_type: str, payload: dict) -> None:
         pass
 
 
-def get_overlay(state: dict) -> Optional[dict]:
+def get_overlay(state: dict) -> dict | None:
     """The current customization overlay artifact, or None."""
     return (state or {}).get("overlay")
 
 
-def set_overlay(store, participant_id: str, raw: Optional[dict]) -> Optional[dict]:
+def set_overlay(store, participant_id: str, raw: dict | None) -> dict | None:
     """Set/replace the learner's customization overlay (None/empty clears). Returns
     the normalized artifact. Read-modify-write so goals/reflections/concepts are
     preserved. Emits an additive `overlay_set` event recording any declined fields."""

@@ -11,11 +11,9 @@ Exercises carry no quantum-style ``target``/``tol``; grading is spec-driven
 """
 from __future__ import annotations
 
-from typing import Dict, List
-
 from .solutions import SOLUTIONS
 
-EXERCISES: List[dict] = [
+EXERCISES: list[dict] = [
     {
         "id": "ds-foundations",
         "module": "wrangling-eda",
@@ -56,7 +54,7 @@ EXERCISES: List[dict] = [
 ]
 
 # One module per stratum (thin v0). Exercises attach to their stratum module.
-MODULES: List[dict] = [
+MODULES: list[dict] = [
     {"id": "data-foundations", "title": "Module 1 · Data foundations",
      "summary": "Data types, tabular structure, tidy data, summary statistics."},
     {"id": "wrangling-eda", "title": "Module 2 · Wrangling & EDA",
@@ -73,7 +71,7 @@ MODULES: List[dict] = [
      "summary": "CNNs, sequence models, attention, transformers, transfer learning."},
 ]
 
-_BY_ID: Dict[str, dict] = {e["id"]: e for e in EXERCISES}
+_BY_ID: dict[str, dict] = {e["id"]: e for e in EXERCISES}
 
 
 def get_exercise(exercise_id: str) -> dict:

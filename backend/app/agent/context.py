@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Optional
 
 from ..core.domain import get_active_pack
 
@@ -44,7 +43,7 @@ def _latest_student_message(recent: list) -> str:
     return ""
 
 
-def _last_result(result: Optional[dict]) -> object:
+def _last_result(result: dict | None) -> object:
     if not result:
         return "no run yet"
     if not result.get("ok"):

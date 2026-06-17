@@ -33,7 +33,7 @@ def _py_files(*subdirs):
 
 
 def _module_level_imports(path):
-    with open(path, "r", encoding="utf-8") as fh:
+    with open(path, encoding="utf-8") as fh:
         tree = ast.parse(fh.read(), filename=path)
     mods = []
     for node in tree.body:   # top-level only — function-local imports excluded
@@ -57,7 +57,7 @@ def test_core_has_no_module_level_pack_imports():
 def test_no_classiq_imports_in_core_or_packs():
     offenders = []
     for path in _py_files(*_SCAN_DIRS):
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             text = fh.read()
         if "classiq" in text.lower():
             offenders.append(os.path.relpath(path, _APP))

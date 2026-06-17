@@ -17,7 +17,6 @@ import tempfile
 from app.core import runner
 from app.core.runner import RunnerResult, run_python
 
-
 # ── sandbox properties ────────────────────────────────────────────────────────
 
 def test_network_is_blocked():

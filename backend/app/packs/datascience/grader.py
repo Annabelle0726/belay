@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Optional
 
 from ...core import runner
 from ...core.domain import Exercise, RunResult
@@ -28,7 +27,7 @@ def spec_path(exercise_id: str) -> str:
 
 
 def load_spec(exercise_id: str) -> dict:
-    with open(spec_path(exercise_id), "r", encoding="utf-8") as fh:
+    with open(spec_path(exercise_id), encoding="utf-8") as fh:
         return json.load(fh)
 
 
@@ -37,19 +36,19 @@ def has_spec(exercise_id: str) -> bool:
 
 
 def _harness_source() -> str:
-    with open(_HARNESS_PATH, "r", encoding="utf-8") as fh:
+    with open(_HARNESS_PATH, encoding="utf-8") as fh:
         return fh.read()
 
 
 def _stage_data(spec: dict) -> dict:
     files = {}
     for rel in spec.get("data_files", []):
-        with open(os.path.join(_SPECS_DIR, rel), "r", encoding="utf-8") as fh:
+        with open(os.path.join(_SPECS_DIR, rel), encoding="utf-8") as fh:
             files[rel] = fh.read()
     return files
 
 
-def _parse_grade(stdout: str) -> Optional[dict]:
+def _parse_grade(stdout: str) -> dict | None:
     for line in stdout.splitlines():
         if line.startswith(_GRADE_PREFIX):
             try:

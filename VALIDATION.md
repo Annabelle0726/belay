@@ -774,6 +774,15 @@ cd backend && python -m pytest tests/test_distress.py tests/test_import_boundari
 
 ---
 
+## Slice H — CI quality gate (ruff + mypy) + distress startup warning
+
+**Baseline floor (pre-Slice-H, off HEAD `3fe1c54`): `335 passed, 1 skipped`.** Slice H
+adds DEV TOOLING and CI only — **no runtime behavior change**; the unchanged suite is the
+proof. (Full runbook: ruff/mypy local commands, the mypy baseline + ratchet, and the
+startup warning, appended in the docs step below.)
+
+---
+
 ## 0. Environment (once) 🟢
 
 Use the project venv, and **always invoke the suite as `python -m pytest`** — a bare

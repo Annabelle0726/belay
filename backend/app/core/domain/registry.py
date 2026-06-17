@@ -9,7 +9,7 @@ arrow pointing from packs to core, not the reverse.
 from __future__ import annotations
 
 import os
-from typing import Callable, Dict, Optional
+from collections.abc import Callable
 
 from .pack import DomainPack
 
@@ -28,13 +28,13 @@ def _load_skeleton() -> DomainPack:
 
 
 # pack id -> zero-arg factory. New packs register here.
-_FACTORIES: Dict[str, Callable[[], DomainPack]] = {
+_FACTORIES: dict[str, Callable[[], DomainPack]] = {
     "datascience": _load_datascience,
     "_skeleton": _load_skeleton,
 }
 
-_active: Optional[DomainPack] = None
-_active_id: Optional[str] = None
+_active: DomainPack | None = None
+_active_id: str | None = None
 
 
 def active_pack_id() -> str:

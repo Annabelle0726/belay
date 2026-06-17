@@ -11,8 +11,6 @@ Runs each registered family `--repeats` times and assembles a JSON report that:
 """
 from __future__ import annotations
 
-from typing import Dict, List, Optional
-
 from app.core.domain import get_active_pack
 from app.store import InMemoryStore
 
@@ -29,7 +27,7 @@ class _Telemetry:
 
     def __init__(self) -> None:
         self.turns = 0
-        self._by: Dict[str, dict] = {}
+        self._by: dict[str, dict] = {}
 
     def add(self, out: dict) -> None:
         self.turns += 1
@@ -101,7 +99,7 @@ class Harness:
 
 def run_benchmark(*, pack_id: str, tutor, judge, repeats: int, tutor_meta: dict,
                   judge_meta: dict, temperature: float,
-                  families: Optional[List[str]] = None) -> dict:
+                  families: list[str] | None = None) -> dict:
     pack = get_active_pack()
     fixtures = get_fixtures(pack_id)
     fams = registry()

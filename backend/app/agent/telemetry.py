@@ -16,19 +16,18 @@ for self-hosted.
 from __future__ import annotations
 
 import contextvars
-from typing import Dict, Optional
 
-_meter: "contextvars.ContextVar[Optional[UsageMeter]]" = contextvars.ContextVar(
+_meter: contextvars.ContextVar[UsageMeter | None] = contextvars.ContextVar(
     "ptf_usage_meter", default=None)
 
 
 class UsageMeter:
     def __init__(self) -> None:
-        self._by_role: Dict[str, dict] = {}
+        self._by_role: dict[str, dict] = {}
 
     def record(self, role: str, *, latency_ms: float,
-               prompt_tokens: Optional[int], completion_tokens: Optional[int],
-               cost: Optional[float]) -> None:
+               prompt_tokens: int | None, completion_tokens: int | None,
+               cost: float | None) -> None:
         e = self._by_role.setdefault(role, {
             "calls": 0, "latency_ms": 0.0,
             "prompt_tokens": 0, "completion_tokens": 0, "cost": 0.0,
@@ -44,10 +43,10 @@ class UsageMeter:
             e["cost"] = round(e["cost"] + cost, 6)
             e["_has_cost"] = True
 
-    def by_component(self) -> Dict[str, dict]:
+    def by_component(self) -> dict[str, dict]:
         """{role: {calls, latency_ms, prompt_tokens, completion_tokens, cost}}.
         Token/cost are None when the provider never reported them."""
-        out: Dict[str, dict] = {}
+        out: dict[str, dict] = {}
         for role, e in self._by_role.items():
             out[role] = {
                 "calls": e["calls"],
@@ -59,11 +58,11 @@ class UsageMeter:
         return out
 
 
-def current_meter() -> "Optional[UsageMeter]":
+def current_meter() -> UsageMeter | None:
     return _meter.get()
 
 
-def set_meter(meter: Optional[UsageMeter]):
+def set_meter(meter: UsageMeter | None):
     """Activate a meter for the current context; returns a token for reset()."""
     return _meter.set(meter)
 
@@ -72,8 +71,8 @@ def reset_meter(token) -> None:
     _meter.reset(token)
 
 
-def record(role: str, *, latency_ms: float, prompt_tokens: Optional[int],
-           completion_tokens: Optional[int], cost: Optional[float]) -> None:
+def record(role: str, *, latency_ms: float, prompt_tokens: int | None,
+           completion_tokens: int | None, cost: float | None) -> None:
     """Record a provider call into the active meter, if any (no-op otherwise)."""
     meter = _meter.get()
     if meter is not None:

@@ -149,6 +149,7 @@ def test_no_grade_write_route_exists():
 def test_sidecar_source_has_no_grade_write_calls():
     """Static guard: the sidecar source contains no grade-writing surface."""
     import os
+
     import app.integrations.quad as quad_pkg
     quad_dir = os.path.dirname(quad_pkg.__file__)
     forbidden = ("write_grade", "post_grade", "put_grade", "set_grade",

@@ -16,12 +16,10 @@ Strata (id prefix is informational only; ids are globally unique):
 """
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
-
 from ...core.domain import Concept, Taxonomy
 
 # (id, label, (prereq concept ids,))
-_CONCEPTS: List[Tuple[str, str, Tuple[str, ...]]] = [
+_CONCEPTS: list[tuple[str, str, tuple[str, ...]]] = [
     # ── 1. data foundations ──────────────────────────────────────────────────
     ("data-types", "Data types (numeric, categorical, ordinal, datetime)", ()),
     ("tabular-structure", "Tabular data: rows as observations, columns as variables", ("data-types",)),
@@ -97,17 +95,17 @@ _CONCEPTS: List[Tuple[str, str, Tuple[str, ...]]] = [
 ]
 
 # Human label map (the former CONCEPTS dict shape, for callers that want it).
-CONCEPTS: Dict[str, str] = {cid: label for cid, label, _ in _CONCEPTS}
+CONCEPTS: dict[str, str] = {cid: label for cid, label, _ in _CONCEPTS}
 
 # exercise_id -> primary concept id
-EXERCISE_CONCEPT: Dict[str, str] = {
+EXERCISE_CONCEPT: dict[str, str] = {
     "ds-foundations": "grouping-aggregation",
     "ds-regression": "linear-regression",
     "ds-mlp": "mlp",
 }
 
 # misconception_id -> concept id
-MISCONCEPTION_CONCEPT: Dict[str, str] = {
+MISCONCEPTION_CONCEPT: dict[str, str] = {
     "DS-corr-causation": "correlation-causation",
     "DS-pvalue-ph0": "hypothesis-testing",
     "DS-train-test-leakage": "data-leakage",
@@ -129,7 +127,7 @@ MISCONCEPTION_CONCEPT: Dict[str, str] = {
 }
 
 # exercise_id -> prerequisite exercise ids (curriculum order edges)
-EXERCISE_PREREQS: Dict[str, List[str]] = {
+EXERCISE_PREREQS: dict[str, list[str]] = {
     "ds-foundations": [],
     "ds-regression": ["ds-foundations"],
     "ds-mlp": ["ds-regression"],

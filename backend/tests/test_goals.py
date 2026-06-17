@@ -6,8 +6,6 @@ existing families/tests stay green.
 """
 from __future__ import annotations
 
-import json
-
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 

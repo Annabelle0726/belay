@@ -20,7 +20,6 @@ import json
 import os
 import sys
 from collections import defaultdict
-from typing import Dict, List
 
 # Allow running from the backend/ or backend/scripts/ directory
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -44,13 +43,13 @@ _CALIB_FIELDS = [
 ]
 
 
-def _load_events(path: str) -> List[dict]:
+def _load_events(path: str) -> list[dict]:
     with open(path, encoding="utf-8") as f:
         return [json.loads(line) for line in f if line.strip()]
 
 
-def _group_events(events: List[dict]) -> Dict[tuple, List[dict]]:
-    groups: Dict[tuple, List[dict]] = defaultdict(list)
+def _group_events(events: list[dict]) -> dict[tuple, list[dict]]:
+    groups: dict[tuple, list[dict]] = defaultdict(list)
     for ev in events:
         key = (ev["participant_id"], ev["exercise_id"])
         groups[key].append(ev)
@@ -77,8 +76,8 @@ def main(argv=None) -> None:
     events = _load_events(args.trace)
     groups = _group_events(events)
 
-    attempt_rows: List[dict] = []
-    calib_pairs: List[dict] = []
+    attempt_rows: list[dict] = []
+    calib_pairs: list[dict] = []
 
     for (pid, eid), grp in sorted(groups.items()):
         try:
@@ -109,15 +108,15 @@ def main(argv=None) -> None:
         writer.writerows(calib_pairs)
 
     # ── measures_by_participant.csv ──────────────────────────────────────────
-    by_pid: Dict[str, List[dict]] = defaultdict(list)
+    by_pid: dict[str, list[dict]] = defaultdict(list)
     for row in attempt_rows:
         by_pid[row["participant_id"]].append(row)
 
-    calib_by_pid: Dict[str, List[dict]] = defaultdict(list)
+    calib_by_pid: dict[str, list[dict]] = defaultdict(list)
     for pair in calib_pairs:
         calib_by_pid[pair["participant_id"]].append(pair)
 
-    participant_rows: List[dict] = []
+    participant_rows: list[dict] = []
     for pid in sorted(by_pid):
         p_row = aggregate_participant(pid, by_pid[pid])
         # §4b ECE + Brier from this participant's guidance pairs
@@ -133,7 +132,7 @@ def main(argv=None) -> None:
 
     out_participant = os.path.join(args.output_dir, "measures_by_participant.csv")
     if participant_rows:
-        all_fields: List[str] = []
+        all_fields: list[str] = []
         seen: set = set()
         for row in participant_rows:
             for k in row:

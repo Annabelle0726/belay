@@ -14,7 +14,6 @@ All ts values are strict ISO strings so ordering comparisons are unambiguous.
 from __future__ import annotations
 
 from app.analysis.measures import (
-    HANDOFF_WINDOW,
     aggregate_participant,
     attempted_handoff,
     brier_score,
@@ -31,7 +30,6 @@ from app.analysis.measures import (
 from app.core.domain import get_active_pack
 
 # ── test fixtures ─────────────────────────────────────────────────────────────
-
 from app.packs.datascience.solutions import SOLUTIONS
 
 EX = get_active_pack().get_exercise("ds-foundations")   # DS pack active in 1c

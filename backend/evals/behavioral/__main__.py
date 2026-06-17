@@ -14,7 +14,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from typing import Optional
 
 
 def compute_judge_meta(tutor_provider: str, tutor_models: set,
@@ -40,7 +39,7 @@ def _build_judge(settings, args):
     return judge, meta
 
 
-def main(argv: Optional[list] = None) -> dict:
+def main(argv: list | None = None) -> dict:
     p = argparse.ArgumentParser(prog="evals.behavioral",
                                 description="Portable behavioral benchmark")
     p.add_argument("--pack", default="datascience")

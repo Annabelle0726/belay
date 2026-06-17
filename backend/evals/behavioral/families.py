@@ -20,12 +20,12 @@ slots in here without restructuring.
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Dict, List
 
 CATEGORIES = ("gate_verdict", "framework_routing", "judge_signal")
 
-_REGISTRY: "Dict[str, Family]" = {}
+_REGISTRY: dict[str, Family] = {}
 
 
 @dataclass
@@ -44,20 +44,20 @@ def family(name: str, category: str):
     return deco
 
 
-def registry() -> "Dict[str, Family]":
+def registry() -> dict[str, Family]:
     return dict(_REGISTRY)
 
 
 # ── result helpers ────────────────────────────────────────────────────────────
 
-def _passrate(category: str, trials: List[bool]) -> dict:
+def _passrate(category: str, trials: list[bool]) -> dict:
     passes = sum(1 for t in trials if t)
     n = len(trials)
     return {"category": category, "passes": passes, "trials": n,
             "pass_rate": f"{passes}/{n}", "rate": (passes / n if n else None)}
 
 
-def _judge_result(scores: List[int], threshold: int, credible: bool) -> dict:
+def _judge_result(scores: list[int], threshold: int, credible: bool) -> dict:
     n = len(scores)
     at_or_above = sum(1 for s in scores if s >= threshold)
     return {
@@ -150,7 +150,7 @@ def revisit(h) -> dict:
 
 # ── judge-scored qualitative signals (separate strong judge) ──────────────────
 
-def _judge_family(rubric: str, fixtures: List[str], threshold: int = 3) -> Callable:
+def _judge_family(rubric: str, fixtures: list[str], threshold: int = 3) -> Callable:
     def run(h) -> dict:
         if h.judge is None:
             return {"category": "judge_signal", "skipped": "no judge configured"}

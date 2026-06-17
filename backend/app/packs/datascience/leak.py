@@ -15,7 +15,6 @@ deterministic heuristic is the right bar: a false positive is a wasted rewrite
 from __future__ import annotations
 
 import re
-from typing import List
 
 from .solutions import SOLUTIONS
 
@@ -42,7 +41,7 @@ _IMPERATIVE = [
 _OPS_THRESHOLD = 2
 
 
-def extract_code_candidates(draft: str) -> List[str]:
+def extract_code_candidates(draft: str) -> list[str]:
     """Runnable code candidates from a draft: fenced blocks + inline spans."""
     candidates = [m.group(1) for m in _FENCE.finditer(draft)]
     candidates += [m.group(1) for m in _INLINE.finditer(draft)]

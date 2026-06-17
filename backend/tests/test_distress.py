@@ -11,9 +11,8 @@ from __future__ import annotations
 import json
 import logging
 
-from app.agent import distress
+from app.agent import distress, run_turn
 from app.agent import goals as goals_mod
-from app.agent import run_turn
 from app.config import settings
 from app.core.domain import get_active_pack
 from app.store import InMemoryStore
@@ -175,6 +174,7 @@ def test_intake_route_surfaces_frame(monkeypatch):
     goal is not honored, and the verbatim signal never reaches the response."""
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
+
     from app.integrations.quad import build_router
     from app.store import ConsentRouter
     _enable(monkeypatch, configured=True)

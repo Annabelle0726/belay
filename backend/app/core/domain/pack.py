@@ -8,10 +8,10 @@ by the registry (see `registry.get_active_pack`).
 """
 from __future__ import annotations
 
-from typing import List, Optional, Protocol, Sequence, runtime_checkable
+from collections.abc import Sequence
+from typing import Protocol, runtime_checkable
 
 from .types import (
-    Concept,
     Exercise,
     LeakEvidence,
     Module,
@@ -54,7 +54,7 @@ class KnowledgeBase(Protocol):
     locator, so any disclosure can be cited and traced.
     """
 
-    def search(self, query: str, k: int) -> List[Passage]:
+    def search(self, query: str, k: int) -> list[Passage]:
         ...
 
 
@@ -123,6 +123,6 @@ class DomainPack(Protocol):
         ...
 
     # -- knowledge (retrieval seam; may be absent) -----------------------------
-    def knowledge(self) -> Optional[KnowledgeBase]:
+    def knowledge(self) -> KnowledgeBase | None:
         """The pack's knowledge base, or None if it has no retrieval surface."""
         ...

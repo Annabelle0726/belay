@@ -9,14 +9,14 @@ looks for (EXTRACTION_PLAN §(f)).
 """
 from __future__ import annotations
 
-from typing import Dict, List, TypedDict
+from typing import TypedDict
 
 
 class _Solution(TypedDict):
     source: str
     starter: str
-    solution_ops: List[str]    # essential operation tokens (whole-word match)
-    answer_values: List[str]   # literal answer tokens (strong disclosure signal)
+    solution_ops: list[str]    # essential operation tokens (whole-word match)
+    answer_values: list[str]   # literal answer tokens (strong disclosure signal)
 
 
 _FOUNDATIONS_REF = '''\
@@ -86,7 +86,7 @@ final_loss = 1.0
 '''
 
 
-SOLUTIONS: Dict[str, _Solution] = {
+SOLUTIONS: dict[str, _Solution] = {
     "ds-foundations": {
         "source": _FOUNDATIONS_REF,
         "starter": _FOUNDATIONS_STARTER,

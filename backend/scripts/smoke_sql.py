@@ -81,8 +81,10 @@ if IS_PG:
 
 print("\n=== b. Schema ===")
 try:
-    from app.store.db import init_db
-    from app.store.db import engine   # the engine the app actually uses
+    from app.store.db import (
+        engine,  # the engine the app actually uses
+        init_db,
+    )
     init_db()
     from sqlalchemy import inspect as sa_inspect
     inspector = sa_inspect(engine)
@@ -199,6 +201,7 @@ except Exception as e:
 print("\n=== f. Cleanup ===")
 try:
     from sqlalchemy import delete
+
     from app.store.db import SessionLocal
     from app.store.models import Event, LearnerState, Participant
 

@@ -10,7 +10,6 @@ reach the server; the tutor sees a pseudonymous id + submission content only.
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 # pseudo_id := <provider>:<numeric host user id>, e.g. gh:12345, gl:9, host:42.
 PSEUDO_ID_RE = re.compile(r"^[a-z0-9_]+:[0-9]+$")
@@ -41,7 +40,7 @@ def _forbidden_key(key: str) -> bool:
     return any(t in n for t in ("sis", "student", "email", "ssn", "phone", "mail"))
 
 
-def pii_reason(payload: dict) -> Optional[str]:
+def pii_reason(payload: dict) -> str | None:
     """Return a human-readable reason if the payload carries PII, else None.
 
     Checks, recursively over the whole payload:

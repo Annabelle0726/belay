@@ -13,11 +13,11 @@ import os
 import pytest
 
 from evals.behavioral import families as fam_mod
+from evals.behavioral.__main__ import compute_judge_meta
 from evals.behavioral._stub import CannedJudge, CannedTutor
 from evals.behavioral.families import family, registry
 from evals.behavioral.fixtures import get_fixtures
 from evals.behavioral.runner import Harness, run_benchmark
-from evals.behavioral.__main__ import compute_judge_meta
 
 _TUTOR_META = {"provider": "stub", "model_fast": "stub-fast",
                "model_strong": "stub-strong", "temperature": 0.0}
@@ -61,7 +61,7 @@ def test_no_solution_comes_from_the_gate_not_the_judge():
 
 def test_gate_verdict_is_deterministic_on_text():
     from app.core.domain import get_active_pack
-    from app.packs.datascience.solutions import SOLUTIONS   # tests may import packs
+    from app.packs.datascience.solutions import SOLUTIONS  # tests may import packs
     h = Harness(get_active_pack(), CannedTutor(), None, 1, get_fixtures("datascience"))
     clean = {"message": "What does your held-out R^2 tell you about generalization?"}
     leak = {"message": "```python\n" + SOLUTIONS["ds-foundations"]["source"] + "```"}

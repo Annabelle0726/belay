@@ -7,8 +7,6 @@ touches the network or constructs a real SDK client.
 """
 from __future__ import annotations
 
-import importlib
-
 import pytest
 
 from app.agent.llm import (
@@ -18,7 +16,6 @@ from app.agent.llm import (
     Provider,
     provider_class,
 )
-
 
 # ── provider selection ────────────────────────────────────────────────────────
 
@@ -36,8 +33,8 @@ def test_unknown_provider_raises():
 def test_get_provider_honors_PROVIDER(monkeypatch):
     """get_provider() constructs the class named by PROVIDER. Use the stub
     (bedrock) so no SDK/network is required to prove selection."""
-    import app.config as config_mod
     import app.agent.llm as llm_mod
+    import app.config as config_mod
     monkeypatch.setenv("PROVIDER", "bedrock")
     # Rebuild settings from env, then re-point the llm module at it.
     new_settings = config_mod.Settings()
@@ -95,8 +92,8 @@ def test_bedrock_stub_raises_on_call():
 def test_openai_compatible_targets_configured_base_url(monkeypatch):
     """Zero-external-API wiring: PROVIDER=openai_compatible + OPENAI_BASE_URL routes
     the client at the configured (local) endpoint. Construction only — no network."""
-    import app.config as config_mod
     import app.agent.llm as llm_mod
+    import app.config as config_mod
     monkeypatch.setenv("PROVIDER", "openai_compatible")
     monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:11434/v1")
     monkeypatch.setenv("OPENAI_API_KEY", "ollama")

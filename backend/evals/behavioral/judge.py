@@ -15,7 +15,6 @@ families.no_solution). The judge only scores the qualitative signals.
 from __future__ import annotations
 
 import json
-from typing import Optional
 
 from app.agent.llm import parse_json
 
@@ -36,8 +35,8 @@ _RUBRICS = {
 
 
 class Judge:
-    def __init__(self, *, provider: str, model: str, base_url: Optional[str] = None,
-                 api_key: Optional[str] = None, temperature: float = 0.0,
+    def __init__(self, *, provider: str, model: str, base_url: str | None = None,
+                 api_key: str | None = None, temperature: float = 0.0,
                  credible: bool = True) -> None:
         self.provider = provider
         self.model = model

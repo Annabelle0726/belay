@@ -10,7 +10,7 @@ over/underfitting, …) that apply everywhere.
 """
 from __future__ import annotations
 
-from typing import Dict, List, TypedDict
+from typing import TypedDict
 
 
 class Misconception(TypedDict):
@@ -23,8 +23,8 @@ class Misconception(TypedDict):
 
 class ConceptEntry(TypedDict):
     concept: str
-    expectations: List[str]
-    misconceptions: List[Misconception]
+    expectations: list[str]
+    misconceptions: list[Misconception]
 
 
 _FOUNDATIONS: ConceptEntry = {
@@ -198,7 +198,7 @@ CROSS_CUTTING: ConceptEntry = {
 }
 
 
-_BY_EXERCISE: Dict[str, ConceptEntry] = {
+_BY_EXERCISE: dict[str, ConceptEntry] = {
     "ds-foundations": _FOUNDATIONS,
     "ds-regression": _REGRESSION,
     "ds-mlp": _MLP,
@@ -222,8 +222,8 @@ def for_exercise(exercise_id: str) -> dict:
     }
 
 
-def all_inventory_seeds() -> List[dict]:
-    items: List[dict] = []
+def all_inventory_seeds() -> list[dict]:
+    items: list[dict] = []
     for ex_id, entry in {**_BY_EXERCISE, "_cross_cutting": CROSS_CUTTING}.items():
         for e in entry["expectations"]:
             items.append({"exercise": ex_id, "concept": entry["concept"],

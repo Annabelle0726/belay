@@ -14,7 +14,6 @@ from app.packs._skeleton import SkeletonPack
 from app.preflight import check_config, check_store, run
 from app.store import ConsentRouter, InMemoryStore
 
-
 # ── preflight doctor ──────────────────────────────────────────────────────────
 
 def test_preflight_config_passes():

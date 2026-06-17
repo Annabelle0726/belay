@@ -30,8 +30,8 @@ import uuid
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from .agent import get_llm, run_turn
 from .agent import distress as distress_mod
+from .agent import get_llm, run_turn
 from .agent import goals as goals_mod
 from .agent import overlay as overlay_mod
 from .config import settings
@@ -74,6 +74,7 @@ def _llm():
 # Quad tutor-seam sidecar: a versioned /quad/v1 surface over the same tutor loop
 # (Apache-2.0; pseudonymous identity; grades firewall). See integrations/quad.
 from .integrations.quad import build_router as _build_quad_router  # noqa: E402
+
 app.include_router(_build_quad_router(_router, _pack, _llm))
 
 

@@ -19,14 +19,13 @@ persistent misconception signal, but two independent solves are.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 
 from ..core.domain import get_active_pack
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _default_entry(now: str) -> dict:
@@ -44,10 +43,10 @@ def update_concepts(
     *,
     exercise_id: str,
     result: dict,
-    misconception_id: Optional[str],
+    misconception_id: str | None,
     repeated_error: bool,
-    now: Optional[str] = None,
-    revisit_concept: Optional[str] = None,
+    now: str | None = None,
+    revisit_concept: str | None = None,
     taxonomy=None,
 ) -> dict:
     """Return an updated concepts dict (does not mutate prev).
@@ -118,7 +117,7 @@ def update_concepts(
     return concepts
 
 
-def due_review(concepts: dict, exercise_id: str, taxonomy=None) -> List[str]:
+def due_review(concepts: dict, exercise_id: str, taxonomy=None) -> list[str]:
     """Concept ids that are due for a spaced revisit on this exercise.
 
     A concept is due iff:
