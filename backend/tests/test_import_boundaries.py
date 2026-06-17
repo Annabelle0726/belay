@@ -3,9 +3,10 @@
 Import-boundary tripwires.
 
 1. The framework core (core/, agent/, analysis/, store/) AND the host integrations
-   (integrations/, e.g. the Apache-2.0 Quad sidecar) must not import a concrete
-   pack at module load — the dependency arrow points packs -> core, and an
-   integration is license-clean only if it imports core, never packs. The
+   (integrations/, e.g. the Quad sidecar) must not import a concrete pack at module
+   load — the dependency arrow points packs -> core, and an integration is
+   import-clean only if it imports core, never packs. (Import-clean is not a license
+   claim: the sidecar is AGPL like every implementation; see LICENSING.md.) The
    registry's pack imports are deliberately function-local (lazy) and so are
    allowed; only MODULE-LEVEL imports are forbidden.
 
@@ -83,8 +84,9 @@ def test_core_does_not_import_quantum():
 
 
 def test_integrations_import_core_only():
-    """The Quad sidecar (and any host integration) is Apache-2.0-clean: it imports
-    framework CORE only, never a pack."""
+    """The Quad sidecar (and any host integration) is import-clean: it imports
+    framework CORE only, never a pack. (Import hygiene, not a license claim — the
+    sidecar is AGPL; see LICENSING.md.)"""
     offenders = []
     for path in _py_files("integrations"):
         for mod in _module_level_imports(path):

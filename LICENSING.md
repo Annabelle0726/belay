@@ -12,24 +12,26 @@ The Sol implementation is AGPL-3.0. The running tutor, its governance gate, and 
 
 This is the same principle Cairn uses: the interoperability primitives are Apache, the platform that implements them is AGPL.
 
-## Proposed boundary (FLAG: confirm or redline before anything lands)
+## Confirmed boundary (realized in code; the grant is not yet in force)
 
-Apache-2.0, the contract only:
+This boundary is confirmed and now realized in the source tree as a single-license directory plus per-file SPDX headers. The realization changed no runtime behavior; only the license *grant* waits on the IP release (see Status above).
 
-- The `DomainPack`, `KnowledgeBase`, and `Passage` protocols, and the value types that define them (`Taxonomy`, `RunResult`, `LeakEvidence`).
-- To realize this cleanly the contract definitions should sit in their own clearly licensed module, so the Apache surface is exactly the contract and nothing more. Today they live in `core/domain`; isolating the pure protocol and type definitions there (or in a `core/domain/contract` submodule) is the small refactor this split implies.
+Apache-2.0, the contract only, realized in `backend/app/core/domain/`:
+
+- The `DomainPack`, `KnowledgeBase`, and `MisconceptionLibrary` protocols (`core/domain/pack.py`) and the value types that define them (`core/domain/types.py`: `PersonaSpec`, `Concept`, `Taxonomy`, `Exercise`, `Module`, `RunResult`, `WorkedExample`, `VerifyResult`, `LeakEvidence`, `Passage`).
+- `core/domain/` is exactly the contract and nothing more: it imports nothing app-internal (only stdlib + typing + its own intra-contract modules), so the Apache surface is the base of the dependency graph. An import-boundary tripwire (`tests/test_import_boundaries.py::test_contract_imports_nothing_app_internal`) fails the build if any implementation leaks back into it.
 
 AGPL-3.0, everything that implements the contract:
 
-- The Sol agent (`agent/`), the governance gate, the sandbox runner implementation (`core/runner`), the datascience pack, the store, and the integrations.
+- The active-pack registry that selects and loads implementations (`core/registry.py`, moved out of `core/domain/` so the contract stays single-license), the Sol agent (`agent/`), the governance gate, the sandbox runner implementation (`core/runner`), the datascience pack, the store, and the integrations. The Quad sidecar at `integrations/quad/` is import-clean (it imports framework core only, never a pack), but it is an implementation and so is AGPL.
 
-The line to confirm is exactly this: the contract is permissive, every concrete implementation is copyleft. If you want the runner interface or anything else moved across the line, say so and the files adjust.
+The line is exactly this: the contract is permissive, every concrete implementation is copyleft. If you want the runner interface or anything else moved across the line, say so and the files adjust.
 
 ## Placement (at publish time)
 
 - AGPL-3.0 full text at the repository root as `LICENSE`. Drop in the verbatim text from the FSF (gnu.org); do not modify it.
 - Apache-2.0 full text alongside the contract module as its `LICENSE`, or in `LICENSES/Apache-2.0.txt`. Drop in the verbatim text from apache.org; do not modify it.
-- Per-file SPDX headers (`SPDX-License-Identifier: AGPL-3.0-only` or `Apache-2.0`) so the boundary is legible file by file, not just by directory.
+- Per-file SPDX headers (`SPDX-License-Identifier: AGPL-3.0-only` or `Apache-2.0`) so the boundary is legible file by file, not just by directory. These headers are already in place on every source file; they are declarations of intent that become a grant only when the two license texts are dropped in and the Status above flips to in force.
 
 ## Contributions: DCO, not a CLA
 

@@ -854,8 +854,38 @@ green (85 files).** Slice J isolates the Apache-2.0 contract into a single-licen
 directory, moves the active-pack registry to the AGPL side, repoints imports, locks the
 dependency direction with the import-boundary tripwire, and adds per-file SPDX headers.
 This is reorganization plus declarations: **no runtime behavior changes, no license texts
-are added, nothing is published.** The unchanged suite is the proof. (Realization details
-appended on completion.)
+are added, nothing is published.** The unchanged suite is the proof.
+
+What changed (all commits suite-green; each step a separable commit):
+
+- **Contract isolated, registry extracted.** `core/domain/` is now exactly the Apache
+  contract: the protocols `DomainPack`/`KnowledgeBase`/`MisconceptionLibrary`
+  (`pack.py`) and the value types (`types.py`: `PersonaSpec`, `Concept`, `Taxonomy`,
+  `Exercise`, `Module`, `RunResult`, `WorkedExample`, `VerifyResult`, `LeakEvidence`,
+  `Passage`). The active-pack registry (which SELECTS/loads implementations) moved
+  `git mv core/domain/registry.py -> core/registry.py` (AGPL). `core/domain/__init__.py`
+  dropped its registry re-exports. The dependency arrow is impl -> contract: registry
+  imports the contract via `from .domain import DomainPack`, never the reverse.
+- **Imports repointed, no shim.** Every `get_active_pack` importer moved
+  `core.domain -> core.registry` (29 files across app/, evals/, tests/); the two
+  combined imports (`analysis/measures.py`, `tests/test_knowledge.py`) split so the
+  contract symbol stays on `core.domain` and the registry symbol comes from
+  `core.registry`. No backward-compat shim was needed (no circular import forced one).
+- **Tripwire locks the direction.** `tests/test_import_boundaries.py::test_contract_imports_nothing_app_internal`
+  resolves every module-level import in `core/domain/` to an absolute name and fails if
+  any resolves into `app.*` outside `app.core.domain`. Verified it has teeth (injecting a
+  registry import into the contract fails the build).
+- **Per-file SPDX headers (declarations only).** `Apache-2.0` on the 3 contract files;
+  `AGPL-3.0-only` on the other 84 (registry, agent, governance, runner, packs, store,
+  integrations, plus tests/evals/conftest). No license texts added, no contacts filled,
+  LICENSING.md status stays "not in force", nothing pushed public.
+
+Suite: **337 passed, 1 skipped** (the 336 baseline still pass; +1 is the new contract
+tripwire). ruff + ruff-format + mypy green (86 files). The binding line was not crossed.
+
+```bash
+cd backend && ruff check . && ruff format --check . && mypy && python -m pytest -q
+```
 
 ---
 
