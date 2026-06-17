@@ -12,7 +12,7 @@ Runs each registered family `--repeats` times and assembles a JSON report that:
 
 from __future__ import annotations
 
-from app.core.domain import get_active_pack
+from app.core.registry import get_active_pack
 from app.store import InMemoryStore
 
 from .families import registry

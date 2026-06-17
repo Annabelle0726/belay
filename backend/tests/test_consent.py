@@ -16,7 +16,7 @@ Four scenarios tested:
 from __future__ import annotations
 
 from app.agent import run_turn
-from app.core.domain import get_active_pack
+from app.core.registry import get_active_pack
 from app.store import InMemoryStore, make_event
 from app.store.consent import ConsentRouter
 

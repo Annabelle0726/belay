@@ -11,7 +11,7 @@ import json
 
 from app.agent import run_turn
 from app.agent import telemetry as tel
-from app.core.domain import get_active_pack
+from app.core.registry import get_active_pack
 from app.store import InMemoryStore
 
 _EX = get_active_pack().get_exercise("ds-foundations")

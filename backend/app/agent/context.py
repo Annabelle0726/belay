@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import re
 
-from ..core.domain import get_active_pack
+from ..core.registry import get_active_pack
 
 # Student-initiated reflect: an explicit cue in the latest student message.
 _REFLECT_CUE = re.compile(

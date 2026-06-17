@@ -11,7 +11,8 @@ This file has two halves:
 
 from __future__ import annotations
 
-from app.core.domain import Passage, get_active_pack
+from app.core.domain import Passage
+from app.core.registry import get_active_pack
 from app.packs.datascience import leak as ds_leak
 from app.packs.datascience.knowledge.kb import DataScienceKB, load_corpus
 

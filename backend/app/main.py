@@ -36,7 +36,7 @@ from .agent import get_llm, run_turn
 from .agent import goals as goals_mod
 from .agent import overlay as overlay_mod
 from .config import settings
-from .core.domain import get_active_pack
+from .core.registry import get_active_pack
 from .schemas import (
     GoalRequest,
     OverlayRequest,

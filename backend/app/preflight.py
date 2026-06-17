@@ -28,7 +28,7 @@ def check_config() -> tuple[bool, str]:
         issues.append(f"STORE_BACKEND must be sql|memory, got {settings.store_backend!r}")
     pack_id = None
     try:
-        from .core.domain import get_active_pack
+        from .core.registry import get_active_pack
 
         pack_id = get_active_pack().id
     except Exception as e:  # noqa: BLE001

@@ -8,7 +8,7 @@ pack: a verified example RUNS and does NOT solve the current exercise.
 
 from __future__ import annotations
 
-from app.core.domain import get_active_pack
+from app.core.registry import get_active_pack
 
 PACK = get_active_pack()
 EX = PACK.get_exercise("ds-foundations")

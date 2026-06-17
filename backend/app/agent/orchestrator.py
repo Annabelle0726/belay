@@ -41,7 +41,7 @@ from __future__ import annotations
 import time
 
 from ..config import settings
-from ..core.domain import get_active_pack
+from ..core.registry import get_active_pack
 from ..store import Store, make_event
 from . import distress as distress_mod
 from . import governance, memory, planner, reasoner, self_eval

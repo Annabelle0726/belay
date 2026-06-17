@@ -9,7 +9,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.core.domain import get_active_pack
+from app.core.registry import get_active_pack
 from app.integrations.quad import build_router
 from app.integrations.quad.pii import PIIRejected, assert_no_pii, pii_reason
 from app.store import ConsentRouter, InMemoryStore

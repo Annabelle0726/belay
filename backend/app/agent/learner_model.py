@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from ..core.domain import get_active_pack
+from ..core.registry import get_active_pack
 
 
 def _now_iso() -> str:

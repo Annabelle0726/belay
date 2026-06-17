@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 
-from ..core.domain import get_active_pack
+from ..core.registry import get_active_pack
 from .llm import LLMClient
 from .prompts import selfeval_system
 

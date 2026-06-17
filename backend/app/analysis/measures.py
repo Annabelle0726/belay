@@ -36,7 +36,8 @@ All accessors use ``(x or {})`` to guard against None.
 
 from __future__ import annotations
 
-from ..core.domain import DomainPack, get_active_pack
+from ..core.domain import DomainPack
+from ..core.registry import get_active_pack
 
 # ── constants -----------------------------------------------------------------
 GOAL_TOL = 0.07  # matches every exercise's tol

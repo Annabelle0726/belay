@@ -29,7 +29,7 @@ from ...agent import get_llm, run_turn
 from ...agent import goals as _goals
 from ...agent import overlay as _overlay
 from ...config import settings
-from ...core.domain import get_active_pack
+from ...core.registry import get_active_pack
 from ...store import ConsentRouter, InMemoryStore, SqlStore
 from .pii import PIIRejected, assert_no_pii
 from .schemas import QuadTurnRequest

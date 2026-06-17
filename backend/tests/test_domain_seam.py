@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 
 from app.agent import run_turn
-from app.core.domain import get_active_pack
+from app.core.registry import get_active_pack
 from app.store import InMemoryStore
 
 

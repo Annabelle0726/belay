@@ -50,7 +50,7 @@ def test_embed_demo_turn_against_skeleton(monkeypatch):
     # The embed demo runs against the _skeleton pack — the server is launched with
     # TUTOR_PACK=_skeleton so the active pack drives the turn (as the page documents).
     monkeypatch.setenv("TUTOR_PACK", "_skeleton")
-    from app.core.domain import get_active_pack
+    from app.core.registry import get_active_pack
 
     assert isinstance(get_active_pack(), SkeletonPack)
 

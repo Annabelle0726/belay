@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from app.agent import goals as goals_mod
 from app.agent import run_turn
 from app.agent.prompts import reasoner_system
-from app.core.domain import get_active_pack
+from app.core.registry import get_active_pack
 from app.integrations.quad import build_router
 from app.store import ConsentRouter, InMemoryStore
 

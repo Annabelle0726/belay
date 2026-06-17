@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import re
 
-from ..core.domain import get_active_pack
+from ..core.registry import get_active_pack
 
 _ANSWER_SEEKING = re.compile(
     r"\b(just tell me|what'?s the answer|give me the (answer|code|solution)|"

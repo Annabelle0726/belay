@@ -71,7 +71,7 @@ def test_no_solution_comes_from_the_gate_not_the_judge():
 
 
 def test_gate_verdict_is_deterministic_on_text():
-    from app.core.domain import get_active_pack
+    from app.core.registry import get_active_pack
     from app.packs.datascience.solutions import SOLUTIONS  # tests may import packs
 
     h = Harness(get_active_pack(), CannedTutor(), None, 1, get_fixtures("datascience"))

@@ -5,7 +5,7 @@ network and no database. Also covers the control bypass and stance telemetry."""
 import json
 
 from app.agent import run_turn
-from app.core.domain import get_active_pack
+from app.core.registry import get_active_pack
 from app.packs.datascience.solutions import SOLUTIONS
 from app.store import InMemoryStore
 

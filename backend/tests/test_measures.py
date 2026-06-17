@@ -28,7 +28,7 @@ from app.analysis.measures import (
     realized_handoff,
     redirect,
 )
-from app.core.domain import get_active_pack
+from app.core.registry import get_active_pack
 
 # ── test fixtures ─────────────────────────────────────────────────────────────
 from app.packs.datascience.solutions import SOLUTIONS

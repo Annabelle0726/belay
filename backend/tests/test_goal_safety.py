@@ -13,7 +13,7 @@ from __future__ import annotations
 from app.agent import goals as goals_mod
 from app.agent import governance, run_turn
 from app.agent.prompts import reasoner_system, selfeval_system
-from app.core.domain import get_active_pack
+from app.core.registry import get_active_pack
 from app.packs.datascience.solutions import SOLUTIONS  # tests may import packs
 from app.store import InMemoryStore
 

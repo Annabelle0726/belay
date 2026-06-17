@@ -9,7 +9,7 @@ families in `families.py`. Pack-keyed so a second pack slots in later; only
 
 from __future__ import annotations
 
-from app.core.domain import get_active_pack
+from app.core.registry import get_active_pack
 
 
 def _ds_fixtures() -> dict[str, dict]:

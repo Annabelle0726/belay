@@ -12,20 +12,20 @@ from __future__ import annotations
 import os
 from collections.abc import Callable
 
-from .pack import DomainPack
+from .domain import DomainPack  # impl -> contract (Apache); correct dependency direction
 
 DEFAULT_PACK = "datascience"
 
 
 def _load_datascience() -> DomainPack:
     # Lazy import: avoids a core -> packs import at module load.
-    from ...packs.datascience import DataSciencePack
+    from ..packs.datascience import DataSciencePack
 
     return DataSciencePack()
 
 
 def _load_skeleton() -> DomainPack:
-    from ...packs._skeleton import SkeletonPack
+    from ..packs._skeleton import SkeletonPack
 
     return SkeletonPack()
 

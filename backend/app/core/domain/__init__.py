@@ -1,11 +1,10 @@
-"""Core domain seam — protocols, value types, and the active-pack registry."""
+"""Core domain CONTRACT (Apache-2.0): the protocols and value types a pack/runner
+must satisfy. This package is the base of the dependency graph — it imports nothing
+app-internal (only stdlib + typing). The active-pack registry that SELECTS and loads
+implementations lives in `core.registry` (AGPL), not here, so this directory is a
+single-license (Apache) surface. See LICENSING.md."""
 
 from .pack import DomainPack, KnowledgeBase, MisconceptionLibrary
-from .registry import (
-    active_pack_id,
-    get_active_pack,
-    register_pack,
-)
 from .types import (
     Concept,
     Exercise,
@@ -24,10 +23,6 @@ __all__ = [
     "DomainPack",
     "KnowledgeBase",
     "MisconceptionLibrary",
-    # registry
-    "get_active_pack",
-    "active_pack_id",
-    "register_pack",
     # types
     "PersonaSpec",
     "Concept",

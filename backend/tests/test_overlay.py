@@ -25,7 +25,7 @@ from app.agent import goals as goals_mod
 from app.agent import overlay as ov
 from app.agent import run_turn
 from app.agent.prompts import reasoner_system
-from app.core.domain import get_active_pack
+from app.core.registry import get_active_pack
 from app.integrations.quad import build_router
 from app.packs.datascience.solutions import SOLUTIONS
 from app.store import ConsentRouter, InMemoryStore

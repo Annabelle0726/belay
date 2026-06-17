@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 
-from ..core.domain import get_active_pack
+from ..core.registry import get_active_pack
 from . import context as ctx_mod
 from .llm import LLMClient
 from .prompts import TEACH_ADDENDUM, reasoner_system

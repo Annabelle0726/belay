@@ -847,6 +847,18 @@ cd backend && ruff check . && ruff format --check . && mypy && python -m pytest 
 
 ---
 
+## Slice J — license-boundary realization (reorganization + SPDX, zero behavior change)
+
+**Baseline floor (off HEAD `72409aa`): `336 passed, 1 skipped`; ruff + ruff-format + mypy
+green (85 files).** Slice J isolates the Apache-2.0 contract into a single-license
+directory, moves the active-pack registry to the AGPL side, repoints imports, locks the
+dependency direction with the import-boundary tripwire, and adds per-file SPDX headers.
+This is reorganization plus declarations: **no runtime behavior changes, no license texts
+are added, nothing is published.** The unchanged suite is the proof. (Realization details
+appended on completion.)
+
+---
+
 ## 0. Environment (once) 🟢
 
 Use the project venv, and **always invoke the suite as `python -m pytest`** — a bare

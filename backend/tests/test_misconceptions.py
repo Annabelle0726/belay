@@ -16,7 +16,7 @@ import json
 
 from app.agent import run_turn
 from app.agent.context import build_context
-from app.core.domain import get_active_pack
+from app.core.registry import get_active_pack
 from app.packs.datascience.misconceptions import (
     CROSS_CUTTING,
     all_inventory_seeds,

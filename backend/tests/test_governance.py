@@ -4,7 +4,7 @@ the executable oracle (code that grades as a solution) AND prose disclosure
 (EXTRACTION_PLAN §(f)), plus stance-conditional blocking and answer-seeking."""
 
 from app.agent import governance
-from app.core.domain import get_active_pack
+from app.core.registry import get_active_pack
 from app.packs.datascience.solutions import SOLUTIONS
 
 EX = get_active_pack().get_exercise("ds-foundations")
