@@ -817,9 +817,33 @@ cd backend && python -m pytest tests/test_distress.py -q   # incl. the startup-w
 ## Slice I — mypy + lint tightening ratchet (gate gets stronger, not just greener)
 
 **Baseline floor (pre-Slice-I, off HEAD `e7bbbdb`): `336 passed, 1 skipped`; mypy scope
-`app/` (52 files, `_child.py` excluded), `ignore_missing_imports=true` (global).** Slice I
-strengthens the gate with **zero behavior change** (the only runtime-adjacent edits are
-B904 raise-from); the unchanged suite is the proof. Full runbook appended in the docs step.
+`app/` (52 files), `ignore_missing_imports=true` (global).** Slice I strengthens the gate
+with **zero behavior change** (the only runtime-adjacent edits are B904 raise-from); the
+unchanged suite is the proof. Run the gate from `backend/`: `ruff check . && ruff format
+--check . && mypy`.
+
+What changed (config in `backend/pyproject.toml`, dev-deps in `requirements-dev.txt`):
+
+- **Missing-imports now have teeth.** The global `ignore_missing_imports` is removed, so a
+  missing/mistyped FIRST-PARTY import errors (`[import-not-found]`). Per-module treatment:
+  - `pandas` → real stubs `pandas-stubs==3.0.3.260530` (pinned, dev-only) — the only
+    library mypy flagged. **No `[[tool.mypy.overrides]] ignore_missing_imports` were
+    needed**: numpy, fastapi, sqlalchemy, openai, anthropic, tqdm all ship inline types.
+- **mypy scope = `app/` + `tests/` + `evals/` (85 files; `_child.py` excluded).**
+- **App-source strictness notch:** `check_untyped_defs` + `warn_return_any`, applied via
+  `[[tool.mypy.overrides]] module=["app.*"]`. `tests/`+`evals/` stay at the BASE level
+  (their dynamism — fixtures, monkeypatch, stub doubles — would drown the signal).
+  **Next ratchet notch (deferred): `disallow_untyped_defs` (full annotation), app-first.**
+- **B904 is enforced** in ruff: every `raise` inside an `except` chains (`from err`, 8) or
+  deliberately suppresses (`from None`, 5). Chaining only — no control-flow change.
+- Deleted two quantum-era dead locals (`target`/`tol`) in `measures.compute_calibration_pairs`.
+
+Suite unchanged: **336 passed, 1 skipped**; ruff + ruff-format + mypy green; CI `quality`
+job + both test legs green.
+
+```bash
+cd backend && ruff check . && ruff format --check . && mypy && python -m pytest -q
+```
 
 ---
 
@@ -847,12 +871,12 @@ No network, no DB, no key. This is the gate `main` must always pass.
 cd backend && python -m pytest
 ```
 
-**Expected (current, through Slice H, datascience active): `336 passed, 1
+**Expected (current, through Slice I, datascience active): `336 passed, 1
 skipped`.** The single skip is the gated live behavioral benchmark
 (`tests/evals/test_behavioral.py::test_live_benchmark_runs`), which skips unless
 `RUN_LLM_EVALS=1` and a reachable tutor + judge endpoint are configured (see §3).
 The running per-phase totals are recorded in the phase sections above (from `221
-passed, 11 skipped` at Phase 0 to `336 passed, 1 skipped` at Slice H). The
+passed, 11 skipped` at Phase 0 to `336 passed, 1 skipped` at Slice I). The
 quantum-era per-module table below is **historical** (those modules no longer
 exist, and the legacy `sol_behavior_evals.py` was retired into
 `evals/behavioral/` in Slice 6b); the current per-module inventory is the appended
