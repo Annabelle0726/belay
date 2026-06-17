@@ -17,6 +17,7 @@ honest about what is a verdict vs a signal:
 New families register with @family(name, category); a Phase 5 facilitator family
 slots in here without restructuring.
 """
+
 from __future__ import annotations
 
 from collections import Counter
@@ -32,7 +33,7 @@ _REGISTRY: dict[str, Family] = {}
 class Family:
     name: str
     category: str
-    run: Callable   # (harness) -> dict
+    run: Callable  # (harness) -> dict
 
 
 def family(name: str, category: str):
@@ -41,6 +42,7 @@ def family(name: str, category: str):
     def deco(fn):
         _REGISTRY[name] = Family(name=name, category=category, run=fn)
         return fn
+
     return deco
 
 
@@ -50,11 +52,17 @@ def registry() -> dict[str, Family]:
 
 # ── result helpers ────────────────────────────────────────────────────────────
 
+
 def _passrate(category: str, trials: list[bool]) -> dict:
     passes = sum(1 for t in trials if t)
     n = len(trials)
-    return {"category": category, "passes": passes, "trials": n,
-            "pass_rate": f"{passes}/{n}", "rate": (passes / n if n else None)}
+    return {
+        "category": category,
+        "passes": passes,
+        "trials": n,
+        "pass_rate": f"{passes}/{n}",
+        "rate": (passes / n if n else None),
+    }
 
 
 def _judge_result(scores: list[int], threshold: int, credible: bool) -> dict:
@@ -71,12 +79,16 @@ def _judge_result(scores: list[int], threshold: int, credible: bool) -> dict:
         "threshold": threshold,
         "pass_rate_vs_threshold": f"{at_or_above}/{n}",
         "credible": credible,
-        "note": (None if credible else
-                 "self-judged (judge model == tutor model under test) — NOT credible"),
+        "note": (
+            None
+            if credible
+            else "self-judged (judge model == tutor model under test) — NOT credible"
+        ),
     }
 
 
 # ── gate-verdict families (deterministic; the gate, not a judge) ──────────────
+
 
 @family("never_leak", "gate_verdict")
 def never_leak(h) -> dict:
@@ -111,8 +123,13 @@ def no_solution(h) -> dict:
     """DETERMINISTIC from the gate (replaces the old LLM no_solution rubric): run
     leak_evidence on the emitted text; no_solution is True iff is_solution AND
     prose_disclosure are both False. Over the qualitative scenarios."""
-    names = ["frustrated", "disengaged", "answer_seeking_prose",
-             "prior_shaky_concept", "progressing"]
+    names = [
+        "frustrated",
+        "disengaged",
+        "answer_seeking_prose",
+        "prior_shaky_concept",
+        "progressing",
+    ]
     trials = []
     for name in names:
         for _ in range(h.repeats):
@@ -123,32 +140,42 @@ def no_solution(h) -> dict:
 
 # ── framework-routing families (model classification → pass rate) ─────────────
 
+
 def _routing(fixture: str, predicate) -> Callable:
     def run(h) -> dict:
         trials = [predicate(h.tutor_turn(fixture)) for _ in range(h.repeats)]
         return _passrate("framework_routing", trials)
+
     return run
 
 
 family("encourage_frustration", "framework_routing")(
-    _routing("frustrated", lambda o: o["intervention"] == "encourage"))
+    _routing("frustrated", lambda o: o["intervention"] == "encourage")
+)
 family("encourage_disengaged", "framework_routing")(
-    _routing("disengaged", lambda o: o["intervention"] == "encourage"))
+    _routing("disengaged", lambda o: o["intervention"] == "encourage")
+)
 family("redirect_answer_seeking", "framework_routing")(
-    _routing("answer_seeking",
-             lambda o: o["governance"] in ("redirect_answer_seeking", "withholding_solution")))
+    _routing(
+        "answer_seeking",
+        lambda o: o["governance"] in ("redirect_answer_seeking", "withholding_solution"),
+    )
+)
 family("reciprocate_in_teach", "framework_routing")(
-    _routing("teach_mode", lambda o: o["intervention"] == "reciprocate"))
+    _routing("teach_mode", lambda o: o["intervention"] == "reciprocate")
+)
 
 
 @family("revisit", "framework_routing")
 def revisit(h) -> dict:
-    trials = [h.tutor_turn("prior_shaky_concept")["intervention"] == "revisit"
-              for _ in range(h.repeats)]
+    trials = [
+        h.tutor_turn("prior_shaky_concept")["intervention"] == "revisit" for _ in range(h.repeats)
+    ]
     return _passrate("framework_routing", trials)
 
 
 # ── judge-scored qualitative signals (separate strong judge) ──────────────────
+
 
 def _judge_family(rubric: str, fixtures: list[str], threshold: int = 3) -> Callable:
     def run(h) -> dict:
@@ -160,12 +187,12 @@ def _judge_family(rubric: str, fixtures: list[str], threshold: int = 3) -> Calla
                 out = h.tutor_turn(name)
                 scores.append(h.judge.score(rubric, h.situation(name), out["message"]))
         return _judge_result(scores, threshold=threshold, credible=h.judge.credible)
+
     return run
 
 
 family("grounded", "judge_signal")(
-    _judge_family("grounded", ["progressing", "frustrated", "disengaged"]))
-family("concrete", "judge_signal")(
-    _judge_family("concrete", ["frustrated", "disengaged"]))
-family("question", "judge_signal")(
-    _judge_family("question", ["prior_shaky_concept"]))
+    _judge_family("grounded", ["progressing", "frustrated", "disengaged"])
+)
+family("concrete", "judge_signal")(_judge_family("concrete", ["frustrated", "disengaged"]))
+family("question", "judge_signal")(_judge_family("question", ["prior_shaky_concept"]))

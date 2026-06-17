@@ -10,6 +10,7 @@ passes around in-process are ``dataclass``es.
 Pack-agnostic is the whole point: nothing here names a domain (no quantum, no
 data-science). A concrete domain fills these in via its `DomainPack`.
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
@@ -17,6 +18,7 @@ from dataclasses import dataclass
 from typing import Any, TypedDict
 
 # ── Persona ──────────────────────────────────────────────────────────────────
+
 
 @dataclass(frozen=True)
 class PersonaSpec:
@@ -32,6 +34,7 @@ class PersonaSpec:
     - ``peer_stance``  — system-prompt stance text for the PEER condition.
     - ``oracle_stance``— system-prompt stance text for the ORACLE condition.
     """
+
     id: str
     display_name: str
     peer_stance: str
@@ -40,6 +43,7 @@ class PersonaSpec:
 
 # ── Taxonomy ─────────────────────────────────────────────────────────────────
 
+
 @dataclass(frozen=True)
 class Concept:
     """One concept in a domain's taxonomy.
@@ -47,6 +51,7 @@ class Concept:
     ``prereqs`` are prerequisite *concept* ids; the learner model's spaced-revisit
     machinery reads these edges through the `Taxonomy` interface.
     """
+
     id: str
     label: str
     prereqs: tuple[str, ...] = ()
@@ -107,9 +112,9 @@ class Taxonomy:
 
     def relevant_concepts(self, exercise_id: str) -> frozenset[str]:
         """Concept ids relevant to an exercise, for spaced revisit:
-          - the exercise's own concept,
-          - that concept's direct prerequisite concepts (Concept.prereqs edges),
-          - and the concepts of the exercise's prerequisite exercises.
+        - the exercise's own concept,
+        - that concept's direct prerequisite concepts (Concept.prereqs edges),
+        - and the concepts of the exercise's prerequisite exercises.
         """
         cids: set[str] = set()
         own = self._exercise_concept.get(exercise_id)
@@ -130,14 +135,15 @@ class Taxonomy:
 # trace rows). They are documented here as TypedDicts so the expected shape is
 # explicit, while remaining ordinary dicts at runtime.
 
+
 class Exercise(TypedDict, total=False):
     id: str
     title: str
     concept: str
     goalText: str
     prompt: str
-    target: dict[str, float]   # grading target (pack-interpreted)
-    tol: float                 # goal tolerance
+    target: dict[str, float]  # grading target (pack-interpreted)
+    tol: float  # goal tolerance
     starter: str
     prereqs: list[str]
 
@@ -149,6 +155,7 @@ class Module(TypedDict, total=False):
 
 
 # ── Run result (pack-agnostic envelope) ──────────────────────────────────────
+
 
 class RunResult(TypedDict, total=False):
     """Result of compiling + executing + grading a submission.
@@ -166,6 +173,7 @@ class RunResult(TypedDict, total=False):
                       dist / diff; DS checks / stdout). Packs SHOULD include a
                       human-readable ``summary`` for the tutor context.
     """
+
     ok: bool
     goalMet: bool
     metric: float | None
@@ -174,6 +182,7 @@ class RunResult(TypedDict, total=False):
 
 
 # ── Worked-example verification ──────────────────────────────────────────────
+
 
 class WorkedExample(TypedDict, total=False):
     source: str
@@ -188,6 +197,7 @@ class VerifyResult(TypedDict, total=False):
 
 
 # ── Governance leak evidence ─────────────────────────────────────────────────
+
 
 @dataclass(frozen=True)
 class LeakEvidence:
@@ -214,6 +224,7 @@ class LeakEvidence:
     its own answer-seeking detector). Bias cautious: a false positive is a wasted
     rewrite; a false negative is a leak.
     """
+
     is_solution: bool
     redacted_message: str
     prose_disclosure: bool = False
@@ -222,12 +233,14 @@ class LeakEvidence:
 
 # ── Knowledge base (seam only — no retrieval is built yet) ───────────────────
 
+
 @dataclass(frozen=True)
 class Passage:
     """A retrieved passage. Carries a stable id, text, a source citation, and a
     locator so a citation can be rendered and traced back to its source. The ``id``
     is what governance records when it drops a leaking passage (never the text)."""
-    id: str         # stable passage id (used in the retrieval trace / drop records)
+
+    id: str  # stable passage id (used in the retrieval trace / drop records)
     text: str
-    citation: str   # source citation (e.g. document title / id)
-    locator: str    # where in the source (page / section / line span)
+    citation: str  # source citation (e.g. document title / id)
+    locator: str  # where in the source (page / section / line span)

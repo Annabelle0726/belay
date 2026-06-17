@@ -11,6 +11,7 @@ Import-boundary tripwires.
 2. No Classiq dependency may creep into core or the packs (the quantum/Classiq
    code is removed in 1d; this tripwire keeps it from coming back).
 """
+
 from __future__ import annotations
 
 import ast
@@ -36,7 +37,7 @@ def _module_level_imports(path):
     with open(path, encoding="utf-8") as fh:
         tree = ast.parse(fh.read(), filename=path)
     mods = []
-    for node in tree.body:   # top-level only — function-local imports excluded
+    for node in tree.body:  # top-level only — function-local imports excluded
         if isinstance(node, ast.Import):
             mods += [a.name for a in node.names]
         elif isinstance(node, ast.ImportFrom):

@@ -16,6 +16,7 @@ Hard constraints (EduCloud privacy posture):
   - The sidecar exposes the existing loop and adds NO prompt-level decision; the
     deterministic governance gate is unchanged.
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -36,7 +37,9 @@ from .schemas import QuadTurnRequest
 PROTOCOL_VERSION = "quad/v1"
 
 
-def build_router(consent_router: ConsentRouter, pack, llm_factory: Callable[[], object]) -> APIRouter:
+def build_router(
+    consent_router: ConsentRouter, pack, llm_factory: Callable[[], object]
+) -> APIRouter:
     """Build the /quad/v1 router over an injected wiring (testable without network).
 
     `llm_factory` is called lazily on the first non-control turn; control-stance
@@ -52,8 +55,12 @@ def build_router(consent_router: ConsentRouter, pack, llm_factory: Callable[[], 
 
     @api.get("/health")
     def health():
-        return {"ok": True, "protocol": PROTOCOL_VERSION,
-                "pack": pack.id, "provider": settings.provider}
+        return {
+            "ok": True,
+            "protocol": PROTOCOL_VERSION,
+            "pack": pack.id,
+            "provider": settings.provider,
+        }
 
     @api.get("/capabilities")
     def capabilities():
@@ -62,20 +69,28 @@ def build_router(consent_router: ConsentRouter, pack, llm_factory: Callable[[], 
             "framework": "peer-tutor-framework",
             "pack": pack.id,
             "provider": settings.provider,
-            "identity": {"scheme": "pseudonymous", "format": "provider:numeric-id",
-                         "example": "gh:12345"},
-            "grades": {"mode": "read-only", "writes": False,
-                       "gradingspec_result": "accepted as read-only turn context (gradingspec convergence)"},
+            "identity": {
+                "scheme": "pseudonymous",
+                "format": "provider:numeric-id",
+                "example": "gh:12345",
+            },
+            "grades": {
+                "mode": "read-only",
+                "writes": False,
+                "gradingspec_result": "accepted as read-only turn context (gradingspec convergence)",
+            },
             "instructor_surfaces": "class-level aggregates only",
             "privacy": "no names, SIS ids, or plaintext email; pseudonymous id only",
             "stances": ["peer", "oracle", "control"],
-            "routes": [f"GET /{PROTOCOL_VERSION}/health",
-                       f"GET /{PROTOCOL_VERSION}/capabilities",
-                       f"POST /{PROTOCOL_VERSION}/turn",
-                       f"POST /{PROTOCOL_VERSION}/goals",
-                       f"POST /{PROTOCOL_VERSION}/reflection",
-                       f"POST /{PROTOCOL_VERSION}/overlay",
-                       f"POST /{PROTOCOL_VERSION}/events"],
+            "routes": [
+                f"GET /{PROTOCOL_VERSION}/health",
+                f"GET /{PROTOCOL_VERSION}/capabilities",
+                f"POST /{PROTOCOL_VERSION}/turn",
+                f"POST /{PROTOCOL_VERSION}/goals",
+                f"POST /{PROTOCOL_VERSION}/reflection",
+                f"POST /{PROTOCOL_VERSION}/overlay",
+                f"POST /{PROTOCOL_VERSION}/events",
+            ],
             "learner_goals": "opt-in; the student's own words, pseudonymous, never to grades",
             # Bounded, enumerated per-learner customization. Input, never authority:
             # it shapes HOW the tutor helps and can NEVER loosen the leak gate or the
@@ -83,13 +98,19 @@ def build_router(consent_router: ConsentRouter, pack, llm_factory: Callable[[], 
             "customization": {
                 "scheme": "bounded-enumerated-overlay",
                 "fields": {
-                    "persona": {"tone": ["warm", "neutral", "direct"],
-                                "verbosity": ["brief", "balanced", "detailed"],
-                                "framing": ["peer", "coach"]},
-                    "pedagogy": {"scaffolding": ["more", "default", "less"],
-                                 "stretch": ["low", "default", "high"]},
-                    "accommodation": {"reading_level": ["plain", "default", "advanced"],
-                                      "language": "short locale token (e.g. en, es)"},
+                    "persona": {
+                        "tone": ["warm", "neutral", "direct"],
+                        "verbosity": ["brief", "balanced", "detailed"],
+                        "framing": ["peer", "coach"],
+                    },
+                    "pedagogy": {
+                        "scaffolding": ["more", "default", "less"],
+                        "stretch": ["low", "default", "high"],
+                    },
+                    "accommodation": {
+                        "reading_level": ["plain", "default", "advanced"],
+                        "language": "short locale token (e.g. en, es)",
+                    },
                 },
                 "floors": "leak gate + wellbeing floor are supreme and NOT customizable",
             },
@@ -117,14 +138,16 @@ def build_router(consent_router: ConsentRouter, pack, llm_factory: Callable[[], 
         # 4. Build the tutor-loop payload. gradingspec_result is READ-ONLY context
         #    mapped onto the turn's run-result slot — never written back anywhere.
         turn_payload = {
-            "participant_id": req.pseudo_id,        # pseudonymous id only
+            "participant_id": req.pseudo_id,  # pseudonymous id only
             "exercise": ex,
-            "event": req.event, "mode": req.mode, "stance": req.stance,
+            "event": req.event,
+            "mode": req.mode,
+            "stance": req.stance,
             "source": req.source,
             "result": req.gradingspec_result,
             "recent": [t.model_dump() for t in req.recent],
             "signals": req.signals,
-            "request": payload.get("request"),   # e.g. "reflect" (student-initiated)
+            "request": payload.get("request"),  # e.g. "reflect" (student-initiated)
             # Optional per-learner customization overlay; floor-checked in run_turn.
             "overlay": req.overlay,
         }
@@ -151,7 +174,7 @@ def build_router(consent_router: ConsentRouter, pack, llm_factory: Callable[[], 
         store = consent_router.store_for(pid)
         artifact = _goals.set_goals(store, pid, payload.get("text", ""))
         resp = {"ok": True, "pseudo_id": pid, "goals": artifact}
-        if artifact and artifact.get("floor") == "distress":   # Slice G: surface the frame
+        if artifact and artifact.get("floor") == "distress":  # Slice G: surface the frame
             resp["distress_support"] = _distress.frame_from_settings(settings)
         return resp
 
@@ -170,7 +193,7 @@ def build_router(consent_router: ConsentRouter, pack, llm_factory: Callable[[], 
         store = consent_router.store_for(pid)
         refl = _goals.add_reflection(store, pid, payload.get("text", ""))
         resp = {"ok": True, "pseudo_id": pid, "reflection": refl}
-        if refl and refl.get("floor") == "distress":   # Slice G: surface the frame
+        if refl and refl.get("floor") == "distress":  # Slice G: surface the frame
             resp["distress_support"] = _distress.frame_from_settings(settings)
         return resp
 
@@ -200,8 +223,7 @@ def build_router(consent_router: ConsentRouter, pack, llm_factory: Callable[[], 
             assert_no_pii(payload)
         except PIIRejected as e:
             raise HTTPException(422, f"PII rejected at boundary: {e}")
-        return {"ok": True, "protocol": PROTOCOL_VERSION,
-                "received": payload.get("type", "event")}
+        return {"ok": True, "protocol": PROTOCOL_VERSION, "received": payload.get("type", "event")}
 
     return api
 

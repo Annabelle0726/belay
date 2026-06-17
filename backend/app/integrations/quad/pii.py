@@ -7,6 +7,7 @@ names, SIS identifiers, or plaintext email is REFUSED at the boundary with a cle
 error. This mirrors the EduCloud privacy posture: real names and SIS IDs never
 reach the server; the tutor sees a pseudonymous id + submission content only.
 """
+
 from __future__ import annotations
 
 import re
@@ -19,8 +20,17 @@ _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 # Field keys that may not appear anywhere in a Quad payload (normalized: lowercased,
 # non-alphanumerics stripped). Names, SIS ids, and contact identifiers.
 _NAME_KEYS = {
-    "name", "firstname", "lastname", "fullname", "realname", "displayname",
-    "givenname", "surname", "fname", "lname", "preferredname",
+    "name",
+    "firstname",
+    "lastname",
+    "fullname",
+    "realname",
+    "displayname",
+    "givenname",
+    "surname",
+    "fname",
+    "lname",
+    "preferredname",
 }
 
 # Keys whose pedagogical content legitimately may contain '@' or names and is NOT
@@ -50,8 +60,10 @@ def pii_reason(payload: dict) -> str | None:
     """
     pid = payload.get("pseudo_id")
     if pid is not None and not PSEUDO_ID_RE.match(str(pid)):
-        return (f"pseudo_id must be a pseudonymous host id like 'gh:12345' "
-                f"(provider:numeric-id); got {pid!r}")
+        return (
+            f"pseudo_id must be a pseudonymous host id like 'gh:12345' "
+            f"(provider:numeric-id); got {pid!r}"
+        )
 
     def walk(node, under_content: bool):
         if isinstance(node, dict):

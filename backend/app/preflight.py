@@ -7,6 +7,7 @@ reachability BEFORE serving.
 
 Operators run this before/at bring-up; the container CMD runs it informationally.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -18,6 +19,7 @@ from .config import settings
 def check_config() -> tuple[bool, str]:
     issues = []
     from .agent.llm import provider_class
+
     try:
         provider_class(settings.provider)
     except Exception as e:  # noqa: BLE001
@@ -27,13 +29,16 @@ def check_config() -> tuple[bool, str]:
     pack_id = None
     try:
         from .core.domain import get_active_pack
+
         pack_id = get_active_pack().id
     except Exception as e:  # noqa: BLE001
         issues.append(f"TUTOR_PACK unresolvable: {e}")
     if issues:
         return False, "; ".join(issues)
-    return True, (f"provider={settings.provider} pack={pack_id} "
-                  f"store={settings.store_backend} db={settings.database_url}")
+    return True, (
+        f"provider={settings.provider} pack={pack_id} "
+        f"store={settings.store_backend} db={settings.database_url}"
+    )
 
 
 def check_store() -> tuple[bool, str]:
@@ -41,6 +46,7 @@ def check_store() -> tuple[bool, str]:
         from sqlalchemy import text
 
         from .store.db import engine
+
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         kind = "postgres" if settings.store_is_postgres else "sqlite"
@@ -52,8 +58,9 @@ def check_store() -> tuple[bool, str]:
 def check_provider(timeout: float = 3.0) -> tuple[bool, str]:
     if settings.provider == "openai_compatible":
         url = settings.openai_base_url.rstrip("/") + "/models"
-        req = urllib.request.Request(url, headers={
-            "Authorization": f"Bearer {settings.openai_api_key}"})
+        req = urllib.request.Request(
+            url, headers={"Authorization": f"Bearer {settings.openai_api_key}"}
+        )
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 return True, f"openai_compatible endpoint reachable: {url} (HTTP {resp.status})"
@@ -79,8 +86,9 @@ def run(probe_provider: bool = True) -> list[tuple[str, tuple[bool, str]]]:
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="app.preflight", description="Preflight doctor")
-    p.add_argument("--skip-provider", action="store_true",
-                   help="skip the provider-endpoint reachability probe")
+    p.add_argument(
+        "--skip-provider", action="store_true", help="skip the provider-endpoint reachability probe"
+    )
     args = p.parse_args(argv)
 
     all_ok = True

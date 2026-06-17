@@ -1,4 +1,5 @@
 """Core domain seam — protocols, value types, and the active-pack registry."""
+
 from .pack import DomainPack, KnowledgeBase, MisconceptionLibrary
 from .registry import (
     active_pack_id,

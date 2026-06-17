@@ -3,6 +3,7 @@ Quad tutor-seam sidecar tests (/quad/v1): the four routes, the PII boundary, and
 the grades firewall. Uses an InMemoryStore-backed wiring + control stance so no
 network or DB is touched.
 """
+
 from __future__ import annotations
 
 from fastapi import FastAPI
@@ -15,12 +16,13 @@ from app.store import ConsentRouter, InMemoryStore
 
 
 def _client():
-    cr = ConsentRouter(InMemoryStore())   # ephemeral; no DB writes
+    cr = ConsentRouter(InMemoryStore())  # ephemeral; no DB writes
 
     def _no_llm():
         class _NoLLM:  # control stance never calls .json
             def json(self, **_k):
                 raise AssertionError("control stance must not call the LLM")
+
         return _NoLLM()
 
     app = FastAPI()
@@ -29,6 +31,7 @@ def _client():
 
 
 # ── the four routes ───────────────────────────────────────────────────────────
+
 
 def test_health():
     r = _client().get("/quad/v1/health")
@@ -49,10 +52,15 @@ def test_capabilities_declares_identity_and_grades_firewall():
 
 def test_turn_runs_control_stance():
     """A control-stance turn runs end to end with a pseudonymous id only."""
-    r = _client().post("/quad/v1/turn", json={
-        "pseudo_id": "gh:12345", "exercise_id": "ds-foundations",
-        "stance": "control", "source": "import pandas as pd",
-    })
+    r = _client().post(
+        "/quad/v1/turn",
+        json={
+            "pseudo_id": "gh:12345",
+            "exercise_id": "ds-foundations",
+            "stance": "control",
+            "source": "import pandas as pd",
+        },
+    )
     assert r.status_code == 200, r.text
     out = r.json()
     assert out["components"]["stance"] == "control"
@@ -67,36 +75,57 @@ def test_events_acks_clean_payload():
 
 # ── PII boundary (privacy is the hard constraint) ─────────────────────────────
 
+
 def test_pii_rejected_email():
-    r = _client().post("/quad/v1/turn", json={
-        "pseudo_id": "gh:12345", "exercise_id": "ds-foundations", "stance": "control",
-        "contact": "jane.doe@university.edu",
-    })
+    r = _client().post(
+        "/quad/v1/turn",
+        json={
+            "pseudo_id": "gh:12345",
+            "exercise_id": "ds-foundations",
+            "stance": "control",
+            "contact": "jane.doe@university.edu",
+        },
+    )
     assert r.status_code == 422
     assert "PII rejected" in r.json()["detail"]
 
 
 def test_pii_rejected_name_field():
-    r = _client().post("/quad/v1/turn", json={
-        "pseudo_id": "gh:12345", "exercise_id": "ds-foundations", "stance": "control",
-        "student_name": "Jane Doe",
-    })
+    r = _client().post(
+        "/quad/v1/turn",
+        json={
+            "pseudo_id": "gh:12345",
+            "exercise_id": "ds-foundations",
+            "stance": "control",
+            "student_name": "Jane Doe",
+        },
+    )
     assert r.status_code == 422
     assert "PII rejected" in r.json()["detail"]
 
 
 def test_pii_rejected_sis_id():
-    r = _client().post("/quad/v1/turn", json={
-        "pseudo_id": "gh:12345", "exercise_id": "ds-foundations", "stance": "control",
-        "sis_id": "A00123456",
-    })
+    r = _client().post(
+        "/quad/v1/turn",
+        json={
+            "pseudo_id": "gh:12345",
+            "exercise_id": "ds-foundations",
+            "stance": "control",
+            "sis_id": "A00123456",
+        },
+    )
     assert r.status_code == 422
 
 
 def test_non_pseudonymous_id_rejected():
-    r = _client().post("/quad/v1/turn", json={
-        "pseudo_id": "jane.doe", "exercise_id": "ds-foundations", "stance": "control",
-    })
+    r = _client().post(
+        "/quad/v1/turn",
+        json={
+            "pseudo_id": "jane.doe",
+            "exercise_id": "ds-foundations",
+            "stance": "control",
+        },
+    )
     assert r.status_code == 422
 
 
@@ -115,15 +144,25 @@ def test_pii_helper_unit():
 
 # ── grades firewall: gradingspec_result is read-only; no write path ───────────
 
+
 def test_gradingspec_result_is_read_only_context():
     """A gradingspec_result is accepted as turn context and produces a normal
     tutor turn — with NO grade-write field in the response and no write route."""
     client = _client()
-    out = client.post("/quad/v1/turn", json={
-        "pseudo_id": "gh:12345", "exercise_id": "ds-foundations", "stance": "control",
-        "gradingspec_result": {"ok": True, "goalMet": False, "metric": 0.4,
-                               "pack": {"id": "datascience", "summary": "r2=0.40"}},
-    }).json()
+    out = client.post(
+        "/quad/v1/turn",
+        json={
+            "pseudo_id": "gh:12345",
+            "exercise_id": "ds-foundations",
+            "stance": "control",
+            "gradingspec_result": {
+                "ok": True,
+                "goalMet": False,
+                "metric": 0.4,
+                "pack": {"id": "datascience", "summary": "r2=0.40"},
+            },
+        },
+    ).json()
     # The turn response is the tutor turn only — it never writes/echoes a grade.
     for forbidden in ("grade", "grade_write", "gradingspec_write", "grading_write", "score_write"):
         assert forbidden not in out
@@ -133,8 +172,7 @@ def test_no_grade_write_route_exists():
     """The sidecar exposes exactly health/capabilities/turn/goals/reflection/overlay/
     events — none of which write a grade (the tutor never writes grades)."""
     api = build_router(ConsentRouter(InMemoryStore()), get_active_pack(), lambda: None)
-    paths = {(r.path, tuple(sorted(set(r.methods) - {"HEAD", "OPTIONS"})))
-             for r in api.routes}
+    paths = {(r.path, tuple(sorted(set(r.methods) - {"HEAD", "OPTIONS"}))) for r in api.routes}
     assert paths == {
         ("/quad/v1/health", ("GET",)),
         ("/quad/v1/capabilities", ("GET",)),
@@ -151,9 +189,9 @@ def test_sidecar_source_has_no_grade_write_calls():
     import os
 
     import app.integrations.quad as quad_pkg
+
     quad_dir = os.path.dirname(quad_pkg.__file__)
-    forbidden = ("write_grade", "post_grade", "put_grade", "set_grade",
-                 "gradebook", "submit_grade")
+    forbidden = ("write_grade", "post_grade", "put_grade", "set_grade", "gradebook", "submit_grade")
     for fn in os.listdir(quad_dir):
         if fn.endswith(".py"):
             with open(os.path.join(quad_dir, fn), encoding="utf-8") as fh:

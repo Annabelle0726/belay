@@ -1,6 +1,7 @@
 """End-to-end loop test with a stub LLM (DS fixtures) — proves Planner ->
 Reasoner -> Self-Eval -> (refine) -> Governance -> Memory wires together, with no
 network and no database. Also covers the control bypass and stance telemetry."""
+
 import json
 
 from app.agent import run_turn
@@ -22,21 +23,36 @@ class StubLLM:
 
     def json(self, *, role, tier, system, user, max_tokens=800, reasoning_effort=None):
         if role == "planner":
-            return {"affective_state": "productive_struggle",
-                    "affect_reasoning": "tried twice, getting closer",
-                    "intervention": "co_reason", "target_concept": "group-by",
-                    "planner_note": "nudge toward aggregating each group"}
+            return {
+                "affective_state": "productive_struggle",
+                "affect_reasoning": "tried twice, getting closer",
+                "intervention": "co_reason",
+                "target_concept": "group-by",
+                "planner_note": "nudge toward aggregating each group",
+            }
         if role == "reasoner":
-            msg = (_LEAK_MSG if self.leak else
-                   "You've read the CSV — what one number should each category collapse to?")
-            return {"message": msg, "check_question": "what summarizes a group?",
-                    "confidence": 0.8, "grasped": ["reading-csv"], "shaky": ["aggregation"]}
+            msg = (
+                _LEAK_MSG
+                if self.leak
+                else "You've read the CSV — what one number should each category collapse to?"
+            )
+            return {
+                "message": msg,
+                "check_question": "what summarizes a group?",
+                "confidence": 0.8,
+                "grasped": ["reading-csv"],
+                "shaky": ["aggregation"],
+            }
         if role == "self_eval":
             self._evals += 1
             needs = self.revise_once and self._evals == 1
-            return {"needs_revision": needs, "confidence": 0.62,
-                    "leak_risk": "none", "self_critique": "checked against their last run",
-                    "reasons": (["over-helping"] if needs else [])}
+            return {
+                "needs_revision": needs,
+                "confidence": 0.62,
+                "leak_risk": "none",
+                "self_critique": "checked against their last run",
+                "reasons": (["over-helping"] if needs else []),
+            }
         raise AssertionError(role)
 
 
@@ -44,21 +60,41 @@ def _payload(pid="p_test", stance="peer"):
     return {
         "participant_id": pid,
         "exercise": _EX,
-        "event": "run", "mode": "study",
+        "event": "run",
+        "mode": "study",
         "stance": stance,
         "source": "import pandas as pd\ndf = pd.read_csv('data/sales.csv')",
-        "result": {"ok": True, "goalMet": False, "metric": None,
-                   "pack": {"id": "datascience", "summary": "0/1 checks passed"}},
-        "recent": [], "signals": {"attempts": 2, "distanceTrend": [0.5, 0.5],
-                                  "repeatedError": False, "sinceLastProgress": 2},
+        "result": {
+            "ok": True,
+            "goalMet": False,
+            "metric": None,
+            "pack": {"id": "datascience", "summary": "0/1 checks passed"},
+        },
+        "recent": [],
+        "signals": {
+            "attempts": 2,
+            "distanceTrend": [0.5, 0.5],
+            "repeatedError": False,
+            "sinceLastProgress": 2,
+        },
     }
 
 
 def test_contract_shape_and_persistence():
     store = InMemoryStore()
     out = run_turn(_payload(), StubLLM(), store)
-    for k in ("affective_state", "confidence", "intervention", "planner_note",
-              "self_critique", "governance", "memory", "message", "check_question", "components"):
+    for k in (
+        "affective_state",
+        "confidence",
+        "intervention",
+        "planner_note",
+        "self_critique",
+        "governance",
+        "memory",
+        "message",
+        "check_question",
+        "components",
+    ):
         assert k in out, f"missing {k}"
     assert out["memory"]["grasped"] == ["reading-csv"]
     assert out["memory"]["shaky"] == ["aggregation"]

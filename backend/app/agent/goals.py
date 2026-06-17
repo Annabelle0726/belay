@@ -10,6 +10,7 @@ Parsing is intentionally minimal: store the text + a timestamp; do not
 over-structure. (Slice B adds a deterministic wellbeing-floor `honored` flag; the
 governance leak gate is always supreme and is unaffected by goals.)
 """
+
 from __future__ import annotations
 
 import re
@@ -101,9 +102,16 @@ def _emit_distress(store, participant_id: str) -> None:
     """Content-free distress trace event at intake (gated). No text, no PII, no
     severity, no category — exactly the signal {triggered, configured, routed}."""
     if settings.distress_trace_enabled:
-        _emit(store, participant_id, "distress",
-              {"triggered": True, "configured": settings.distress_configured,
-               "routed": settings.distress_configured})
+        _emit(
+            store,
+            participant_id,
+            "distress",
+            {
+                "triggered": True,
+                "configured": settings.distress_configured,
+                "routed": settings.distress_configured,
+            },
+        )
 
 
 def get_goals(state: dict) -> dict | None:
@@ -122,19 +130,23 @@ def set_goals(store, participant_id: str, text: str) -> dict | None:
     if not text:
         state["goals"] = None
         store.save_learner_state(participant_id, state)
-        _emit(store, participant_id, "goal_set",
-              {"text": None, "honored": None, "action": "clear"})
+        _emit(store, participant_id, "goal_set", {"text": None, "honored": None, "action": "clear"})
         return None
     # Distress-routing intake (Slice G; opt-in). An explicit distress signal in the
     # goal text is NOT honored and NOT stored verbatim; the route surfaces the support
     # frame. Only a non-PII, content-free marker + event are recorded.
     if settings.distress_routing_enabled and _distress.has_distress_signal(
-            text, _distress.extra_terms(settings)):
+        text, _distress.extra_terms(settings)
+    ):
         artifact = {"text": None, "honored": False, "floor": "distress", "ts": _now_iso()}
         state["goals"] = artifact
         store.save_learner_state(participant_id, state)
-        _emit(store, participant_id, "goal_set",
-              {"text": None, "honored": False, "floor": "distress", "action": "distress"})
+        _emit(
+            store,
+            participant_id,
+            "goal_set",
+            {"text": None, "honored": False, "floor": "distress", "action": "distress"},
+        )
         _emit_distress(store, participant_id)
         return artifact
     # Wellbeing floor: a self-destructive/berating goal is recorded but NOT honored.
@@ -144,8 +156,7 @@ def set_goals(store, participant_id: str, text: str) -> dict | None:
         artifact["floor"] = "wellbeing"
     state["goals"] = artifact
     store.save_learner_state(participant_id, state)
-    _emit(store, participant_id, "goal_set",
-          {"text": text, "honored": honored, "action": "set"})
+    _emit(store, participant_id, "goal_set", {"text": text, "honored": honored, "action": "set"})
     return artifact
 
 
@@ -153,8 +164,9 @@ def clear_goals(store, participant_id: str) -> None:
     set_goals(store, participant_id, "")
 
 
-def add_reflection(store, participant_id: str, text: str,
-                   concept: str | None = None) -> dict | None:
+def add_reflection(
+    store, participant_id: str, text: str, concept: str | None = None
+) -> dict | None:
     """Store a student reflection (their own words), timestamped and LINKED to the
     goal currently in force. Reflections feed the tutor's read of the student (the
     learner model) and are never surfaced to an instructor."""
@@ -165,13 +177,23 @@ def add_reflection(store, participant_id: str, text: str,
     # Distress-routing intake (Slice G; opt-in): a distress signal in a reflection is
     # NOT stored verbatim; record a non-verbatim, floor-marked entry + content-free event.
     if settings.distress_routing_enabled and _distress.has_distress_signal(
-            text, _distress.extra_terms(settings)):
-        reflection = {"text": None, "ts": _now_iso(), "goal_text": None,
-                      "concept": None, "floor": "distress"}
+        text, _distress.extra_terms(settings)
+    ):
+        reflection = {
+            "text": None,
+            "ts": _now_iso(),
+            "goal_text": None,
+            "concept": None,
+            "floor": "distress",
+        }
         state["reflections"] = list(state.get("reflections") or []) + [reflection]
         store.save_learner_state(participant_id, state)
-        _emit(store, participant_id, "reflection_recorded",
-              {"text": None, "goal_text": None, "concept": None, "floor": "distress"})
+        _emit(
+            store,
+            participant_id,
+            "reflection_recorded",
+            {"text": None, "goal_text": None, "concept": None, "floor": "distress"},
+        )
         _emit_distress(store, participant_id)
         return reflection
     goal = state.get("goals") or {}
@@ -181,8 +203,12 @@ def add_reflection(store, participant_id: str, text: str,
     reflections.append(reflection)
     state["reflections"] = reflections
     store.save_learner_state(participant_id, state)
-    _emit(store, participant_id, "reflection_recorded",
-          {"text": text, "goal_text": goal_text, "concept": concept})
+    _emit(
+        store,
+        participant_id,
+        "reflection_recorded",
+        {"text": text, "goal_text": goal_text, "concept": concept},
+    )
     return reflection
 
 

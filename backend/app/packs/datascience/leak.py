@@ -12,6 +12,7 @@ disclosing its own solution (not adversarial extraction), so a cautious
 deterministic heuristic is the right bar: a false positive is a wasted rewrite
 (fine); a false negative is a leak (not fine).
 """
+
 from __future__ import annotations
 
 import re
@@ -25,7 +26,8 @@ _INLINE = re.compile(r"`([^`\n]+)`")
 
 # Imperative solution-giving prose. Any match → disclosure (strong signal).
 _IMPERATIVE = [
-    re.compile(p, re.IGNORECASE) for p in (
+    re.compile(p, re.IGNORECASE)
+    for p in (
         r"\bthe (answer|solution|result|output) is\b",
         r"\bthe correct (code|answer|approach|solution) is\b",
         r"\byou just need to\b",
@@ -56,8 +58,10 @@ def redact(draft: str) -> str:
 
 
 def _word_present(token: str, text: str) -> bool:
-    return re.search(rf"(?<![A-Za-z0-9_]){re.escape(token)}(?![A-Za-z0-9_])",
-                     text, re.IGNORECASE) is not None
+    return (
+        re.search(rf"(?<![A-Za-z0-9_]){re.escape(token)}(?![A-Za-z0-9_])", text, re.IGNORECASE)
+        is not None
+    )
 
 
 def prose_discloses(draft: str, exercise_id: str) -> bool:

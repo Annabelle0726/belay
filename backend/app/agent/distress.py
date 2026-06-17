@@ -15,6 +15,7 @@ Hard boundaries (non-negotiable):
   - No verbatim distressing content and no PII is stored, logged, or traced.
   - Off by default (`settings.distress_routing_enabled`); when off, none of this runs.
 """
+
 from __future__ import annotations
 
 import logging
@@ -56,7 +57,7 @@ def has_distress_signal(text: str, extra_terms: Iterable[str] | None = None) -> 
         return False
     if _DISTRESS.search(text):
         return True
-    for t in (extra_terms or ()):
+    for t in extra_terms or ():
         t = (t or "").strip()
         if t and re.search(re.escape(t), text, re.IGNORECASE):
             return True
@@ -67,8 +68,10 @@ def has_distress_signal(text: str, extra_terms: Iterable[str] | None = None) -> 
 # Warm, brief, non-amplifying. States the tutor is a study tool not a counselor, points
 # the learner OUTWARD to a human, does not counsel/diagnose/assess/name methods, and
 # does not isolate ("you don't have to deal with this alone" points outward).
-_FRAME_HEAD = ("I want to pause our work for a moment. I'm a study tool, not a "
-               "counselor, and what you're describing deserves real support from a person.")
+_FRAME_HEAD = (
+    "I want to pause our work for a moment. I'm a study tool, not a "
+    "counselor, and what you're describing deserves real support from a person."
+)
 
 
 def distress_frame(configured: bool, support_message: str, escalation_target: str) -> str:
@@ -77,10 +80,14 @@ def distress_frame(configured: bool, support_message: str, escalation_target: st
     escalation route; otherwise render a SAFE GENERIC frame that renders NO placeholder.
     The FILL-IN default is never shown to a learner."""
     if configured:
-        return (f"{_FRAME_HEAD} {support_message}\n\n"
-                f"I'm also flagging this so a person can reach out to you: {escalation_target}")
-    return (f"{_FRAME_HEAD} Please reach out to someone you trust, or your institution's "
-            "support channels, as soon as you can — you don't have to deal with this alone.")
+        return (
+            f"{_FRAME_HEAD} {support_message}\n\n"
+            f"I'm also flagging this so a person can reach out to you: {escalation_target}"
+        )
+    return (
+        f"{_FRAME_HEAD} Please reach out to someone you trust, or your institution's "
+        "support channels, as soon as you can — you don't have to deal with this alone."
+    )
 
 
 def frame_from_settings(settings) -> str:
@@ -91,9 +98,11 @@ def frame_from_settings(settings) -> str:
         log.warning(
             "DISTRESS_ROUTING_ENABLED is on but DISTRESS_SUPPORT_MESSAGE / "
             "DISTRESS_ESCALATION_TARGET are still the [FILL-IN] defaults; rendering the "
-            "safe generic frame. Set both to your institution's IRB-approved values.")
-    return distress_frame(configured, settings.distress_support_message,
-                          settings.distress_escalation_target)
+            "safe generic frame. Set both to your institution's IRB-approved values."
+        )
+    return distress_frame(
+        configured, settings.distress_support_message, settings.distress_escalation_target
+    )
 
 
 def extra_terms(settings) -> tuple:

@@ -6,6 +6,7 @@ Selects the active `DomainPack` from configuration (``TUTOR_PACK``, default
 ``core.domain`` never imports a domain at module load — keeping the dependency
 arrow pointing from packs to core, not the reverse.
 """
+
 from __future__ import annotations
 
 import os
@@ -19,11 +20,13 @@ DEFAULT_PACK = "datascience"
 def _load_datascience() -> DomainPack:
     # Lazy import: avoids a core -> packs import at module load.
     from ...packs.datascience import DataSciencePack
+
     return DataSciencePack()
 
 
 def _load_skeleton() -> DomainPack:
     from ...packs._skeleton import SkeletonPack
+
     return SkeletonPack()
 
 
@@ -54,9 +57,7 @@ def get_active_pack() -> DomainPack:
         try:
             factory = _FACTORIES[pid]
         except KeyError:
-            raise ValueError(
-                f"unknown TUTOR_PACK={pid!r}; known packs: {sorted(_FACTORIES)}"
-            )
+            raise ValueError(f"unknown TUTOR_PACK={pid!r}; known packs: {sorted(_FACTORIES)}")
         _active = factory()
         _active_id = pid
     return _active

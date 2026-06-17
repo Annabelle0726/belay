@@ -13,6 +13,7 @@ the same one the draft path uses. The KB just returns the best lexical matches.
 Ranking: TF-IDF (log IDF, raw TF) cosine similarity; ties broken by ascending passage
 id so results are stable. Index is built once at construction from the corpus.
 """
+
 from __future__ import annotations
 
 import json
@@ -57,9 +58,7 @@ class DataScienceKB:
         for toks in self._tokens:
             for t in set(toks):
                 df[t] = df.get(t, 0) + 1
-        self._idf: dict[str, float] = {
-            t: math.log((1 + n) / (1 + d)) + 1.0 for t, d in df.items()
-        }
+        self._idf: dict[str, float] = {t: math.log((1 + n) / (1 + d)) + 1.0 for t, d in df.items()}
         # Precompute each doc's TF-IDF vector + norm for cosine.
         self._vecs: list[dict[str, float]] = []
         self._norms: list[float] = []

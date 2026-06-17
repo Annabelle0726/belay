@@ -7,6 +7,7 @@ the prose-leak heuristic: ``solution_ops`` (essential operation tokens) and
 ``answer_values`` (literal answers) are the disclosure signals the prose check
 looks for (EXTRACTION_PLAN §(f)).
 """
+
 from __future__ import annotations
 
 from typing import TypedDict
@@ -15,26 +16,26 @@ from typing import TypedDict
 class _Solution(TypedDict):
     source: str
     starter: str
-    solution_ops: list[str]    # essential operation tokens (whole-word match)
-    answer_values: list[str]   # literal answer tokens (strong disclosure signal)
+    solution_ops: list[str]  # essential operation tokens (whole-word match)
+    answer_values: list[str]  # literal answer tokens (strong disclosure signal)
 
 
-_FOUNDATIONS_REF = '''\
+_FOUNDATIONS_REF = """\
 import pandas as pd
 df = pd.read_csv("data/sales.csv")
 result = df.groupby("category")["amount"].mean().to_dict()
 print(result)
-'''
+"""
 
-_FOUNDATIONS_STARTER = '''\
+_FOUNDATIONS_STARTER = """\
 import pandas as pd
 df = pd.read_csv("data/sales.csv")
 # Goal: build `result` = {category: mean amount} for each category.
 result = {}
 print(result)
-'''
+"""
 
-_REGRESSION_REF = '''\
+_REGRESSION_REF = """\
 import numpy as np
 X_train = np.loadtxt("data/X_train.csv", delimiter=",")
 y_train = np.loadtxt("data/y_train.csv", delimiter=",")
@@ -42,9 +43,9 @@ X_test = np.loadtxt("data/X_test.csv", delimiter=",")
 A = np.c_[X_train, np.ones_like(X_train)]
 coef, *_ = np.linalg.lstsq(A, y_train, rcond=None)
 y_pred = np.c_[X_test, np.ones_like(X_test)] @ coef
-'''
+"""
 
-_REGRESSION_STARTER = '''\
+_REGRESSION_STARTER = """\
 import numpy as np
 X_train = np.loadtxt("data/X_train.csv", delimiter=",")
 y_train = np.loadtxt("data/y_train.csv", delimiter=",")
@@ -52,9 +53,9 @@ X_test = np.loadtxt("data/X_test.csv", delimiter=",")
 # Goal: fit a linear model on the TRAIN split, then set `y_pred` for X_test.
 # It is graded by held-out R^2 on the test split (>= 0.8). Do not peek at y_test.
 y_pred = None
-'''
+"""
 
-_MLP_REF = '''\
+_MLP_REF = """\
 import numpy as np
 X = np.loadtxt("data/X.csv", delimiter=",")
 y = np.loadtxt("data/y.csv", delimiter=",").reshape(-1, 1)
@@ -74,16 +75,16 @@ for _ in range(4000):
     W1 -= lr * dW1; b1 -= lr * db1; W2 -= lr * dW2; b2 -= lr * db2
 final_loss = float(loss)
 print("final_loss", final_loss)
-'''
+"""
 
-_MLP_STARTER = '''\
+_MLP_STARTER = """\
 import numpy as np
 X = np.loadtxt("data/X.csv", delimiter=",")
 y = np.loadtxt("data/y.csv", delimiter=",").reshape(-1, 1)
 # Goal: train a tiny MLP (one hidden layer) with numpy until MSE `final_loss` <= 0.05.
 # Seed your RNG for determinism. Set `final_loss` to the final training loss.
 final_loss = 1.0
-'''
+"""
 
 
 SOLUTIONS: dict[str, _Solution] = {

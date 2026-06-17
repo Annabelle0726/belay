@@ -7,6 +7,7 @@ This is the single execution path for `run`; `verify_worked_example` and the
 `leak_evidence` executable oracle reuse `grade` so no student code ever runs
 outside the runner.
 """
+
 from __future__ import annotations
 
 import json
@@ -52,7 +53,7 @@ def _parse_grade(stdout: str) -> dict | None:
     for line in stdout.splitlines():
         if line.startswith(_GRADE_PREFIX):
             try:
-                return json.loads(line[len(_GRADE_PREFIX):])
+                return json.loads(line[len(_GRADE_PREFIX) :])
             except json.JSONDecodeError:
                 return None
     return None
@@ -84,13 +85,23 @@ def grade(source: str, exercise: Exercise) -> RunResult:
 
     if grade_obj is None:
         # Harness produced no verdict: crash, timeout, or resource kill.
-        err = (res.error
-               or (res.stderr.strip()[-300:] if res.stderr.strip() else None)
-               or "grader produced no verdict")
+        err = (
+            res.error
+            or (res.stderr.strip()[-300:] if res.stderr.strip() else None)
+            or "grader produced no verdict"
+        )
         return {
-            "ok": False, "goalMet": False, "metric": None, "error": err,
-            "pack": {"id": "datascience", "checks": [], "stdout": res.stdout[-500:],
-                     "summary": err, "timed_out": res.timed_out},
+            "ok": False,
+            "goalMet": False,
+            "metric": None,
+            "error": err,
+            "pack": {
+                "id": "datascience",
+                "checks": [],
+                "stdout": res.stdout[-500:],
+                "summary": err,
+                "timed_out": res.timed_out,
+            },
         }
 
     return {

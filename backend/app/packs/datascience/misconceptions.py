@@ -8,6 +8,7 @@ PEER_MOVE that surfaces it without handing over the fix. ``for_exercise`` merges
 an exercise's own misconceptions with the cross-cutting set (leakage, p-values,
 over/underfitting, …) that apply everywhere.
 """
+
 from __future__ import annotations
 
 from typing import TypedDict
@@ -218,7 +219,7 @@ def for_exercise(exercise_id: str) -> dict:
         "concept": base["concept"],
         "expectations": list(base["expectations"]) + list(CROSS_CUTTING["expectations"]),
         "misconceptions": [dict(m) for m in base["misconceptions"]]
-                          + [dict(m) for m in CROSS_CUTTING["misconceptions"]],
+        + [dict(m) for m in CROSS_CUTTING["misconceptions"]],
     }
 
 
@@ -226,10 +227,17 @@ def all_inventory_seeds() -> list[dict]:
     items: list[dict] = []
     for ex_id, entry in {**_BY_EXERCISE, "_cross_cutting": CROSS_CUTTING}.items():
         for e in entry["expectations"]:
-            items.append({"exercise": ex_id, "concept": entry["concept"],
-                          "kind": "correct", "text": e})
+            items.append(
+                {"exercise": ex_id, "concept": entry["concept"], "kind": "correct", "text": e}
+            )
         for m in entry["misconceptions"]:
-            items.append({"exercise": ex_id, "concept": entry["concept"],
-                          "kind": "distractor", "misconception_id": m["id"],
-                          "text": m["inventory_seed"]})
+            items.append(
+                {
+                    "exercise": ex_id,
+                    "concept": entry["concept"],
+                    "kind": "distractor",
+                    "misconception_id": m["id"],
+                    "text": m["inventory_seed"],
+                }
+            )
     return items

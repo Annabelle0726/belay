@@ -8,6 +8,7 @@ This file has two halves:
      core governance and never enters context; a benign passage is retained; the
      None-path is a no-op; no leaking passage text is written to the trace.
 """
+
 from __future__ import annotations
 
 from app.core.domain import Passage, get_active_pack
@@ -19,6 +20,7 @@ _EXERCISES = ("ds-foundations", "ds-regression", "ds-mlp")
 
 # ── KB retrieval: relevance, determinism, hermetic ────────────────────────────
 
+
 def test_search_ranks_relevant_module_first():
     kb = DataScienceKB()
     found = [p.id for p in kb.search("compute the average amount for each category group", 3)]
@@ -27,7 +29,9 @@ def test_search_ranks_relevant_module_first():
     reg = [p.id for p in kb.search("fit a linear model and evaluate on a held-out split", 3)]
     assert reg and reg[0].startswith("reg-"), reg
 
-    mlp = [p.id for p in kb.search("train a small neural net with a hidden layer to reduce loss", 3)]
+    mlp = [
+        p.id for p in kb.search("train a small neural net with a hidden layer to reduce loss", 3)
+    ]
     assert mlp and mlp[0].startswith("mlp-"), mlp
 
 
@@ -43,7 +47,7 @@ def test_search_returns_passage_objects_with_id():
     hits = kb.search("least squares regression", 2)
     assert all(isinstance(p, Passage) for p in hits)
     p = hits[0]
-    assert p.id and p.text and p.citation and p.locator   # full Passage shape
+    assert p.id and p.text and p.citation and p.locator  # full Passage shape
 
 
 def test_empty_or_unmatched_query_returns_nothing():
@@ -61,6 +65,7 @@ def test_k_bounds_results():
 
 # ── the shipped corpus is leak-clean (no passage discloses any solution) ──────
 
+
 def test_shipped_corpus_discloses_no_solution():
     """Every shipped passage must pass the prose-leak heuristic against EVERY
     exercise — otherwise a benign reference would be wrongly screened out (and, worse,
@@ -72,14 +77,16 @@ def test_shipped_corpus_discloses_no_solution():
 
 # ── wiring: knowledge() is real for datascience, None for _skeleton ───────────
 
+
 def test_datascience_knowledge_is_a_real_kb():
-    kb = get_active_pack().knowledge()       # active pack is datascience
+    kb = get_active_pack().knowledge()  # active pack is datascience
     assert isinstance(kb, DataScienceKB)
     assert len(kb.search("regression", 1)) == 1
 
 
 def test_skeleton_knowledge_is_none():
     from app.packs._skeleton import SkeletonPack
+
     assert SkeletonPack().knowledge() is None
 
 
@@ -96,53 +103,88 @@ from app.store import InMemoryStore
 # leaking reasoner in test_student_rule_cannot_leak.
 _POISON = {
     "id": "poison-foundations",
-    "module": "wrangling-eda", "concept": "group-by and aggregation",
-    "title": "leak", "source": "fixture",
-    "text": ("For this exercise the answer is the per-category mean: just call groupby "
-             "on category and then mean on amount, and you are done."),
+    "module": "wrangling-eda",
+    "concept": "group-by and aggregation",
+    "title": "leak",
+    "source": "fixture",
+    "text": (
+        "For this exercise the answer is the per-category mean: just call groupby "
+        "on category and then mean on amount, and you are done."
+    ),
 }
 _BENIGN = {
     "id": "benign-foundations",
-    "module": "wrangling-eda", "concept": "group-by and aggregation",
+    "module": "wrangling-eda",
+    "concept": "group-by and aggregation",
     "title": "Split-apply-combine",
     "source": "peer-tutor-framework course concept notes (CC-BY 4.0)",
-    "text": ("Split the rows into groups defined by a key column, summarize each group, "
-             "and combine the summaries back into one table. Thinking in this shape "
-             "keeps the intent clear and the code vectorized."),
+    "text": (
+        "Split the rows into groups defined by a key column, summarize each group, "
+        "and combine the summaries back into one table. Thinking in this shape "
+        "keeps the intent clear and the code vectorized."
+    ),
 }
 _EX = get_active_pack().get_exercise("ds-foundations")
 
 
 def _payload(pid, recent):
-    return {"participant_id": pid, "exercise": _EX, "event": "chat", "mode": "study",
-            "stance": "peer", "source": "import pandas as pd",
-            "result": {"ok": True, "goalMet": False, "metric": None,
-                       "pack": {"id": "datascience", "summary": "0/1 checks passed"}},
-            "recent": recent, "signals": None}
+    return {
+        "participant_id": pid,
+        "exercise": _EX,
+        "event": "chat",
+        "mode": "study",
+        "stance": "peer",
+        "source": "import pandas as pd",
+        "result": {
+            "ok": True,
+            "goalMet": False,
+            "metric": None,
+            "pack": {"id": "datascience", "summary": "0/1 checks passed"},
+        },
+        "recent": recent,
+        "signals": None,
+    }
 
 
 class _RecordingStub:
     """Benign tutor; captures the reasoner's serialized context (the user prompt)."""
+
     def __init__(self):
         self.reasoner_user = ""
 
     def json(self, *, role, tier, system, user, max_tokens=800, reasoning_effort=None):
         if role == "reasoner":
             self.reasoner_user = user
-            return {"message": "What single number should each category collapse to?",
-                    "check_question": None, "confidence": 0.8, "grasped": [], "shaky": []}
+            return {
+                "message": "What single number should each category collapse to?",
+                "check_question": None,
+                "confidence": 0.8,
+                "grasped": [],
+                "shaky": [],
+            }
         if role == "planner":
-            return {"affective_state": "curious", "affect_reasoning": "x",
-                    "intervention": "co_reason", "target_concept": "g",
-                    "planner_note": "n", "confidence": 0.8}
-        return {"needs_revision": False, "confidence": 0.8, "leak_risk": "none",
-                "self_critique": "ok", "reasons": []}
+            return {
+                "affective_state": "curious",
+                "affect_reasoning": "x",
+                "intervention": "co_reason",
+                "target_concept": "g",
+                "planner_note": "n",
+                "confidence": 0.8,
+            }
+        return {
+            "needs_revision": False,
+            "confidence": 0.8,
+            "leak_risk": "none",
+            "self_critique": "ok",
+            "reasons": [],
+        }
 
 
 def test_screen_drops_solution_bearing_passage_keeps_benign():
     """Unit: core governance drops a solution-bearing passage and keeps a benign one,
     recording the drop by id + reason only (no text)."""
     from app.core.domain import Passage
+
     poison = Passage(id=_POISON["id"], text=_POISON["text"], citation="fixture", locator="x")
     benign = Passage(id=_BENIGN["id"], text=_BENIGN["text"], citation="notes", locator="y")
     out = governance.screen_passages([poison, benign], _EX)
@@ -178,8 +220,10 @@ def test_leak_over_retrieval_blocks_end_to_end(monkeypatch):
     assert leak_snippet not in stub.reasoner_user
     assert leak_snippet not in store.export_jsonl("p_leak_ret")
     # the benign passage DID reach the prompt context
-    assert "split-apply-combine".replace("-", " ") in stub.reasoner_user.lower() \
+    assert (
+        "split-apply-combine".replace("-", " ") in stub.reasoner_user.lower()
         or "combine the summaries" in stub.reasoner_user
+    )
 
 
 def test_benign_only_retrieval_emits_event_with_no_drops(monkeypatch):

@@ -22,6 +22,7 @@ THREAT MODEL (stated honestly):
   sized to the actual threat: a tutor or student program that is wrong, slow, or
   resource-hungry — not one mounting a sandbox escape.
 """
+
 from __future__ import annotations
 
 import os
@@ -37,19 +38,20 @@ _CHILD = os.path.join(os.path.dirname(__file__), "_child.py")
 # Defaults sized for a tutoring grader (numpy/pandas import + a tiny model).
 DEFAULT_CPU_SECONDS = 10
 DEFAULT_WALL_SECONDS = 20.0
-DEFAULT_MEMORY_MB: int | None = None   # opt-in; see threat model (macOS caveat)
+DEFAULT_MEMORY_MB: int | None = None  # opt-in; see threat model (macOS caveat)
 
 
 @dataclass
 class RunnerResult:
     """Structured outcome of a sandboxed execution."""
-    ok: bool                       # process completed with exit code 0, no timeout
+
+    ok: bool  # process completed with exit code 0, no timeout
     exit_code: int | None
     stdout: str
     stderr: str
     timed_out: bool
     wall_ms: float
-    error: str | None           # runner-level error (timeout / spawn failure)
+    error: str | None  # runner-level error (timeout / spawn failure)
     artifacts: dict[str, str] = field(default_factory=dict)
 
 
@@ -104,8 +106,12 @@ def run_python(
         try:
             proc = subprocess.run(
                 [sys.executable, "-I", _CHILD, prog_path],
-                cwd=workdir, env=env, capture_output=True, text=True,
-                timeout=wall_seconds, start_new_session=True,
+                cwd=workdir,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=wall_seconds,
+                start_new_session=True,
             )
             exit_code: int | None = proc.returncode
             stdout, stderr = proc.stdout, proc.stderr
@@ -122,7 +128,7 @@ def run_python(
         wall_ms = round((time.perf_counter() - t0) * 1000, 1)
 
         collected: dict[str, str] = {}
-        for name in (artifacts or []):
+        for name in artifacts or []:
             path = os.path.join(workdir, name)
             if os.path.exists(path):
                 try:
@@ -133,12 +139,23 @@ def run_python(
 
         ok = (not timed_out) and exit_code == 0
         return RunnerResult(
-            ok=ok, exit_code=exit_code, stdout=stdout or "", stderr=stderr or "",
-            timed_out=timed_out, wall_ms=wall_ms, error=error, artifacts=collected,
+            ok=ok,
+            exit_code=exit_code,
+            stdout=stdout or "",
+            stderr=stderr or "",
+            timed_out=timed_out,
+            wall_ms=wall_ms,
+            error=error,
+            artifacts=collected,
         )
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
 
 
-__all__ = ["run_python", "RunnerResult", "DEFAULT_CPU_SECONDS",
-           "DEFAULT_WALL_SECONDS", "DEFAULT_MEMORY_MB"]
+__all__ = [
+    "run_python",
+    "RunnerResult",
+    "DEFAULT_CPU_SECONDS",
+    "DEFAULT_WALL_SECONDS",
+    "DEFAULT_MEMORY_MB",
+]

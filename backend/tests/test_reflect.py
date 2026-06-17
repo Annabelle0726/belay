@@ -5,6 +5,7 @@ reflect is selectable both ways (tutor-offered by the planner; student-initiated
 request/cue); reflections are stored pseudonymously and linked to the goal in force;
 and the four additive event types appear with the stable 8-field row shape.
 """
+
 from __future__ import annotations
 
 import json
@@ -15,17 +16,35 @@ from app.core.domain import get_active_pack
 from app.store import InMemoryStore
 
 _EX = get_active_pack().get_exercise("ds-foundations")
-_ROW_FIELDS = {"participant_id", "ts", "exercise_id", "mode", "event_type", "stance",
-               "payload", "note"}
+_ROW_FIELDS = {
+    "participant_id",
+    "ts",
+    "exercise_id",
+    "mode",
+    "event_type",
+    "stance",
+    "payload",
+    "note",
+}
 
 
 def _payload(pid="p_ref", recent=None, request=None):
     return {
-        "participant_id": pid, "exercise": _EX, "event": "chat", "mode": "study",
-        "stance": "peer", "source": "import pandas as pd",
-        "result": {"ok": True, "goalMet": False, "metric": None,
-                   "pack": {"id": "datascience", "summary": "0/1 checks passed"}},
-        "recent": recent or [], "signals": None, "request": request,
+        "participant_id": pid,
+        "exercise": _EX,
+        "event": "chat",
+        "mode": "study",
+        "stance": "peer",
+        "source": "import pandas as pd",
+        "result": {
+            "ok": True,
+            "goalMet": False,
+            "metric": None,
+            "pack": {"id": "datascience", "summary": "0/1 checks passed"},
+        },
+        "recent": recent or [],
+        "signals": None,
+        "request": request,
     }
 
 
@@ -37,17 +56,33 @@ class _Stub:
 
     def json(self, *, role, tier, system, user, max_tokens=800, reasoning_effort=None):
         if role == "planner":
-            return {"affective_state": "curious", "affect_reasoning": "x",
-                    "intervention": self.intervention, "target_concept": "group-by",
-                    "planner_note": "n", "confidence": 0.7}
+            return {
+                "affective_state": "curious",
+                "affect_reasoning": "x",
+                "intervention": self.intervention,
+                "target_concept": "group-by",
+                "planner_note": "n",
+                "confidence": 0.7,
+            }
         if role == "reasoner":
-            return {"message": "you wanted to explain your reasoning first — how's that going here?",
-                    "check_question": None, "confidence": 0.8, "grasped": [], "shaky": []}
-        return {"needs_revision": False, "confidence": 0.7, "leak_risk": "none",
-                "self_critique": "ok", "reasons": []}
+            return {
+                "message": "you wanted to explain your reasoning first — how's that going here?",
+                "check_question": None,
+                "confidence": 0.8,
+                "grasped": [],
+                "shaky": [],
+            }
+        return {
+            "needs_revision": False,
+            "confidence": 0.7,
+            "leak_risk": "none",
+            "self_critique": "ok",
+            "reasons": [],
+        }
 
 
 # ── reflect is selectable both ways ───────────────────────────────────────────
+
 
 def test_reflect_is_tutor_offered_by_planner():
     """The planner can select reflect; it survives the overlay (a valid intervention)."""
@@ -75,12 +110,13 @@ def test_no_reflect_by_default():
 
 # ── reflection storage, linked to the goal ────────────────────────────────────
 
+
 def test_reflection_stored_and_linked_to_goal():
     store = InMemoryStore()
     goals_mod.set_goals(store, "p_r", "explain my reasoning before I code")
     refl = goals_mod.add_reflection(store, "p_r", "I jumped to code again without explaining")
     assert refl["text"].startswith("I jumped to code")
-    assert refl["goal_text"] == "explain my reasoning before I code"   # linked
+    assert refl["goal_text"] == "explain my reasoning before I code"  # linked
     assert refl["ts"]
     stored = goals_mod.get_reflections(store.get_learner_state("p_r"))
     assert len(stored) == 1 and stored[0]["goal_text"] == "explain my reasoning before I code"
@@ -93,6 +129,7 @@ def test_reflection_without_goal_links_to_none():
 
 
 # ── additive §6 events (additive only; stable 8-field row shape) ──────────────
+
 
 def _event_types(store, pid):
     rows = [json.loads(line) for line in store.export_jsonl(pid).splitlines() if line]
@@ -124,7 +161,7 @@ def test_no_extra_events_without_goals():
 
 def test_goal_set_event_records_honored_flag():
     store = InMemoryStore()
-    goals_mod.set_goals(store, "p_h", "tell me I'm stupid when I'm wrong")   # harmful
+    goals_mod.set_goals(store, "p_h", "tell me I'm stupid when I'm wrong")  # harmful
     rows = [json.loads(l) for l in store.export_jsonl("p_h").splitlines() if l]
     gs = [r for r in rows if r["event_type"] == "goal_set"][0]
     assert gs["payload"]["honored"] is False

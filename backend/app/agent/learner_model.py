@@ -17,6 +17,7 @@ Concept-entry shape (one key per concept_id in LearnerState.concepts):
 Grasped sticks once evidence ≥ 2 — a single solve isn't enough to override a
 persistent misconception signal, but two independent solves are.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -67,9 +68,7 @@ def update_concepts(
 
     concepts = {k: dict(v) for k, v in prev.items()}
     own_cid = taxonomy.concept_for_exercise(exercise_id)
-    goal_met = isinstance(result, dict) and bool(
-        result.get("goal_met") or result.get("goalMet")
-    )
+    goal_met = isinstance(result, dict) and bool(result.get("goal_met") or result.get("goalMet"))
 
     # 1. Touch the exercise's own concept.
     if own_cid:
@@ -87,9 +86,7 @@ def update_concepts(
         mcid = taxonomy.concept_for_misconception(misconception_id)
         if mcid:
             entry = dict(concepts.get(mcid, _default_entry(now)))
-            firmly_grasped = (
-                entry.get("state") == "grasped" and entry.get("evidence", 0) >= 2
-            )
+            firmly_grasped = entry.get("state") == "grasped" and entry.get("evidence", 0) >= 2
             if not firmly_grasped:
                 if mcid not in concepts:
                     entry["evidence"] = 1
@@ -100,9 +97,7 @@ def update_concepts(
     # 4. Repeated error (no solve) → own concept shaky.
     if repeated_error and not goal_met and own_cid:
         entry = dict(concepts[own_cid])
-        firmly_grasped = (
-            entry.get("state") == "grasped" and entry.get("evidence", 0) >= 2
-        )
+        firmly_grasped = entry.get("state") == "grasped" and entry.get("evidence", 0) >= 2
         if not firmly_grasped:
             entry["state"] = "shaky"
             concepts[own_cid] = entry

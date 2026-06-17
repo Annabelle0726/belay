@@ -6,6 +6,7 @@ measures, and learner model need in order to teach a specific subject without
 importing that subject's concrete modules. The active pack is chosen at runtime
 by the registry (see `registry.get_active_pack`).
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -34,8 +35,7 @@ class MisconceptionLibrary(Protocol):
     already consumes.
     """
 
-    def for_exercise(self, exercise_id: str) -> dict:
-        ...
+    def for_exercise(self, exercise_id: str) -> dict: ...
 
 
 @runtime_checkable
@@ -54,8 +54,7 @@ class KnowledgeBase(Protocol):
     locator, so any disclosure can be cited and traced.
     """
 
-    def search(self, query: str, k: int) -> list[Passage]:
-        ...
+    def search(self, query: str, k: int) -> list[Passage]: ...
 
 
 @runtime_checkable
@@ -70,7 +69,7 @@ class DomainPack(Protocol):
     # -- identity & persona ----------------------------------------------------
     id: str
     persona: PersonaSpec
-    taxonomy: Taxonomy            # a Sequence[Concept] with lookup edges
+    taxonomy: Taxonomy  # a Sequence[Concept] with lookup edges
 
     # -- curriculum ------------------------------------------------------------
     def curriculum(self) -> Sequence[Module]:

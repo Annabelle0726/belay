@@ -5,6 +5,7 @@ Implements the 1a seam against numpy/pandas exercises graded by declarative
 specs in the sandbox runner. All student-code execution (run, worked-example
 verify, the leak executable oracle) routes through `core/runner` via `grader`.
 """
+
 from __future__ import annotations
 
 import ast
@@ -76,7 +77,7 @@ class DataSciencePack:
     def __init__(self) -> None:
         self.taxonomy: Taxonomy = build_taxonomy()
         self._misconceptions = _DSMisconceptions()
-        self._kb = None   # lazily built on first knowledge() call
+        self._kb = None  # lazily built on first knowledge() call
 
     # -- curriculum -----------------------------------------------------------
     def curriculum(self) -> Sequence[Module]:
@@ -113,16 +114,24 @@ class DataSciencePack:
         if not g.get("ok"):
             return {"ok": False, "reason": "does_not_run", "dist": None, "claim_ok": None}
         if g.get("goalMet"):
-            return {"ok": False, "reason": "would_solve_current_exercise",
-                    "dist": None, "claim_ok": None}
+            return {
+                "ok": False,
+                "reason": "would_solve_current_exercise",
+                "dist": None,
+                "claim_ok": None,
+            }
         expected = worked_example.get("expected_stdout")
         claim_ok = None
         if expected is not None:
             stdout = (g.get("pack") or {}).get("stdout", "")
             claim_ok = expected.strip() in stdout
             if not claim_ok:
-                return {"ok": False, "reason": "prediction_mismatch",
-                        "dist": None, "claim_ok": False}
+                return {
+                    "ok": False,
+                    "reason": "prediction_mismatch",
+                    "dist": None,
+                    "claim_ok": False,
+                }
         return {"ok": True, "reason": "verified", "dist": None, "claim_ok": claim_ok}
 
     # -- misconceptions -------------------------------------------------------
@@ -157,5 +166,6 @@ class DataSciencePack:
         `pack.leak_evidence` before any can enter tutor context (Slice F)."""
         if self._kb is None:
             from .knowledge.kb import DataScienceKB
+
             self._kb = DataScienceKB()
         return self._kb

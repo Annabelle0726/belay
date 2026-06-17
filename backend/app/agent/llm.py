@@ -22,6 +22,7 @@ deterministic stub and exercise the whole loop with no network. `get_provider()`
 INVARIANT: the provider seam carries NO governance decision. The inference choice
 never changes the deterministic leak gate.
 """
+
 from __future__ import annotations
 
 import json
@@ -34,16 +35,27 @@ from . import telemetry as _tel
 
 
 def _cost(prompt_tokens, completion_tokens) -> float:
-    return round((prompt_tokens or 0) / 1000.0 * settings.cost_per_1k_prompt
-                 + (completion_tokens or 0) / 1000.0 * settings.cost_per_1k_completion, 6)
+    return round(
+        (prompt_tokens or 0) / 1000.0 * settings.cost_per_1k_prompt
+        + (completion_tokens or 0) / 1000.0 * settings.cost_per_1k_completion,
+        6,
+    )
 
 
 @runtime_checkable
 class Provider(Protocol):
     name: str
 
-    def json(self, *, role: str, tier: str, system: str, user: str,
-             max_tokens: int = 800, reasoning_effort: str | None = None) -> dict: ...
+    def json(
+        self,
+        *,
+        role: str,
+        tier: str,
+        system: str,
+        user: str,
+        max_tokens: int = 800,
+        reasoning_effort: str | None = None,
+    ) -> dict: ...
 
 
 # Back-compat alias (older imports referenced LLMClient).
@@ -81,8 +93,8 @@ class OpenAICompatProvider:
 
     def __init__(self) -> None:
         from openai import OpenAI  # lazy import
-        self._client = OpenAI(base_url=settings.openai_base_url,
-                              api_key=settings.openai_api_key)
+
+        self._client = OpenAI(base_url=settings.openai_base_url, api_key=settings.openai_api_key)
 
     def model_for(self, tier: str) -> str:
         return _model_for(tier)
@@ -90,9 +102,7 @@ class OpenAICompatProvider:
     @staticmethod
     def _extract_text(resp) -> str:
         msg = resp.choices[0].message
-        return (getattr(msg, "content", None)
-                or getattr(msg, "reasoning_content", "")
-                or "")
+        return getattr(msg, "content", None) or getattr(msg, "reasoning_content", "") or ""
 
     @staticmethod
     def _usage(resp):
@@ -101,14 +111,21 @@ class OpenAICompatProvider:
             return None, None
         return getattr(u, "prompt_tokens", None), getattr(u, "completion_tokens", None)
 
-    def json(self, *, role: str, tier: str, system: str, user: str,
-             max_tokens: int = 800, reasoning_effort: str | None = None) -> dict:
+    def json(
+        self,
+        *,
+        role: str,
+        tier: str,
+        system: str,
+        user: str,
+        max_tokens: int = 800,
+        reasoning_effort: str | None = None,
+    ) -> dict:
         t0 = time.perf_counter()
         model = self.model_for(tier)
         kwargs: dict = dict(
             model=model,
-            messages=[{"role": "system", "content": system},
-                      {"role": "user", "content": user}],
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
             temperature=settings.llm_temperature,
             max_tokens=max_tokens,
         )
@@ -139,13 +156,15 @@ class OpenAICompatProvider:
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
                 {"role": "assistant", "content": text or ""},
-                {"role": "user", "content":
-                    "Return ONLY the JSON object. No prose, no markdown fences."},
+                {
+                    "role": "user",
+                    "content": "Return ONLY the JSON object. No prose, no markdown fences.",
+                },
             ]
             try:
                 resp = self._client.chat.completions.create(
-                    model=model, messages=retry_msgs, temperature=0.0,
-                    max_tokens=max_tokens)
+                    model=model, messages=retry_msgs, temperature=0.0, max_tokens=max_tokens
+                )
                 parsed = parse_json(self._extract_text(resp))
             except Exception:
                 pass
@@ -154,8 +173,13 @@ class OpenAICompatProvider:
             raise ValueError(f"{role}: model did not return parseable JSON")
 
         ptok, ctok = self._usage(resp)
-        _tel.record(role, latency_ms=round((time.perf_counter() - t0) * 1000, 1),
-                    prompt_tokens=ptok, completion_tokens=ctok, cost=_cost(ptok, ctok))
+        _tel.record(
+            role,
+            latency_ms=round((time.perf_counter() - t0) * 1000, 1),
+            prompt_tokens=ptok,
+            completion_tokens=ctok,
+            cost=_cost(ptok, ctok),
+        )
         return parsed
 
 
@@ -167,14 +191,26 @@ class AnthropicProvider:
 
     def __init__(self) -> None:
         from anthropic import Anthropic  # lazy import
-        self._client = (Anthropic(api_key=settings.anthropic_api_key)
-                        if settings.anthropic_api_key else Anthropic())
+
+        self._client = (
+            Anthropic(api_key=settings.anthropic_api_key)
+            if settings.anthropic_api_key
+            else Anthropic()
+        )
 
     def model_for(self, tier: str) -> str:
         return _model_for(tier)
 
-    def json(self, *, role: str, tier: str, system: str, user: str,
-             max_tokens: int = 800, reasoning_effort: str | None = None) -> dict:
+    def json(
+        self,
+        *,
+        role: str,
+        tier: str,
+        system: str,
+        user: str,
+        max_tokens: int = 800,
+        reasoning_effort: str | None = None,
+    ) -> dict:
         # reasoning_effort is the open-weight knob; Anthropic uses extended
         # thinking instead. Thinking is this provider's CAPABILITY (default on);
         # openai_compatible defaults it off. No governance logic is involved.
@@ -192,16 +228,20 @@ class AnthropicProvider:
             kwargs["max_tokens"] = max(max_tokens, budget + 512)
             kwargs["thinking"] = {"type": "enabled", "budget_tokens": budget}
         resp = self._client.messages.create(**kwargs)
-        text = "".join(b.text for b in resp.content
-                       if getattr(b, "type", None) == "text").strip()
+        text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
         parsed = parse_json(text)
         if parsed is None:
             raise ValueError(f"{role}: model did not return parseable JSON")
         u = getattr(resp, "usage", None)
         ptok = getattr(u, "input_tokens", None) if u else None
         ctok = getattr(u, "output_tokens", None) if u else None
-        _tel.record(role, latency_ms=round((time.perf_counter() - t0) * 1000, 1),
-                    prompt_tokens=ptok, completion_tokens=ctok, cost=_cost(ptok, ctok))
+        _tel.record(
+            role,
+            latency_ms=round((time.perf_counter() - t0) * 1000, 1),
+            prompt_tokens=ptok,
+            completion_tokens=ctok,
+            cost=_cost(ptok, ctok),
+        )
         return parsed
 
 
@@ -222,12 +262,21 @@ class BedrockProvider:
     def model_for(self, tier: str) -> str:
         return _model_for(tier)
 
-    def json(self, *, role: str, tier: str, system: str, user: str,
-             max_tokens: int = 800, reasoning_effort: str | None = None) -> dict:
+    def json(
+        self,
+        *,
+        role: str,
+        tier: str,
+        system: str,
+        user: str,
+        max_tokens: int = 800,
+        reasoning_effort: str | None = None,
+    ) -> dict:
         raise NotImplementedError(
             "bedrock provider is a documented stub; set PROVIDER=openai_compatible "
             "or PROVIDER=anthropic (Nova mapping: "
-            f"fast={settings.bedrock_model_fast}, strong={settings.bedrock_model_strong})")
+            f"fast={settings.bedrock_model_fast}, strong={settings.bedrock_model_strong})"
+        )
 
 
 # Provider id -> class. New providers register here; core selects by PROVIDER.
@@ -243,8 +292,7 @@ def provider_class(provider_id: str) -> type:
     try:
         return _PROVIDERS[provider_id]
     except KeyError:
-        raise ValueError(
-            f"unknown PROVIDER={provider_id!r}; known: {sorted(_PROVIDERS)}")
+        raise ValueError(f"unknown PROVIDER={provider_id!r}; known: {sorted(_PROVIDERS)}")
 
 
 def get_provider() -> Provider:

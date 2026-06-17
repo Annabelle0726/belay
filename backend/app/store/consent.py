@@ -33,6 +33,7 @@ Usage (in main.py):
     # Export reads ONLY the durable store:
     _router.durable.export_jsonl(pid)
 """
+
 from __future__ import annotations
 
 from .repository import InMemoryStore, SqlStore
@@ -69,6 +70,7 @@ class ConsentRouter:
         if isinstance(self._durable, SqlStore):
             from .db import SessionLocal
             from .models import Participant
+
             with SessionLocal() as s:
                 row = Participant(id=pid, anon_code=anon_code, consent=consent)
                 s.add(row)
@@ -92,6 +94,7 @@ class ConsentRouter:
             try:
                 from .db import SessionLocal
                 from .models import Participant
+
                 with SessionLocal() as s:
                     row = s.get(Participant, pid)
                     if row is not None:

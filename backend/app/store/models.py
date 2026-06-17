@@ -51,6 +51,7 @@ the customization overlay emits `overlay_set` (new event_type values only; the
 8-field row shape and the events.jsonl export contract are unchanged). These only
 appear when a student opts in to goals or a customization overlay.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -99,11 +100,13 @@ class Event(Base):
     __tablename__ = "events"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    participant_id: Mapped[str] = mapped_column(String(64), ForeignKey("participants.id"), index=True)
+    participant_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("participants.id"), index=True
+    )
     ts: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)
     exercise_id: Mapped[str] = mapped_column(String(64), index=True)
-    mode: Mapped[str] = mapped_column(String(16))          # study | teach
-    event_type: Mapped[str] = mapped_column(String(16))    # run | turn
+    mode: Mapped[str] = mapped_column(String(16))  # study | teach
+    event_type: Mapped[str] = mapped_column(String(16))  # run | turn
     stance: Mapped[str | None] = mapped_column(String(16), nullable=True)  # peer | oracle | control
-    payload: Mapped[dict] = mapped_column(JSON)            # full telemetry
+    payload: Mapped[dict] = mapped_column(JSON)  # full telemetry
     note: Mapped[str] = mapped_column(Text, default="")

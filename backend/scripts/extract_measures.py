@@ -12,6 +12,7 @@ Reads events produced by Store.export_jsonl() and writes:
 
 Pure and offline: no model calls, no network. Identical input ⇒ identical output.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -36,9 +37,14 @@ from app.analysis.measures import (
 from app.core.domain import get_active_pack
 
 _CALIB_FIELDS = [
-    "participant_id", "exercise_id", "turn_index",
-    "confidence", "outcome",
-    "leak_predicted", "leak_predicted_strict", "leak_actual",
+    "participant_id",
+    "exercise_id",
+    "turn_index",
+    "confidence",
+    "outcome",
+    "leak_predicted",
+    "leak_predicted_strict",
+    "leak_actual",
     "abstained",
 ]
 
@@ -59,18 +65,24 @@ def _group_events(events: list[dict]) -> dict[tuple, list[dict]]:
 
 
 def main(argv=None) -> None:
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("trace", help="Path to the JSONL trace export")
     parser.add_argument("output_dir", help="Directory to write output files")
-    parser.add_argument("--cohort", default=None,
-                        help="Optional cohort label applied to all participants")
-    parser.add_argument("--window", type=int, default=HANDOFF_WINDOW,
-                        help=f"Next-run outcome window (default {HANDOFF_WINDOW})")
+    parser.add_argument(
+        "--cohort", default=None, help="Optional cohort label applied to all participants"
+    )
+    parser.add_argument(
+        "--window",
+        type=int,
+        default=HANDOFF_WINDOW,
+        help=f"Next-run outcome window (default {HANDOFF_WINDOW})",
+    )
     args = parser.parse_args(argv)
 
     os.makedirs(args.output_dir, exist_ok=True)
-    sim = None   # pack grader is deterministic; measures no longer needs a simulator
+    sim = None  # pack grader is deterministic; measures no longer needs a simulator
     pack = get_active_pack()
 
     events = _load_events(args.trace)

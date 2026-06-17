@@ -10,6 +10,7 @@ Declarative check types (convergent with Quad pkg/gradingspec — see GRADING_SP
   stdout_contains | stdout_equals | var_numeric | var_dataframe |
   function_contract | metric_threshold | var_threshold
 """
+
 import contextlib
 import io
 import json
@@ -74,13 +75,17 @@ def _run_check(chk, ns, stdout_text):
         return ok, None, ""
     if t == "var_dataframe":
         import pandas as pd
+
         val = ns.get(chk["var"])
         exp = pd.DataFrame(chk["expected"])
         tol = float(chk.get("tol", 1e-6))
         try:
             pd.testing.assert_frame_equal(
-                val.reset_index(drop=True), exp.reset_index(drop=True),
-                check_dtype=False, atol=tol, check_like=True,
+                val.reset_index(drop=True),
+                exp.reset_index(drop=True),
+                check_dtype=False,
+                atol=tol,
+                check_like=True,
             )
             return True, None, ""
         except Exception as exc:  # noqa: BLE001
@@ -137,14 +142,19 @@ def main():
             checks_out.append({"type": chk["type"], "ok": bool(ok), "detail": detail})
             goal = goal and bool(ok)
 
-    print("__GRADE__" + json.dumps({
-        "ok": err is None,
-        "error": err,
-        "goalMet": bool(goal),
-        "metric": metric_value,
-        "checks": checks_out,
-        "stdout": stdout_text[-2000:],
-    }))
+    print(
+        "__GRADE__"
+        + json.dumps(
+            {
+                "ok": err is None,
+                "error": err,
+                "goalMet": bool(goal),
+                "metric": metric_value,
+                "checks": checks_out,
+                "stdout": stdout_text[-2000:],
+            }
+        )
+    )
 
 
 if __name__ == "__main__":

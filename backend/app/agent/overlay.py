@@ -33,6 +33,7 @@ overlay is even safer than goals here:
 The post-hoc berating softener (`governance.soften_if_berating`) remains the backstop
 for a berating OUTPUT, exactly as for goals; tone has no oracle (EXTRACTION_PLAN §(g)).
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -44,14 +45,14 @@ from .goals import is_harmful
 # Each knob maps {field: (allowed_values, default)}. Defaults are mastery-friendly
 # and reproduce today's behavior, so an absent/empty overlay changes nothing.
 _PERSONA = {
-    "tone":      (("warm", "neutral", "direct"), "warm"),       # "direct" == firm but kind
+    "tone": (("warm", "neutral", "direct"), "warm"),  # "direct" == firm but kind
     "verbosity": (("brief", "balanced", "detailed"), "balanced"),
-    "framing":   (("peer", "coach"), "peer"),
+    "framing": (("peer", "coach"), "peer"),
 }
 _PEDAGOGY = {
     # "less" scaffolding = more independence / fewer hints, NEVER more of the answer.
     "scaffolding": (("more", "default", "less"), "default"),
-    "stretch":     (("low", "default", "high"), "default"),     # "high" == challenge me
+    "stretch": (("low", "default", "high"), "default"),  # "high" == challenge me
 }
 _ACCOMMODATION = {
     "reading_level": (("plain", "default", "advanced"), "default"),
@@ -60,6 +61,7 @@ _ACCOMMODATION = {
 }
 
 _SECTIONS = {"persona": _PERSONA, "pedagogy": _PEDAGOGY, "accommodation": _ACCOMMODATION}
+
 
 # A language code is a short alpha token (e.g. "en", "es", "pt-br"); anything else
 # falls back to the default. Kept tiny on purpose (rendering/prompt-level only).
@@ -153,9 +155,15 @@ def set_overlay(store, participant_id: str, raw: dict | None) -> dict | None:
     state = store.get_learner_state(participant_id)
     state["overlay"] = artifact
     store.save_learner_state(participant_id, state)
-    _emit(store, participant_id, "overlay_set",
-          {"declined": (artifact or {}).get("declined", []),
-           "action": "set" if artifact else "clear"})
+    _emit(
+        store,
+        participant_id,
+        "overlay_set",
+        {
+            "declined": (artifact or {}).get("declined", []),
+            "action": "set" if artifact else "clear",
+        },
+    )
     return artifact
 
 

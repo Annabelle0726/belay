@@ -9,6 +9,7 @@ student code through core/runner — never exec it in the main process. The bypa
 test replaces the runner with a spy and asserts (a) each path calls the runner and
 (b) a payload that would write a sentinel file if executed in-process never runs.
 """
+
 from __future__ import annotations
 
 import os
@@ -18,6 +19,7 @@ from app.core import runner
 from app.core.runner import RunnerResult, run_python
 
 # ── sandbox properties ────────────────────────────────────────────────────────
+
 
 def test_network_is_blocked():
     prog = (
@@ -79,9 +81,14 @@ def test_stdout_and_exit_code_captured():
 # ── bypass: pack student-code paths must use the runner ───────────────────────
 
 _CANNED = RunnerResult(
-    ok=True, exit_code=0,
+    ok=True,
+    exit_code=0,
     stdout='__GRADE__{"ok": true, "goalMet": false, "metric": null, "checks": [], "stdout": ""}',
-    stderr="", timed_out=False, wall_ms=1.0, error=None, artifacts={},
+    stderr="",
+    timed_out=False,
+    wall_ms=1.0,
+    error=None,
+    artifacts={},
 )
 
 

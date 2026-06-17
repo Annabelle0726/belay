@@ -12,6 +12,7 @@ marks the judge-scored families self-judged and not credible.
 no_solution is NOT judged here — it is a deterministic gate verdict (see
 families.no_solution). The judge only scores the qualitative signals.
 """
+
 from __future__ import annotations
 
 import json
@@ -22,22 +23,32 @@ _RUBRICS = {
     "grounded": (
         "You grade a peer tutor's single message. Score how GROUNDED it is in the "
         "student's actual code / result / situation (not generic advice), 1-5. "
-        'Respond with ONLY JSON: {"score": <1-5>, "note": "one clause"}.'),
+        'Respond with ONLY JSON: {"score": <1-5>, "note": "one clause"}.'
+    ),
     "concrete": (
         "You grade a peer tutor's encourage message to a frustrated/disengaged "
         "student. Score how CONCRETE it is — does it give ONE clear next step (not "
-        'vague "keep trying")? 1-5. Respond with ONLY JSON: {"score": <1-5>, "note": "one clause"}.'),
+        'vague "keep trying")? 1-5. Respond with ONLY JSON: {"score": <1-5>, "note": "one clause"}.'
+    ),
     "question": (
         "You grade a peer tutor's revisit message. Score whether it poses EXACTLY "
         "ONE clear retrieval/prediction question (5 = exactly one question; 1 = no "
-        'question or several). Respond with ONLY JSON: {"score": <1-5>, "note": "one clause"}.'),
+        'question or several). Respond with ONLY JSON: {"score": <1-5>, "note": "one clause"}.'
+    ),
 }
 
 
 class Judge:
-    def __init__(self, *, provider: str, model: str, base_url: str | None = None,
-                 api_key: str | None = None, temperature: float = 0.0,
-                 credible: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        provider: str,
+        model: str,
+        base_url: str | None = None,
+        api_key: str | None = None,
+        temperature: float = 0.0,
+        credible: bool = True,
+    ) -> None:
         self.provider = provider
         self.model = model
         self.temperature = temperature
@@ -45,22 +56,28 @@ class Judge:
         self._kind = "anthropic" if provider == "anthropic" else "openai"
         if self._kind == "anthropic":
             from anthropic import Anthropic
+
             self._client = Anthropic(api_key=api_key) if api_key else Anthropic()
         else:
             from openai import OpenAI
+
             self._client = OpenAI(base_url=base_url, api_key=api_key or "EMPTY")
 
     def _complete(self, system: str, user: str) -> str:
         if self._kind == "anthropic":
             resp = self._client.messages.create(
-                model=self.model, max_tokens=200, system=system,
-                messages=[{"role": "user", "content": user}])
-            return "".join(b.text for b in resp.content
-                           if getattr(b, "type", None) == "text")
+                model=self.model,
+                max_tokens=200,
+                system=system,
+                messages=[{"role": "user", "content": user}],
+            )
+            return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
         resp = self._client.chat.completions.create(
-            model=self.model, temperature=self.temperature, max_tokens=200,
-            messages=[{"role": "system", "content": system},
-                      {"role": "user", "content": user}])
+            model=self.model,
+            temperature=self.temperature,
+            max_tokens=200,
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+        )
         return resp.choices[0].message.content or ""
 
     def score(self, rubric: str, situation: dict, message: str) -> int:

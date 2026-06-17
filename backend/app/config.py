@@ -1,4 +1,5 @@
 """Runtime configuration (env-driven, no extra deps)."""
+
 from __future__ import annotations
 
 import os
@@ -33,11 +34,13 @@ class Settings:
     provider: str = field(default_factory=lambda: _env("PROVIDER", "openai_compatible"))
 
     # openai_compatible — single base_url serves all tiers (Ollama/vLLM/etc).
-    openai_base_url: str = field(default_factory=lambda: _env(
-        "OPENAI_BASE_URL", "http://localhost:11434/v1"))   # Ollama default
+    openai_base_url: str = field(
+        default_factory=lambda: _env("OPENAI_BASE_URL", "http://localhost:11434/v1")
+    )  # Ollama default
     # Token-free local endpoints still want a non-empty string for the SDK.
-    openai_api_key: str = field(default_factory=lambda: _env(
-        "OPENAI_API_KEY", _env("LLM_API_KEY", "EMPTY")))
+    openai_api_key: str = field(
+        default_factory=lambda: _env("OPENAI_API_KEY", _env("LLM_API_KEY", "EMPTY"))
+    )
     openai_model_fast: str = field(default_factory=lambda: _env("MODEL_FAST", "llama3.2"))
     openai_model_strong: str = field(default_factory=lambda: _env("MODEL_STRONG", "llama3.2"))
     # Optional reasoning-effort knob (gpt-oss etc.); empty = not sent. Applied to
@@ -53,28 +56,37 @@ class Settings:
     # anthropic requests extended thinking by default (its capability).
     anthropic_thinking: bool = field(default_factory=lambda: _envbool("ANTHROPIC_THINKING", True))
     anthropic_thinking_budget: int = field(
-        default_factory=lambda: int(_env("ANTHROPIC_THINKING_BUDGET", "2048")))
+        default_factory=lambda: int(_env("ANTHROPIC_THINKING_BUDGET", "2048"))
+    )
 
     # anthropic
     anthropic_api_key: str = field(default_factory=lambda: _env("ANTHROPIC_API_KEY", ""))
-    anthropic_model_fast: str = field(default_factory=lambda: _env(
-        "ANTHROPIC_MODEL_FAST", "claude-haiku-4-5-20251001"))
-    anthropic_model_strong: str = field(default_factory=lambda: _env(
-        "ANTHROPIC_MODEL_STRONG", "claude-sonnet-4-6"))
+    anthropic_model_fast: str = field(
+        default_factory=lambda: _env("ANTHROPIC_MODEL_FAST", "claude-haiku-4-5-20251001")
+    )
+    anthropic_model_strong: str = field(
+        default_factory=lambda: _env("ANTHROPIC_MODEL_STRONG", "claude-sonnet-4-6")
+    )
 
     # bedrock (stub) — Amazon Nova fast/strong mapping, written down for the
     # documented stub; not live.
-    bedrock_model_fast: str = field(default_factory=lambda: _env(
-        "BEDROCK_MODEL_FAST", "amazon.nova-lite-v1:0"))
-    bedrock_model_strong: str = field(default_factory=lambda: _env(
-        "BEDROCK_MODEL_STRONG", "amazon.nova-pro-v1:0"))
+    bedrock_model_fast: str = field(
+        default_factory=lambda: _env("BEDROCK_MODEL_FAST", "amazon.nova-lite-v1:0")
+    )
+    bedrock_model_strong: str = field(
+        default_factory=lambda: _env("BEDROCK_MODEL_STRONG", "amazon.nova-pro-v1:0")
+    )
 
     llm_temperature: float = field(default_factory=lambda: float(_env("LLM_TEMPERATURE", "0.4")))
 
     # Cost telemetry (Workstream C): provider-configurable USD per 1k tokens.
     # Default 0 — self-hosted inference is free; set for a metered hosted provider.
-    cost_per_1k_prompt: float = field(default_factory=lambda: float(_env("COST_PER_1K_PROMPT", "0")))
-    cost_per_1k_completion: float = field(default_factory=lambda: float(_env("COST_PER_1K_COMPLETION", "0")))
+    cost_per_1k_prompt: float = field(
+        default_factory=lambda: float(_env("COST_PER_1K_PROMPT", "0"))
+    )
+    cost_per_1k_completion: float = field(
+        default_factory=lambda: float(_env("COST_PER_1K_COMPLETION", "0"))
+    )
 
     @property
     def model_tiers(self) -> dict[str, str]:
@@ -107,8 +119,12 @@ class Settings:
     #     bounded refine, it is re-run at a higher effort and re-evaluated, up to
     #     MAX_ESCALATE times. (Model-swap to a larger open-weight tier is a
     #     future hook if one joins the JS2 menu — see reasoner/llm seam.)
-    reasoner_effort_default: str = field(default_factory=lambda: _env("REASONER_EFFORT_DEFAULT", "medium"))
-    reasoner_effort_escalated: str = field(default_factory=lambda: _env("REASONER_EFFORT_ESCALATED", "high"))
+    reasoner_effort_default: str = field(
+        default_factory=lambda: _env("REASONER_EFFORT_DEFAULT", "medium")
+    )
+    reasoner_effort_escalated: str = field(
+        default_factory=lambda: _env("REASONER_EFFORT_ESCALATED", "high")
+    )
     tau_escalate: float = field(default_factory=lambda: float(_env("TAU_ESCALATE", "0.55")))
     max_escalate: int = field(default_factory=lambda: int(_env("MAX_ESCALATE", "1")))
     #
@@ -132,37 +148,48 @@ class Settings:
     def store_is_postgres(self) -> bool:
         return self.database_url.startswith("postgres")
 
-    cors_origins: list = field(default_factory=lambda: _env(
-        "CORS_ORIGINS", "http://localhost:5173,http://localhost:3000"
-    ).split(","))
+    cors_origins: list = field(
+        default_factory=lambda: _env(
+            "CORS_ORIGINS", "http://localhost:5173,http://localhost:3000"
+        ).split(",")
+    )
 
     # --- Distress-routing layer (Slice G) — INSTITUTION + IRB OWNED ---------
     # OFF by default: when disabled, no detection runs, no short-circuit happens, and
     # behavior is byte-identical to today. The framework ships a neutral frame and a
     # [FILL-IN] placeholder only — it invents no hotline, number, or named service.
     distress_routing_enabled: bool = field(
-        default_factory=lambda: _envbool("DISTRESS_ROUTING_ENABLED", False))
+        default_factory=lambda: _envbool("DISTRESS_ROUTING_ENABLED", False)
+    )
     # The support resources surfaced to the learner. The [FILL-IN] default is NEVER
     # rendered (see config gating + `distress_configured`); the institution replaces it
     # with its IRB- and jurisdiction-approved resources.
-    distress_support_message: str = field(default_factory=lambda: _env(
-        "DISTRESS_SUPPORT_MESSAGE", "[FILL-IN: institution support resources]"))
-    distress_escalation_target: str = field(default_factory=lambda: _env(
-        "DISTRESS_ESCALATION_TARGET", "[FILL-IN: institution escalation contact]"))
+    distress_support_message: str = field(
+        default_factory=lambda: _env(
+            "DISTRESS_SUPPORT_MESSAGE", "[FILL-IN: institution support resources]"
+        )
+    )
+    distress_escalation_target: str = field(
+        default_factory=lambda: _env(
+            "DISTRESS_ESCALATION_TARGET", "[FILL-IN: institution escalation contact]"
+        )
+    )
     # Lets the IRB disable the (already content-free) distress trace event entirely.
     distress_trace_enabled: bool = field(
-        default_factory=lambda: _envbool("DISTRESS_TRACE_ENABLED", True))
+        default_factory=lambda: _envbool("DISTRESS_TRACE_ENABLED", True)
+    )
     # Optional institution-configured extra detection terms (comma-separated, IRB-owned)
     # on top of the conservative built-in vocabulary. Default empty.
-    distress_signal_terms: str = field(
-        default_factory=lambda: _env("DISTRESS_SIGNAL_TERMS", ""))
+    distress_signal_terms: str = field(default_factory=lambda: _env("DISTRESS_SIGNAL_TERMS", ""))
 
     @property
     def distress_configured(self) -> bool:
         """True once BOTH FILL-IN defaults are replaced with real institution values.
         Displayed crisis content is gated on this; the placeholder is never rendered."""
-        return ("[FILL-IN" not in self.distress_support_message
-                and "[FILL-IN" not in self.distress_escalation_target)
+        return (
+            "[FILL-IN" not in self.distress_support_message
+            and "[FILL-IN" not in self.distress_escalation_target
+        )
 
 
 settings = Settings()

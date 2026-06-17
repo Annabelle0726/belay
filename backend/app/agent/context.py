@@ -11,6 +11,7 @@ includes a compact misconception map — expectations + {id, belief, signature,
 peer_move} for each likely misconception.  The control arm short-circuits before
 any reasoner call, so it never sees this map.
 """
+
 from __future__ import annotations
 
 import json
@@ -21,7 +22,9 @@ from ..core.domain import get_active_pack
 # Student-initiated reflect: an explicit cue in the latest student message.
 _REFLECT_CUE = re.compile(
     r"\b(let'?s reflect|i want to reflect|can we reflect|reflect on (my|the) (goal|progress)"
-    r"|how am i doing|am i on track|check in on (my|the) goal)\b", re.IGNORECASE)
+    r"|how am i doing|am i on track|check in on (my|the) goal)\b",
+    re.IGNORECASE,
+)
 
 
 def _student_wants_reflect(recent: list) -> bool:
@@ -47,8 +50,13 @@ def _last_result(result: dict | None) -> object:
     if not result:
         return "no run yet"
     if not result.get("ok"):
-        return {"compiles": False, "error": result.get("error"), "goal_met": False,
-                "metric": None, "summary": None}
+        return {
+            "compiles": False,
+            "error": result.get("error"),
+            "goal_met": False,
+            "metric": None,
+            "summary": None,
+        }
     # Pack-agnostic (§6): the per-pack human-readable detail is in result.pack.summary
     # (quantum: distribution + mismatch; DS: check results). Fall back to the legacy
     # quantum dist/diff so pre-v6 payloads still render something useful.
@@ -69,8 +77,12 @@ def _last_result(result: dict | None) -> object:
 
 
 def default_signals(attempts: int) -> dict:
-    return {"attempts": attempts, "distanceTrend": [], "repeatedError": False,
-            "sinceLastProgress": 0}
+    return {
+        "attempts": attempts,
+        "distanceTrend": [],
+        "repeatedError": False,
+        "sinceLastProgress": 0,
+    }
 
 
 def _misconceptions_context(exercise_id: str) -> dict:
@@ -82,8 +94,8 @@ def _misconceptions_context(exercise_id: str) -> dict:
         "expectations": entry["expectations"],
         "misconceptions": [
             {
-                "id":        m["id"],
-                "belief":    m["belief"],
+                "id": m["id"],
+                "belief": m["belief"],
                 "signature": m["signature"],
                 "peer_move": m["peer_move"],
             }
@@ -96,17 +108,21 @@ def build_context(payload: dict, learner_state: dict, attempts: int) -> dict:
     ex = payload["exercise"]
     stance = payload.get("stance", "peer")
     ctx: dict = {
-        "event": payload.get("event", "chat"),                 # run | chat
-        "mode": payload.get("mode", "study"),                  # study | teach
+        "event": payload.get("event", "chat"),  # run | chat
+        "mode": payload.get("mode", "study"),  # study | teach
         "exercise": {
-            "title": ex["title"], "concept": ex["concept"],
-            "goal": ex["goalText"], "prompt": ex["prompt"],
+            "title": ex["title"],
+            "concept": ex["concept"],
+            "goal": ex["goalText"],
+            "prompt": ex["prompt"],
         },
         "current_functional_model": payload.get("source", ""),
         "last_result": _last_result(payload.get("result")),
         "attempt_signals": payload.get("signals") or default_signals(attempts),
-        "known_memory": {"grasped": learner_state.get("grasped", []),
-                         "shaky": learner_state.get("shaky", [])},
+        "known_memory": {
+            "grasped": learner_state.get("grasped", []),
+            "shaky": learner_state.get("shaky", []),
+        },
         "recent_dialogue": payload.get("recent", []),
     }
     # Opt-in learner-authored goals (the student's own words). Injected into the
@@ -118,11 +134,13 @@ def build_context(payload: dict, learner_state: dict, attempts: int) -> dict:
         # persona-parameterized prompts as preferences honored WITHIN the stance,
         # never as authority over it. Absent for control.
         ctx["overlay"] = learner_state.get("overlay")
-        ctx["reflections"] = (learner_state.get("reflections") or [])[-3:]  # recent, for the tutor's read
+        ctx["reflections"] = (learner_state.get("reflections") or [])[
+            -3:
+        ]  # recent, for the tutor's read
         # Student-initiated reflect: an explicit `request: "reflect"` or a dialogue cue.
         ctx["reflect_requested"] = bool(
-            payload.get("request") == "reflect"
-            or _student_wants_reflect(payload.get("recent", [])))
+            payload.get("request") == "reflect" or _student_wants_reflect(payload.get("recent", []))
+        )
     # Shared capability (F6): inject misconception expectations + signatures for
     # the peer and oracle stances so both arms have the same tutor knowledge.
     # Control short-circuits in the orchestrator before the reasoner runs, so
@@ -133,6 +151,7 @@ def build_context(payload: dict, learner_state: dict, attempts: int) -> dict:
     # Persistent learner model: spaced follow-up (revisit) — peer/oracle only.
     if stance != "control":
         from . import learner_model as lm_mod
+
         taxonomy = get_active_pack().taxonomy
         concepts = learner_state.get("concepts", {})
         due = lm_mod.due_review(concepts, ex.get("id", ""))
@@ -154,8 +173,10 @@ def build_context(payload: dict, learner_state: dict, attempts: int) -> dict:
         student_msg = _latest_student_message(payload.get("recent", []))
         if kb is not None and student_msg:
             from . import governance as _gov
-            query = " ".join(s for s in (student_msg, ex.get("concept", ""),
-                                         ex.get("title", "")) if s)
+
+            query = " ".join(
+                s for s in (student_msg, ex.get("concept", ""), ex.get("title", "")) if s
+            )
             screen = _gov.screen_passages(kb.search(query, _RETRIEVAL_K), ex)
             ctx["knowledge"] = [
                 {"id": p.id, "text": p.text, "citation": p.citation, "locator": p.locator}
@@ -165,7 +186,7 @@ def build_context(payload: dict, learner_state: dict, attempts: int) -> dict:
                 "exercise_id": ex.get("id", ""),
                 "retrieved": screen["retrieved"],
                 "kept": [p.id for p in screen["kept"]],
-                "dropped": screen["dropped"],   # [{id, reason}] — never passage text
+                "dropped": screen["dropped"],  # [{id, reason}] — never passage text
             }
 
     return ctx

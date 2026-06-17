@@ -35,6 +35,7 @@ The returned object is a superset of the artifact's contract, so the existing
 glass-box UI renders it unchanged; the extra `components` block is richer
 telemetry the UI can ignore or surface.
 """
+
 from __future__ import annotations
 
 import time
@@ -59,8 +60,9 @@ _GOV_PROSE = {
 }
 
 
-def _control_turn(payload: dict, ctx: dict, store: Store,
-                  pid: str, exercise: dict, mode: str, pack) -> dict:
+def _control_turn(
+    payload: dict, ctx: dict, store: Store, pid: str, exercise: dict, mode: str, pack
+) -> dict:
     """Bypass the peer loop for the control condition.
 
     No planner/reasoner/self_eval calls are made. A fixed support message is
@@ -75,8 +77,7 @@ def _control_turn(payload: dict, ctx: dict, store: Store,
         "planner_note": "control condition — standard support only",
         "self_critique": "—",
         "governance": "none",
-        "memory": {"grasped": learner.get("grasped", []),
-                   "shaky": learner.get("shaky", [])},
+        "memory": {"grasped": learner.get("grasped", []), "shaky": learner.get("shaky", [])},
         "message": CONTROL_MESSAGE,
         "check_question": None,
         "components": {
@@ -112,20 +113,25 @@ def _control_turn(payload: dict, ctx: dict, store: Store,
         },
     }
     trace = {
-        "event": ctx["event"], "mode": mode, "stance": "control",
+        "event": ctx["event"],
+        "mode": mode,
+        "stance": "control",
         "source": ctx["current_functional_model"],
         "last_result": ctx["last_result"],
-        "plan": None, "reasoner": None, "self_eval": None, "governance": None,
+        "plan": None,
+        "reasoner": None,
+        "self_eval": None,
+        "governance": None,
         "final_message": final["message"],
         "telemetry": final["components"],
     }
-    store.append_event(make_event(pid, exercise["id"], mode, "turn", trace,
-                                  stance="control"))
+    store.append_event(make_event(pid, exercise["id"], mode, "turn", trace, stance="control"))
     return final
 
 
-def _distress_turn(ctx: dict, store: Store, pid: str, exercise: dict,
-                   mode: str, stance: str, pack) -> dict:
+def _distress_turn(
+    ctx: dict, store: Store, pid: str, exercise: dict, mode: str, stance: str, pack
+) -> dict:
     """Distress-routing short-circuit (Slice G). Deterministic, NO planner/reasoner/LLM
     call. Surfaces a kind, non-amplifying frame that routes the learner to a human and
     suppresses normal tutoring. The frame's crisis CONTENT is institution config; the
@@ -142,16 +148,18 @@ def _distress_turn(ctx: dict, store: Store, pid: str, exercise: dict,
         "planner_note": "distress routing — surfaced configured support and routed to a human",
         "self_critique": "—",
         "governance": "flag_escalate",
-        "memory": {"grasped": learner.get("grasped", []),
-                   "shaky": learner.get("shaky", [])},
+        "memory": {"grasped": learner.get("grasped", []), "shaky": learner.get("shaky", [])},
         "message": distress_mod.frame_from_settings(settings),
         "check_question": None,
         "components": {
             "planner": {"target_concept": "—"},
             "reasoner": {"raw_confidence": 1.0},
             "self_eval": {"leak_risk": "none", "reasons": []},
-            "governance": {"prose": "Distress routing → human support", "blocked": False,
-                           "reasons": []},
+            "governance": {
+                "prose": "Distress routing → human support",
+                "blocked": False,
+                "reasons": [],
+            },
             "wellbeing_softened": False,
             "overlay_declined": [],
             # Content-free distress signal (no text, no PII, no severity, no category).
@@ -175,10 +183,16 @@ def _distress_turn(ctx: dict, store: Store, pid: str, exercise: dict,
     # The ONLY trace for a distress turn is the additive, content-free event: no turn
     # event, no source/message/dialogue is recorded. Payload is exactly the signal.
     if settings.distress_trace_enabled:
-        store.append_event(make_event(
-            pid, exercise["id"], mode, "distress",
-            {"triggered": True, "configured": configured, "routed": configured},
-            stance=stance))
+        store.append_event(
+            make_event(
+                pid,
+                exercise["id"],
+                mode,
+                "distress",
+                {"triggered": True, "configured": configured, "routed": configured},
+                stance=stance,
+            )
+        )
     return final
 
 
@@ -190,8 +204,9 @@ def _abstain(draft: dict) -> dict:
     Sol's own certainty) are preserved so memory still updates."""
     d = dict(draft)
     d["message"] = ABSTAIN_MESSAGE
-    d["check_question"] = ("What does your latest run actually show — want to line it up "
-                           "against the goal together?")
+    d["check_question"] = (
+        "What does your latest run actually show — want to line it up " "against the goal together?"
+    )
     d["confidence"] = min(float(draft.get("confidence", 0.3)), 0.3)
     return d
 
@@ -248,15 +263,28 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
     # --- the loop (runs for both peer and oracle; stance only changes prompts,
     #     the self-eval rubric, and which governance gates fire) ---
     plan = timed("planner_ms", planner.plan, ctx, llm, stance=stance)
-    draft = timed("reasoner_ms", reasoner.respond, ctx, plan, llm, stance=stance,
-                  reasoning_effort=settings.reasoner_effort_default)
+    draft = timed(
+        "reasoner_ms",
+        reasoner.respond,
+        ctx,
+        plan,
+        llm,
+        stance=stance,
+        reasoning_effort=settings.reasoner_effort_default,
+    )
     evaluation = timed("self_eval_ms", self_eval.evaluate, ctx, plan, draft, llm, stance=stance)
 
     # (1) Bounded refine — fix a failing rubric (quality), at the default effort.
     refines = 0
     while evaluation["needs_revision"] and refines < settings.max_refine:
-        draft = reasoner.respond(ctx, plan, llm, critique=evaluation, stance=stance,
-                                 reasoning_effort=settings.reasoner_effort_default)
+        draft = reasoner.respond(
+            ctx,
+            plan,
+            llm,
+            critique=evaluation,
+            stance=stance,
+            reasoning_effort=settings.reasoner_effort_default,
+        )
         evaluation = self_eval.evaluate(ctx, plan, draft, llm, stance=stance)
         refines += 1
     timings["refines"] = refines
@@ -266,11 +294,11 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
     #     reasoning effort and re-evaluate, bounded by MAX_ESCALATE.
     reasoning_effort = settings.reasoner_effort_default
     escalations = 0
-    while (evaluation["confidence"] < settings.tau_escalate
-           and escalations < settings.max_escalate):
+    while evaluation["confidence"] < settings.tau_escalate and escalations < settings.max_escalate:
         reasoning_effort = settings.reasoner_effort_escalated
-        draft = reasoner.respond(ctx, plan, llm, critique=evaluation, stance=stance,
-                                 reasoning_effort=reasoning_effort)
+        draft = reasoner.respond(
+            ctx, plan, llm, critique=evaluation, stance=stance, reasoning_effort=reasoning_effort
+        )
         evaluation = self_eval.evaluate(ctx, plan, draft, llm, stance=stance)
         escalations += 1
     escalated = escalations > 0
@@ -287,13 +315,16 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
         retries = 0
         while not we["ok"] and retries < settings.max_worked_example_retry:
             draft = reasoner.respond(
-                ctx, plan, llm,
+                ctx,
+                plan,
+                llm,
                 critique={
                     "reasons": [f"worked_example {we['reason']}"],
                     "leak_risk": "none",
                     "self_critique": "regenerate a verifiable, non-solution example",
                 },
-                stance=stance, reasoning_effort=reasoning_effort,
+                stance=stance,
+                reasoning_effort=reasoning_effort,
             )
             evaluation = self_eval.evaluate(ctx, plan, draft, llm, stance=stance)
             we = pack.verify_worked_example(draft.get("worked_example") or {}, exercise)
@@ -301,8 +332,7 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
         if we["ok"]:
             src = draft["worked_example"]["source"].strip()
             draft["message"] += (
-                "\n\nHere's a small related example you can run:\n```\n"
-                + src + "\n```"
+                "\n\nHere's a small related example you can run:\n```\n" + src + "\n```"
             )
         else:
             draft["message"] += (
@@ -311,9 +341,9 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
             )
         we_telemetry = {
             "verified": we["ok"],
-            "reason":   we["reason"],
-            "retries":  retries,
-            "shown":    we["ok"],
+            "reason": we["reason"],
+            "retries": retries,
+            "shown": we["ok"],
             "claim_ok": we.get("claim_ok"),
         }
         timings["we_retries"] = retries
@@ -335,7 +365,7 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
     abstained = False
     if stance == "peer" and evaluation["confidence"] < settings.tau_abstain:
         draft = _abstain(draft)
-        plan["intervention"] = "escalate"   # keep governance's escalate flag consistent
+        plan["intervention"] = "escalate"  # keep governance's escalate flag consistent
         abstained = True
 
     # Governance runs LAST, unchanged. In an abstention there is no solution to
@@ -361,7 +391,9 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
         headline_confidence = min(headline_confidence, draft["confidence"])
 
     mem_state = memory.update(
-        store, pid, draft,
+        store,
+        pid,
+        draft,
         exercise_id=exercise["id"],
         result=ctx["last_result"],
         misconception_id=draft.get("misconception_id"),
@@ -385,7 +417,7 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
         # ---- artifact-compatible contract ----
         "affective_state": plan["affective_state"],
         "affect_reasoning": plan["affect_reasoning"],
-        "confidence": round(headline_confidence, 2),   # calibrated, from self-eval
+        "confidence": round(headline_confidence, 2),  # calibrated, from self-eval
         "intervention": plan["intervention"],
         "planner_note": plan["planner_note"],
         "self_critique": evaluation["self_critique"],
@@ -393,18 +425,28 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
         "memory": {"grasped": mem_state["grasped"], "shaky": mem_state["shaky"]},
         "message": draft["message"],
         "check_question": draft.get("check_question"),
-        "worked_example": we_telemetry,   # telemetry only; UI may ignore
+        "worked_example": we_telemetry,  # telemetry only; UI may ignore
         # ---- richer telemetry (UI may ignore) ----
         "components": {
-            "planner": {"target_concept": plan["target_concept"],
-                        "confidence": confidence_trajectory["planner"]},
-            "reasoner": {"raw_confidence": round(reasoner_conf, 2),
-                         "misconception_id": draft.get("misconception_id")},
-            "self_eval": {"leak_risk": evaluation["leak_risk"], "reasons": evaluation["reasons"],
-                          # Goal-alignment quality signal (additive §6; None without goals).
-                          "goal_alignment": evaluation.get("goal_alignment")},
-            "governance": {"prose": _GOV_PROSE.get(gov["flag"], "—"),
-                           "blocked": gov["block"], "reasons": gov["reasons"]},
+            "planner": {
+                "target_concept": plan["target_concept"],
+                "confidence": confidence_trajectory["planner"],
+            },
+            "reasoner": {
+                "raw_confidence": round(reasoner_conf, 2),
+                "misconception_id": draft.get("misconception_id"),
+            },
+            "self_eval": {
+                "leak_risk": evaluation["leak_risk"],
+                "reasons": evaluation["reasons"],
+                # Goal-alignment quality signal (additive §6; None without goals).
+                "goal_alignment": evaluation.get("goal_alignment"),
+            },
+            "governance": {
+                "prose": _GOV_PROSE.get(gov["flag"], "—"),
+                "blocked": gov["block"],
+                "reasons": gov["reasons"],
+            },
             # Wellbeing defense-in-depth (additive §6): a post-hoc berating-softener,
             # NOT a deterministic gate. True iff an obviously berating draft was softened.
             "wellbeing_softened": wellbeing_softened,
@@ -413,7 +455,7 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
             "overlay_declined": (ctx.get("overlay") or {}).get("declined", []),
             "refines": refines,
             # ---- calibrated-uncertainty telemetry (Step 3) ----
-            "reasoning_effort": reasoning_effort,   # effort of the final reasoner draft
+            "reasoning_effort": reasoning_effort,  # effort of the final reasoner draft
             "escalated": escalated,
             "abstained": abstained,
             "confidence_trajectory": confidence_trajectory,
@@ -436,13 +478,16 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
     }
 
     trace = {
-        "event": ctx["event"], "mode": mode, "stance": stance,
+        "event": ctx["event"],
+        "mode": mode,
+        "stance": stance,
         "source": ctx["current_functional_model"],
         "last_result": ctx["last_result"],
         "plan": plan,
-        "reasoner": {k: draft.get(k)
-                     for k in ("message", "confidence", "grasped", "shaky",
-                               "misconception_id")},
+        "reasoner": {
+            k: draft.get(k)
+            for k in ("message", "confidence", "grasped", "shaky", "misconception_id")
+        },
         "self_eval": evaluation,
         "governance": gov,
         "escalated": escalated,
@@ -450,29 +495,58 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
         "final_message": final["message"],
         "telemetry": final["components"],
     }
-    store.append_event(make_event(pid, exercise["id"], mode, "turn", trace,
-                                  stance=stance))
+    store.append_event(make_event(pid, exercise["id"], mode, "turn", trace, stance=stance))
 
     # Additive §6 events (opt-in; fire only when goals/reflect apply, so default
     # behavior with no goals is unchanged and produces no extra events).
     goals_art = ctx.get("goals")
     if goals_art and goals_art.get("honored"):
-        store.append_event(make_event(
-            pid, exercise["id"], mode, "goal_alignment_check",
-            {"goal_text": goals_art.get("text"),
-             "alignment": evaluation.get("goal_alignment"),
-             "intervention": plan["intervention"]}, stance=stance))
+        store.append_event(
+            make_event(
+                pid,
+                exercise["id"],
+                mode,
+                "goal_alignment_check",
+                {
+                    "goal_text": goals_art.get("text"),
+                    "alignment": evaluation.get("goal_alignment"),
+                    "intervention": plan["intervention"],
+                },
+                stance=stance,
+            )
+        )
     if plan.get("intervention") == "reflect":
-        store.append_event(make_event(
-            pid, exercise["id"], mode, "reflect",
-            {"prompt": final["message"], "goal_text": (goals_art or {}).get("text"),
-             "concept": plan.get("target_concept")}, stance=stance))
+        store.append_event(
+            make_event(
+                pid,
+                exercise["id"],
+                mode,
+                "reflect",
+                {
+                    "prompt": final["message"],
+                    "goal_text": (goals_art or {}).get("text"),
+                    "concept": plan.get("target_concept"),
+                },
+                stance=stance,
+            )
+        )
     # Slice F: trace the leak-over-retrieval gate when retrieval ran this turn.
     # Records counts + kept ids + dropped {id, reason} ONLY — never passage text.
     retr = ctx.get("_retrieval")
     if retr:
-        store.append_event(make_event(
-            pid, exercise["id"], mode, "retrieval",
-            {"exercise_id": retr["exercise_id"], "retrieved": retr["retrieved"],
-             "kept": retr["kept"], "dropped": retr["dropped"]}, stance=stance))
+        store.append_event(
+            make_event(
+                pid,
+                exercise["id"],
+                mode,
+                "retrieval",
+                {
+                    "exercise_id": retr["exercise_id"],
+                    "retrieved": retr["retrieved"],
+                    "kept": retr["kept"],
+                    "dropped": retr["dropped"],
+                },
+                stance=stance,
+            )
+        )
     return final

@@ -4,6 +4,7 @@ Per-component usage telemetry (additive §6 `telemetry.component_usage`).
 Covers the UsageMeter aggregation, the additive presence of the field in a turn,
 and population from provider-reported usage via a recording stub (no network).
 """
+
 from __future__ import annotations
 
 import json
@@ -18,12 +19,20 @@ _EX = get_active_pack().get_exercise("ds-foundations")
 
 def _payload(pid="p_tel", stance="peer"):
     return {
-        "participant_id": pid, "exercise": _EX,
-        "event": "run", "mode": "study", "stance": stance,
+        "participant_id": pid,
+        "exercise": _EX,
+        "event": "run",
+        "mode": "study",
+        "stance": stance,
         "source": "import pandas as pd",
-        "result": {"ok": True, "goalMet": False, "metric": None,
-                   "pack": {"id": "datascience", "summary": "0/1 checks passed"}},
-        "recent": [], "signals": None,
+        "result": {
+            "ok": True,
+            "goalMet": False,
+            "metric": None,
+            "pack": {"id": "datascience", "summary": "0/1 checks passed"},
+        },
+        "recent": [],
+        "signals": None,
     }
 
 
@@ -32,14 +41,29 @@ class _PlainStub:
 
     def json(self, *, role, tier, system, user, max_tokens=800, reasoning_effort=None):
         if role == "planner":
-            return {"affective_state": "curious", "affect_reasoning": "x",
-                    "intervention": "co_reason", "target_concept": "group-by",
-                    "planner_note": "n", "confidence": 0.7}
+            return {
+                "affective_state": "curious",
+                "affect_reasoning": "x",
+                "intervention": "co_reason",
+                "target_concept": "group-by",
+                "planner_note": "n",
+                "confidence": 0.7,
+            }
         if role == "reasoner":
-            return {"message": "what one number per group?", "check_question": None,
-                    "confidence": 0.8, "grasped": [], "shaky": ["aggregation"]}
-        return {"needs_revision": False, "confidence": 0.7, "leak_risk": "none",
-                "self_critique": "ok", "reasons": []}
+            return {
+                "message": "what one number per group?",
+                "check_question": None,
+                "confidence": 0.8,
+                "grasped": [],
+                "shaky": ["aggregation"],
+            }
+        return {
+            "needs_revision": False,
+            "confidence": 0.7,
+            "leak_risk": "none",
+            "self_critique": "ok",
+            "reasons": [],
+        }
 
 
 class _UsageStub(_PlainStub):
@@ -47,11 +71,18 @@ class _UsageStub(_PlainStub):
 
     def json(self, *, role, tier, system, user, max_tokens=800, reasoning_effort=None):
         tel.record(role, latency_ms=5.0, prompt_tokens=100, completion_tokens=20, cost=0.001)
-        return super().json(role=role, tier=tier, system=system, user=user,
-                            max_tokens=max_tokens, reasoning_effort=reasoning_effort)
+        return super().json(
+            role=role,
+            tier=tier,
+            system=system,
+            user=user,
+            max_tokens=max_tokens,
+            reasoning_effort=reasoning_effort,
+        )
 
 
 # ── UsageMeter unit ───────────────────────────────────────────────────────────
+
 
 def test_usage_meter_aggregates_per_role():
     m = tel.UsageMeter()
@@ -75,10 +106,11 @@ def test_usage_meter_null_when_unreported():
 
 # ── additive field presence + population in a turn ────────────────────────────
 
+
 def test_component_usage_present_and_additive():
     store = InMemoryStore()
     out = run_turn(_payload(), _PlainStub(), store)
-    assert "component_usage" in out["components"]   # additive field always present
+    assert "component_usage" in out["components"]  # additive field always present
     row = json.loads(store.export_jsonl("p_tel"))
     assert "component_usage" in row["payload"]["telemetry"]
 

@@ -8,6 +8,7 @@ AND updates the structured per-concept mastery map (LearnerState.concepts).
 This is the difference between a stateless demo and a system that can target
 support to a student over time (and supply the longitudinal signal §5e needs).
 """
+
 from __future__ import annotations
 
 from ..store import Store, merge_memory
@@ -26,8 +27,9 @@ def update(
     plan: dict,
 ) -> dict:
     prev = store.get_learner_state(participant_id)
-    merged = merge_memory(prev, {"grasped": draft.get("grasped", []),
-                                 "shaky": draft.get("shaky", [])})
+    merged = merge_memory(
+        prev, {"grasped": draft.get("grasped", []), "shaky": draft.get("shaky", [])}
+    )
     new_concepts = lm_mod.update_concepts(
         prev.get("concepts", {}),
         exercise_id=exercise_id,

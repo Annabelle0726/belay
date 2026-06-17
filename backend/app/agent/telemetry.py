@@ -13,26 +13,41 @@ self-hosted; Anthropic `usage` for anthropic) and are None when the provider doe
 not report them (e.g. a test stub). Cost is provider-configurable and may be 0
 for self-hosted.
 """
+
 from __future__ import annotations
 
 import contextvars
 
 _meter: contextvars.ContextVar[UsageMeter | None] = contextvars.ContextVar(
-    "ptf_usage_meter", default=None)
+    "ptf_usage_meter", default=None
+)
 
 
 class UsageMeter:
     def __init__(self) -> None:
         self._by_role: dict[str, dict] = {}
 
-    def record(self, role: str, *, latency_ms: float,
-               prompt_tokens: int | None, completion_tokens: int | None,
-               cost: float | None) -> None:
-        e = self._by_role.setdefault(role, {
-            "calls": 0, "latency_ms": 0.0,
-            "prompt_tokens": 0, "completion_tokens": 0, "cost": 0.0,
-            "_has_tokens": False, "_has_cost": False,
-        })
+    def record(
+        self,
+        role: str,
+        *,
+        latency_ms: float,
+        prompt_tokens: int | None,
+        completion_tokens: int | None,
+        cost: float | None,
+    ) -> None:
+        e = self._by_role.setdefault(
+            role,
+            {
+                "calls": 0,
+                "latency_ms": 0.0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "cost": 0.0,
+                "_has_tokens": False,
+                "_has_cost": False,
+            },
+        )
         e["calls"] += 1
         e["latency_ms"] = round(e["latency_ms"] + latency_ms, 1)
         if prompt_tokens is not None or completion_tokens is not None:
@@ -71,10 +86,21 @@ def reset_meter(token) -> None:
     _meter.reset(token)
 
 
-def record(role: str, *, latency_ms: float, prompt_tokens: int | None,
-           completion_tokens: int | None, cost: float | None) -> None:
+def record(
+    role: str,
+    *,
+    latency_ms: float,
+    prompt_tokens: int | None,
+    completion_tokens: int | None,
+    cost: float | None,
+) -> None:
     """Record a provider call into the active meter, if any (no-op otherwise)."""
     meter = _meter.get()
     if meter is not None:
-        meter.record(role, latency_ms=latency_ms, prompt_tokens=prompt_tokens,
-                     completion_tokens=completion_tokens, cost=cost)
+        meter.record(
+            role,
+            latency_ms=latency_ms,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            cost=cost,
+        )

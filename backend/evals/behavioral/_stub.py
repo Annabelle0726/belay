@@ -6,13 +6,16 @@ whose reasoner returns a grounded, non-leaking message (records usage so the
 telemetry aggregates have data). `CannedJudge` returns a fixed score. These make
 the harness exercisable end-to-end offline; live runs use real providers.
 """
+
 from __future__ import annotations
 
 from app.agent import telemetry as _tel
 
-_GROUNDED_MSG = ("Looking at your held-out R^2 on the test split — what does that "
-                 "number tell you about how the model will generalize? What's the "
-                 "one thing you'd change next?")
+_GROUNDED_MSG = (
+    "Looking at your held-out R^2 on the test split — what does that "
+    "number tell you about how the model will generalize? What's the "
+    "one thing you'd change next?"
+)
 
 
 class CannedTutor:
@@ -26,19 +29,34 @@ class CannedTutor:
             u = user.lower()
             if "i give up" in u or "nothing works" in u:
                 affect = "frustration"
-            elif '"idk"' in u or "text\": \"idk" in u or "idk" in u:
+            elif '"idk"' in u or 'text": "idk' in u or "idk" in u:
                 affect = "disengaged"
             else:
                 affect = "productive_struggle"
-            return {"affective_state": affect, "affect_reasoning": "cue in dialogue",
-                    "intervention": "co_reason", "target_concept": "generalization",
-                    "planner_note": "guide", "confidence": 0.7}
+            return {
+                "affective_state": affect,
+                "affect_reasoning": "cue in dialogue",
+                "intervention": "co_reason",
+                "target_concept": "generalization",
+                "planner_note": "guide",
+                "confidence": 0.7,
+            }
         if role == "reasoner":
-            return {"message": _GROUNDED_MSG, "check_question": None,
-                    "confidence": 0.8, "grasped": [], "shaky": ["generalization"]}
+            return {
+                "message": _GROUNDED_MSG,
+                "check_question": None,
+                "confidence": 0.8,
+                "grasped": [],
+                "shaky": ["generalization"],
+            }
         # self_eval
-        return {"needs_revision": False, "confidence": 0.75, "leak_risk": "none",
-                "self_critique": "grounded, withholds the fix", "reasons": []}
+        return {
+            "needs_revision": False,
+            "confidence": 0.75,
+            "leak_risk": "none",
+            "self_critique": "grounded, withholds the fix",
+            "reasons": [],
+        }
 
 
 class CannedJudge:

@@ -1,5 +1,6 @@
 """Pydantic schemas for the HTTP edge. Internals use plain dicts; validation
 lives here at the boundary."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -26,13 +27,14 @@ class RunResult(BaseModel):
     score / loss) and all other domain-specific data (gates / dist / diff /
     checks / stdout) lives in the namespaced ``pack`` envelope.
     """
+
     model_config = {"extra": "allow"}
 
     ok: bool
     goalMet: bool | None = None
     metric: float | None = None
     error: str | None = None
-    pack: dict | None = None   # {"id": <pack id>, ...domain-specific fields}
+    pack: dict | None = None  # {"id": <pack id>, ...domain-specific fields}
 
 
 class SolTurnRequest(BaseModel):
@@ -45,7 +47,7 @@ class SolTurnRequest(BaseModel):
     result: dict | None = None
     recent: list[DialogueTurn] = []
     signals: dict | None = None
-    request: str | None = None   # e.g. "reflect" — student-initiated reflect
+    request: str | None = None  # e.g. "reflect" — student-initiated reflect
     overlay: dict | None = None  # opt-in per-learner customization overlay (bounded)
 
 
@@ -65,18 +67,18 @@ class SolTurnResponse(BaseModel):
     memory: Memory
     message: str
     check_question: str | None = None
-    worked_example: dict | None = None   # telemetry only; UI may ignore
+    worked_example: dict | None = None  # telemetry only; UI may ignore
     components: dict[str, Any] = {}
 
 
 class GoalRequest(BaseModel):
     participant_id: str
-    text: str = ""          # the student's own words; empty clears the goals
+    text: str = ""  # the student's own words; empty clears the goals
 
 
 class ReflectionRequest(BaseModel):
     participant_id: str
-    text: str               # the student's reflection, in their own words
+    text: str  # the student's reflection, in their own words
 
 
 class OverlayRequest(BaseModel):

@@ -9,6 +9,7 @@ Runs each registered family `--repeats` times and assembles a JSON report that:
     judge model equals the tutor model under test (a model cannot judge itself);
   - aggregates the §6 per-component telemetry (latency, tokens, cost).
 """
+
 from __future__ import annotations
 
 from app.core.domain import get_active_pack
@@ -17,9 +18,11 @@ from app.store import InMemoryStore
 from .families import registry
 from .fixtures import REVISIT_PREPOP, get_fixtures
 
-_CAT_KEY = {"gate_verdict": "gate_verdicts",
-            "framework_routing": "framework_routing",
-            "judge_signal": "judge_signals"}
+_CAT_KEY = {
+    "gate_verdict": "gate_verdicts",
+    "framework_routing": "framework_routing",
+    "judge_signal": "judge_signals",
+}
 
 
 class _Telemetry:
@@ -33,9 +36,18 @@ class _Telemetry:
         self.turns += 1
         cu = (out.get("components") or {}).get("component_usage") or {}
         for role, e in cu.items():
-            a = self._by.setdefault(role, {"calls": 0, "latency_ms": 0.0,
-                                           "prompt_tokens": 0, "completion_tokens": 0,
-                                           "cost": 0.0, "_tok": False, "_cost": False})
+            a = self._by.setdefault(
+                role,
+                {
+                    "calls": 0,
+                    "latency_ms": 0.0,
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "cost": 0.0,
+                    "_tok": False,
+                    "_cost": False,
+                },
+            )
             a["calls"] += e.get("calls", 0)
             a["latency_ms"] = round(a["latency_ms"] + (e.get("latency_ms") or 0.0), 1)
             if e.get("prompt_tokens") is not None:
@@ -50,7 +62,8 @@ class _Telemetry:
         by, total_cost, has_cost = {}, 0.0, False
         for role, a in self._by.items():
             by[role] = {
-                "calls": a["calls"], "latency_ms": a["latency_ms"],
+                "calls": a["calls"],
+                "latency_ms": a["latency_ms"],
                 "prompt_tokens": a["prompt_tokens"] if a["_tok"] else None,
                 "completion_tokens": a["completion_tokens"] if a["_tok"] else None,
                 "cost": a["cost"] if a["_cost"] else None,
@@ -58,8 +71,11 @@ class _Telemetry:
             if a["_cost"]:
                 total_cost += a["cost"]
                 has_cost = True
-        return {"turns": self.turns, "by_component": by,
-                "total_cost": round(total_cost, 6) if has_cost else None}
+        return {
+            "turns": self.turns,
+            "by_component": by,
+            "total_cost": round(total_cost, 6) if has_cost else None,
+        }
 
 
 class Harness:
@@ -73,6 +89,7 @@ class Harness:
 
     def tutor_turn(self, name: str, goals: str | None = None) -> dict:
         from app.agent import run_turn
+
         store = InMemoryStore()
         payload = self.fixtures[name]
         prepop = REVISIT_PREPOP.get(name)
@@ -80,6 +97,7 @@ class Harness:
             store.save_learner_state(payload["participant_id"], prepop)
         if goals:  # opt-in: set a learner goal before the turn (student-rule-cannot-leak)
             from app.agent.goals import set_goals
+
             set_goals(store, payload["participant_id"], goals)
         out = run_turn(payload, self.tutor, store)
         self.telemetry.add(out)
@@ -88,18 +106,33 @@ class Harness:
     def gate(self, out: dict, name: str) -> dict:
         """DETERMINISTIC gate verdict on the emitted message — never an LLM call."""
         ev = self.pack.leak_evidence(out["message"], self.fixtures[name]["exercise"])
-        return {"is_solution": ev.is_solution, "prose_disclosure": ev.prose_disclosure,
-                "no_solution": (not ev.is_solution) and (not ev.prose_disclosure)}
+        return {
+            "is_solution": ev.is_solution,
+            "prose_disclosure": ev.prose_disclosure,
+            "no_solution": (not ev.is_solution) and (not ev.prose_disclosure),
+        }
 
     def situation(self, name: str) -> dict:
         fx = self.fixtures[name]
-        return {"source": fx.get("source"), "result": fx.get("result"),
-                "recent": fx.get("recent"), "signals": fx.get("signals")}
+        return {
+            "source": fx.get("source"),
+            "result": fx.get("result"),
+            "recent": fx.get("recent"),
+            "signals": fx.get("signals"),
+        }
 
 
-def run_benchmark(*, pack_id: str, tutor, judge, repeats: int, tutor_meta: dict,
-                  judge_meta: dict, temperature: float,
-                  families: list[str] | None = None) -> dict:
+def run_benchmark(
+    *,
+    pack_id: str,
+    tutor,
+    judge,
+    repeats: int,
+    tutor_meta: dict,
+    judge_meta: dict,
+    temperature: float,
+    families: list[str] | None = None,
+) -> dict:
     pack = get_active_pack()
     fixtures = get_fixtures(pack_id)
     fams = registry()

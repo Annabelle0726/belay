@@ -9,6 +9,7 @@ and has nothing of its own to exploit. See ``app/core/runner/__init__.py`` for
 the threat model: this is a resource / network / isolation boundary, not
 adversarial containment.
 """
+
 import os
 import sys
 
@@ -55,7 +56,7 @@ def _block_network() -> None:
     def _blocked(*_a, **_k):
         raise OSError("network access is disabled in the sandbox runner")
 
-    socket.socket = _blocked            # type: ignore[assignment]
+    socket.socket = _blocked  # type: ignore[assignment]
     socket.create_connection = _blocked  # type: ignore[assignment]
     if hasattr(socket, "create_server"):
         socket.create_server = _blocked  # type: ignore[assignment]
@@ -70,6 +71,7 @@ def main() -> None:
     _block_network()
     sys.argv = [prog]
     import runpy
+
     runpy.run_path(prog, run_name="__main__")
 
 

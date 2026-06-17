@@ -5,6 +5,7 @@ It implements the seam with trivial behavior (no student-code execution, no thir
 -party deps) so the orchestrated loop, governance, learner model, and context can
 be exercised without any concrete domain. Template for authoring new packs.
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -44,9 +45,18 @@ _MODULE: Module = {"id": "echo-module", "title": "Module 1 · Echo", "exercises"
 
 class _EchoMisconceptions:
     def for_exercise(self, exercise_id: str) -> dict:
-        return {"concept": "echo concept", "expectations": ["print the expected token"],
-                "misconceptions": [{"id": "echo-mis", "belief": "printing is optional",
-                                    "signature": "no output", "peer_move": "ask what output is expected"}]}
+        return {
+            "concept": "echo concept",
+            "expectations": ["print the expected token"],
+            "misconceptions": [
+                {
+                    "id": "echo-mis",
+                    "belief": "printing is optional",
+                    "signature": "no output",
+                    "peer_move": "ask what output is expected",
+                }
+            ],
+        }
 
 
 class SkeletonPack:
@@ -57,8 +67,10 @@ class SkeletonPack:
 
     def __init__(self) -> None:
         self.taxonomy: Taxonomy = Taxonomy(
-            [Concept(id="echo-concept", label="Echo concept", prereqs=("echo-prereq",)),
-             Concept(id="echo-prereq", label="Echo prerequisite")],
+            [
+                Concept(id="echo-concept", label="Echo concept", prereqs=("echo-prereq",)),
+                Concept(id="echo-prereq", label="Echo prerequisite"),
+            ],
             exercise_concept={"echo-1": "echo-concept"},
             misconception_concept={"echo-mis": "echo-concept"},
             exercise_prereqs={"echo-1": []},
@@ -76,22 +88,29 @@ class SkeletonPack:
     def run(self, source: str, exercise: Exercise) -> RunResult:
         # Echo "grader": goal met iff the source mentions ok. No execution.
         goal = "ok" in source
-        return {"ok": True, "goalMet": goal, "metric": None, "error": None,
-                "pack": {"id": self.id, "summary": "echo: matched" if goal else "echo: no match"}}
+        return {
+            "ok": True,
+            "goalMet": goal,
+            "metric": None,
+            "error": None,
+            "pack": {"id": self.id, "summary": "echo: matched" if goal else "echo: no match"},
+        }
 
     def program_signature(self, source: str):
         return source.strip()
 
-    def verify_worked_example(self, worked_example: WorkedExample,
-                              exercise: Exercise) -> VerifyResult:
+    def verify_worked_example(
+        self, worked_example: WorkedExample, exercise: Exercise
+    ) -> VerifyResult:
         return {"ok": True, "reason": "verified", "dist": None, "claim_ok": None}
 
     def misconceptions(self) -> MisconceptionLibrary:
         return self._mis
 
     def leak_evidence(self, draft: str, exercise: Exercise) -> LeakEvidence:
-        return LeakEvidence(is_solution=False, redacted_message=draft,
-                            prose_disclosure=False, snippets=())
+        return LeakEvidence(
+            is_solution=False, redacted_message=draft, prose_disclosure=False, snippets=()
+        )
 
     def knowledge(self) -> object | None:
         return None

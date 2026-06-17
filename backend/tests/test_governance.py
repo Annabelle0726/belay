@@ -2,6 +2,7 @@
 so it gets the most direct coverage. Covers BOTH leak evidence sources:
 the executable oracle (code that grades as a solution) AND prose disclosure
 (EXTRACTION_PLAN §(f)), plus stance-conditional blocking and answer-seeking."""
+
 from app.agent import governance
 from app.core.domain import get_active_pack
 from app.packs.datascience.solutions import SOLUTIONS
@@ -11,8 +12,10 @@ EX = get_active_pack().get_exercise("ds-foundations")
 # A fenced, full working solution → executable oracle flags it.
 _FULL_SOLUTION = "here you go:\n```python\n" + SOLUTIONS["ds-foundations"]["source"] + "```"
 # Prose that discloses the answer without any runnable code block.
-_PROSE_LEAK = ("Honestly the answer is just to group by category and take the mean — "
-               "you'll get 15, 40, and 100.")
+_PROSE_LEAK = (
+    "Honestly the answer is just to group by category and take the mean — "
+    "you'll get 15, 40, and 100."
+)
 
 
 def _ctx(message_recent=None):
@@ -39,8 +42,10 @@ def test_blocks_prose_disclosure():
 
 
 def test_allows_genuine_hint():
-    draft = {"message": "You've read the CSV — what single number should each category collapse to?",
-             "confidence": 0.7}
+    draft = {
+        "message": "You've read the CSV — what single number should each category collapse to?",
+        "confidence": 0.7,
+    }
     gov = governance.check(_ctx(), {"intervention": "co_reason"}, draft, {})
     assert gov["block"] is False
     assert gov["flag"] == "none"
@@ -48,14 +53,22 @@ def test_allows_genuine_hint():
 
 def test_answer_seeking_sets_redirect():
     recent = [{"who": "student", "text": "just tell me the answer please"}]
-    draft = {"message": "Let's think about what one number summarizes a category.", "confidence": 0.7}
+    draft = {
+        "message": "Let's think about what one number summarizes a category.",
+        "confidence": 0.7,
+    }
     gov = governance.check(_ctx(recent), {"intervention": "co_reason"}, draft, {})
     assert gov["flag"] == "redirect_answer_seeking"
 
 
 def test_safe_rewrite_strips_solution_keeps_prose():
-    draft = {"message": "ok here:\n```python\n" + SOLUTIONS["ds-foundations"]["source"] + "```\ngood luck",
-             "confidence": 0.95, "check_question": None}
+    draft = {
+        "message": "ok here:\n```python\n"
+        + SOLUTIONS["ds-foundations"]["source"]
+        + "```\ngood luck",
+        "confidence": 0.95,
+        "check_question": None,
+    }
     out = governance.safe_rewrite(draft, {"flag": "withholding_solution"}, EX)
     assert "groupby" not in out["message"]
     assert "good luck" in out["message"]
@@ -64,6 +77,7 @@ def test_safe_rewrite_strips_solution_keeps_prose():
 
 
 # --- stance-conditional blocking ---
+
 
 def test_peer_stance_strips_full_solution():
     """peer: a draft containing the working solution must be blocked."""

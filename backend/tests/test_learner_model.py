@@ -5,6 +5,7 @@ Deterministic tests for the persistent learner model (DS fixtures):
   - planner overlay: revisit fires in peer+calm, is coerced away in oracle/teach/
     goal_met/encourage/diagnose
 """
+
 from __future__ import annotations
 
 from app.agent import learner_model as lm
@@ -46,6 +47,7 @@ def _ctx(*, mode="study", goal_met=False, repeated_error=False, due_review=None)
 
 
 # ── §1 concept taxonomy ───────────────────────────────────────────────────────
+
 
 class TestConceptMappings:
     def test_all_concept_ids_in_concepts_dict(self):
@@ -95,110 +97,202 @@ class TestRelevantConcepts:
 
 # ── §2 update_concepts (uses the active DS pack's taxonomy) ────────────────────
 
+
 class TestUpdateConcepts:
     def test_touch_increments_evidence(self):
         concepts = lm.update_concepts(
-            {}, exercise_id="ds-regression", result={}, misconception_id=None,
-            repeated_error=False, now=_TS,
+            {},
+            exercise_id="ds-regression",
+            result={},
+            misconception_id=None,
+            repeated_error=False,
+            now=_TS,
         )
         assert concepts["linear-regression"]["evidence"] == 1
         assert concepts["linear-regression"]["last_seen"] == _TS
 
     def test_solve_sets_grasped(self):
         concepts = lm.update_concepts(
-            {}, exercise_id="ds-regression", result={"goal_met": True},
-            misconception_id=None, repeated_error=False, now=_TS,
+            {},
+            exercise_id="ds-regression",
+            result={"goal_met": True},
+            misconception_id=None,
+            repeated_error=False,
+            now=_TS,
         )
         assert concepts["linear-regression"]["state"] == "grasped"
 
     def test_no_solve_stays_shaky(self):
         concepts = lm.update_concepts(
-            {}, exercise_id="ds-regression", result={"goal_met": False},
-            misconception_id=None, repeated_error=False, now=_TS,
+            {},
+            exercise_id="ds-regression",
+            result={"goal_met": False},
+            misconception_id=None,
+            repeated_error=False,
+            now=_TS,
         )
         assert concepts["linear-regression"]["state"] == "shaky"
 
     def test_misconception_sets_shaky(self):
         concepts = lm.update_concepts(
-            {}, exercise_id="ds-regression", result={},
-            misconception_id="DS-corr-causation", repeated_error=False, now=_TS,
+            {},
+            exercise_id="ds-regression",
+            result={},
+            misconception_id="DS-corr-causation",
+            repeated_error=False,
+            now=_TS,
         )
         assert concepts["correlation-causation"]["state"] == "shaky"
 
     def test_grasped_sticks_with_enough_evidence(self):
-        prev = {"correlation-causation": {"state": "grasped", "evidence": 2,
-                "last_seen": _TS, "last_review": None, "last_review_ex": None}}
+        prev = {
+            "correlation-causation": {
+                "state": "grasped",
+                "evidence": 2,
+                "last_seen": _TS,
+                "last_review": None,
+                "last_review_ex": None,
+            }
+        }
         concepts = lm.update_concepts(
-            prev, exercise_id="ds-regression", result={},
-            misconception_id="DS-corr-causation", repeated_error=False, now=_TS,
+            prev,
+            exercise_id="ds-regression",
+            result={},
+            misconception_id="DS-corr-causation",
+            repeated_error=False,
+            now=_TS,
         )
         assert concepts["correlation-causation"]["state"] == "grasped"
 
     def test_grasped_overridden_with_low_evidence(self):
-        prev = {"correlation-causation": {"state": "grasped", "evidence": 1,
-                "last_seen": _TS, "last_review": None, "last_review_ex": None}}
+        prev = {
+            "correlation-causation": {
+                "state": "grasped",
+                "evidence": 1,
+                "last_seen": _TS,
+                "last_review": None,
+                "last_review_ex": None,
+            }
+        }
         concepts = lm.update_concepts(
-            prev, exercise_id="ds-regression", result={},
-            misconception_id="DS-corr-causation", repeated_error=False, now=_TS,
+            prev,
+            exercise_id="ds-regression",
+            result={},
+            misconception_id="DS-corr-causation",
+            repeated_error=False,
+            now=_TS,
         )
         assert concepts["correlation-causation"]["state"] == "shaky"
 
     def test_repeated_error_sets_shaky(self):
         concepts = lm.update_concepts(
-            {}, exercise_id="ds-regression", result={"goal_met": False},
-            misconception_id=None, repeated_error=True, now=_TS,
+            {},
+            exercise_id="ds-regression",
+            result={"goal_met": False},
+            misconception_id=None,
+            repeated_error=True,
+            now=_TS,
         )
         assert concepts["linear-regression"]["state"] == "shaky"
 
     def test_repeated_error_does_not_override_firmly_grasped(self):
-        prev = {"linear-regression": {"state": "grasped", "evidence": 2,
-                "last_seen": _TS, "last_review": None, "last_review_ex": None}}
+        prev = {
+            "linear-regression": {
+                "state": "grasped",
+                "evidence": 2,
+                "last_seen": _TS,
+                "last_review": None,
+                "last_review_ex": None,
+            }
+        }
         concepts = lm.update_concepts(
-            prev, exercise_id="ds-regression", result={"goal_met": False},
-            misconception_id=None, repeated_error=True, now=_TS,
+            prev,
+            exercise_id="ds-regression",
+            result={"goal_met": False},
+            misconception_id=None,
+            repeated_error=True,
+            now=_TS,
         )
         assert concepts["linear-regression"]["state"] == "grasped"
 
     def test_revisit_updates_last_review(self):
-        prev = {"grouping-aggregation": {"state": "shaky", "evidence": 1,
-                "last_seen": _TS, "last_review": None, "last_review_ex": None}}
+        prev = {
+            "grouping-aggregation": {
+                "state": "shaky",
+                "evidence": 1,
+                "last_seen": _TS,
+                "last_review": None,
+                "last_review_ex": None,
+            }
+        }
         concepts = lm.update_concepts(
-            prev, exercise_id="ds-regression", result={}, misconception_id=None,
-            repeated_error=False, now=_TS, revisit_concept="grouping-aggregation",
+            prev,
+            exercise_id="ds-regression",
+            result={},
+            misconception_id=None,
+            repeated_error=False,
+            now=_TS,
+            revisit_concept="grouping-aggregation",
         )
         assert concepts["grouping-aggregation"]["last_review"] == _TS
         assert concepts["grouping-aggregation"]["last_review_ex"] == "ds-regression"
 
     def test_revisit_unknown_concept_is_safe(self):
         concepts = lm.update_concepts(
-            {}, exercise_id="ds-regression", result={}, misconception_id=None,
-            repeated_error=False, now=_TS, revisit_concept="transformers",
+            {},
+            exercise_id="ds-regression",
+            result={},
+            misconception_id=None,
+            repeated_error=False,
+            now=_TS,
+            revisit_concept="transformers",
         )
         assert "transformers" not in concepts
 
     def test_goalmet_in_camelcase_recognized(self):
         concepts = lm.update_concepts(
-            {}, exercise_id="ds-regression", result={"goalMet": True},
-            misconception_id=None, repeated_error=False, now=_TS,
+            {},
+            exercise_id="ds-regression",
+            result={"goalMet": True},
+            misconception_id=None,
+            repeated_error=False,
+            now=_TS,
         )
         assert concepts["linear-regression"]["state"] == "grasped"
 
     def test_does_not_mutate_prev(self):
-        prev = {"linear-regression": {"state": "shaky", "evidence": 1,
-                "last_seen": _TS, "last_review": None, "last_review_ex": None}}
+        prev = {
+            "linear-regression": {
+                "state": "shaky",
+                "evidence": 1,
+                "last_seen": _TS,
+                "last_review": None,
+                "last_review_ex": None,
+            }
+        }
         lm.update_concepts(
-            prev, exercise_id="ds-regression", result={"goal_met": True},
-            misconception_id=None, repeated_error=False, now=_TS,
+            prev,
+            exercise_id="ds-regression",
+            result={"goal_met": True},
+            misconception_id=None,
+            repeated_error=False,
+            now=_TS,
         )
         assert prev["linear-regression"]["state"] == "shaky"
 
 
 # ── §3 due_review ─────────────────────────────────────────────────────────────
 
+
 class TestDueReview:
     def _entry(self, state, last_review_ex=None):
-        return {"state": state, "evidence": 1, "last_seen": _TS,
-                "last_review": None, "last_review_ex": last_review_ex}
+        return {
+            "state": state,
+            "evidence": 1,
+            "last_seen": _TS,
+            "last_review": None,
+            "last_review_ex": last_review_ex,
+        }
 
     def test_shaky_relevant_not_reviewed_is_due(self):
         # grouping-aggregation is relevant to ds-regression (via the exercise prereq).
@@ -231,6 +325,7 @@ class TestDueReview:
 
 
 # ── §4 planner overlay ────────────────────────────────────────────────────────
+
 
 class TestPlannerOverlay:
     def test_calm_turn_with_due_review_becomes_revisit(self):

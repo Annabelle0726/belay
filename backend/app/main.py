@@ -23,6 +23,7 @@ Consent gating (DMP §3 / IRB)
   The trace export reads ONLY the durable store; tutoring behaviour is
   byte-for-byte identical regardless of consent.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -59,8 +60,8 @@ app.add_middleware(
 
 # --- wiring (swappable via env) ----------------------------------------------
 _durable = SqlStore() if settings.store_backend == "sql" else InMemoryStore()
-_router  = ConsentRouter(_durable)
-_pack    = get_active_pack()   # active DomainPack (TUTOR_PACK, default datascience)
+_router = ConsentRouter(_durable)
+_pack = get_active_pack()  # active DomainPack (TUTOR_PACK, default datascience)
 
 
 def _llm():
@@ -80,8 +81,12 @@ app.include_router(_build_quad_router(_router, _pack, _llm))
 
 @app.get("/healthz")
 def healthz():
-    return {"ok": True, "pack": _pack.id, "provider": settings.provider,
-            "store": settings.store_backend}
+    return {
+        "ok": True,
+        "pack": _pack.id,
+        "provider": settings.provider,
+        "store": settings.store_backend,
+    }
 
 
 @app.get("/api/curriculum")
@@ -98,10 +103,15 @@ def run(req: RunRequest):
     result = _pack.run(req.source, ex)
     # Route the trace event to durable or ephemeral based on consent.
     store = _router.store_for(req.participant_id)
-    store.append_event(make_event(
-        req.participant_id, req.exercise_id, "study", "run",
-        {"source": req.source, "result": result},
-    ))
+    store.append_event(
+        make_event(
+            req.participant_id,
+            req.exercise_id,
+            "study",
+            "run",
+            {"source": req.source, "result": result},
+        )
+    )
     return result
 
 
@@ -151,6 +161,7 @@ def export_events(pid: str):
 
 # --- learner-authored goals (opt-in; pseudonymous, never PII, never to grades) --
 
+
 @app.post("/api/goals")
 def set_goals(req: GoalRequest):
     """Set/update (empty text clears) the student's own goals. Stored
@@ -158,7 +169,7 @@ def set_goals(req: GoalRequest):
     store = _router.store_for(req.participant_id)
     artifact = goals_mod.set_goals(store, req.participant_id, req.text)
     resp = {"participant_id": req.participant_id, "goals": artifact}
-    if artifact and artifact.get("floor") == "distress":   # Slice G: surface the frame
+    if artifact and artifact.get("floor") == "distress":  # Slice G: surface the frame
         resp["distress_support"] = distress_mod.frame_from_settings(settings)
     return resp
 
@@ -166,8 +177,7 @@ def set_goals(req: GoalRequest):
 @app.get("/api/goals/{pid}")
 def get_goals(pid: str):
     store = _router.store_for(pid)
-    return {"participant_id": pid,
-            "goals": goals_mod.get_goals(store.get_learner_state(pid))}
+    return {"participant_id": pid, "goals": goals_mod.get_goals(store.get_learner_state(pid))}
 
 
 @app.post("/api/reflection")
@@ -177,7 +187,7 @@ def add_reflection(req: ReflectionRequest):
     store = _router.store_for(req.participant_id)
     reflection = goals_mod.add_reflection(store, req.participant_id, req.text)
     resp = {"participant_id": req.participant_id, "reflection": reflection}
-    if reflection and reflection.get("floor") == "distress":   # Slice G: surface the frame
+    if reflection and reflection.get("floor") == "distress":  # Slice G: surface the frame
         resp["distress_support"] = distress_mod.frame_from_settings(settings)
     return resp
 

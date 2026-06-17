@@ -24,6 +24,7 @@ data-science pack) will need prose-leak heuristics; see EXTRACTION_PLAN §(f).
 Governance flags map onto the values the front-end glass box already renders:
   none | withholding_solution | redirect_answer_seeking | encourage_tone | flag_escalate
 """
+
 from __future__ import annotations
 
 import re
@@ -57,7 +58,7 @@ _BERATING = re.compile(
     r"too\s+(dumb|stupid|slow|lazy))\b"
     r"|\byou'?(ll| will)\s+never\s+(be\s+(any\s+)?good|get|understand|learn|amount|make it|succeed)\b"
     r"|\byou\s+should\s+(feel\s+)?(ashamed|embarrassed|be\s+ashamed)\b"
-    r"|\byou\s+should'?(ve| have)\s+known\s+better\b"   # contempt, not correction
+    r"|\byou\s+should'?(ve| have)\s+known\s+better\b"  # contempt, not correction
     r"|\byou\s+don'?t\s+deserve\b"
     r"|\bwhat'?s\s+wrong\s+with\s+you\b"
     # put-down comparison ("everyone finds this easy/obvious"); NOTE this is the
@@ -87,8 +88,9 @@ def _student_asked_for_answer(ctx: dict) -> bool:
     return False
 
 
-def check(ctx: dict, plan: dict, draft: dict, evaluation: dict,
-          stance: str = "peer", pack=None) -> dict:
+def check(
+    ctx: dict, plan: dict, draft: dict, evaluation: dict, stance: str = "peer", pack=None
+) -> dict:
     pack = pack or get_active_pack()
     exercise = ctx["_exercise_full"]
     flag = "none"
@@ -133,11 +135,15 @@ def safe_rewrite(draft: dict, gov: dict, exercise: dict, pack=None) -> dict:
     """
     pack = pack or get_active_pack()
     msg = pack.leak_evidence(draft.get("message", ""), exercise).redacted_message
-    redirect = ("Actually — I don't want to just paste the whole thing, that's the part "
-                "worth working out. What's the *one* operation you think comes next, and why?")
+    redirect = (
+        "Actually — I don't want to just paste the whole thing, that's the part "
+        "worth working out. What's the *one* operation you think comes next, and why?"
+    )
     draft = dict(draft)
     draft["message"] = (msg + "\n\n" + redirect).strip() if msg else redirect
-    draft["check_question"] = draft.get("check_question") or "What do you think the next single step is?"
+    draft["check_question"] = (
+        draft.get("check_question") or "What do you think the next single step is?"
+    )
     # If we had to suppress a solution, the tutor shouldn't also claim high confidence.
     draft["confidence"] = min(float(draft.get("confidence", 0.5)), 0.6)
     return draft
@@ -162,8 +168,9 @@ def screen_passages(passages, exercise: dict, pack=None) -> dict:
     for p in passages:
         ev = pack.leak_evidence(p.text, exercise)
         if ev.is_solution or ev.prose_disclosure:
-            dropped.append({"id": p.id,
-                            "reason": "is_solution" if ev.is_solution else "prose_disclosure"})
+            dropped.append(
+                {"id": p.id, "reason": "is_solution" if ev.is_solution else "prose_disclosure"}
+            )
         else:
             kept.append(p)
     return {"kept": kept, "dropped": dropped, "retrieved": len(passages)}

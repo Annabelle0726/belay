@@ -6,6 +6,7 @@ content. On an explicit distress signal (only when DISTRESS_ROUTING_ENABLED) it
 short-circuits to a deterministic, kind frame that surfaces institution-configured
 support and routes to a human, and suppresses normal tutoring. Off by default.
 """
+
 from __future__ import annotations
 
 import json
@@ -19,36 +20,63 @@ from app.store import InMemoryStore
 
 _EX = get_active_pack().get_exercise("ds-foundations")
 _DISTRESS_MSG = "honestly I want to die, I can't do this anymore"
-_DISTRESS_SNIPPET = "want to die"          # the distinctive input snippet (privacy probe)
-_DESPAIR_MSG = "I feel hopeless and want to give up on this degree"   # NOT a crisis signal
+_DISTRESS_SNIPPET = "want to die"  # the distinctive input snippet (privacy probe)
+_DESPAIR_MSG = "I feel hopeless and want to give up on this degree"  # NOT a crisis signal
 
 
 def _payload(pid, student_text=None, stance="peer"):
     recent = [{"who": "student", "text": student_text}] if student_text else []
-    return {"participant_id": pid, "exercise": _EX, "event": "chat", "mode": "study",
-            "stance": stance, "source": "import pandas as pd",
-            "result": {"ok": True, "goalMet": False, "metric": None,
-                       "pack": {"id": "datascience", "summary": "0/1 checks passed"}},
-            "recent": recent, "signals": None}
+    return {
+        "participant_id": pid,
+        "exercise": _EX,
+        "event": "chat",
+        "mode": "study",
+        "stance": stance,
+        "source": "import pandas as pd",
+        "result": {
+            "ok": True,
+            "goalMet": False,
+            "metric": None,
+            "pack": {"id": "datascience", "summary": "0/1 checks passed"},
+        },
+        "recent": recent,
+        "signals": None,
+    }
 
 
 class _CallStub:
     """Records which roles were called; returns benign (non-leaking) outputs so a
     NON-suppressed turn produces a normal tutor message."""
+
     def __init__(self):
         self.roles = []
 
     def json(self, *, role, tier, system, user, max_tokens=800, reasoning_effort=None):
         self.roles.append(role)
         if role == "planner":
-            return {"affective_state": "curious", "affect_reasoning": "x",
-                    "intervention": "co_reason", "target_concept": "g",
-                    "planner_note": "n", "confidence": 0.8}
+            return {
+                "affective_state": "curious",
+                "affect_reasoning": "x",
+                "intervention": "co_reason",
+                "target_concept": "g",
+                "planner_note": "n",
+                "confidence": 0.8,
+            }
         if role == "reasoner":
-            return {"message": "What single number should each category collapse to?",
-                    "check_question": None, "confidence": 0.8, "grasped": [], "shaky": []}
-        return {"needs_revision": False, "confidence": 0.8, "leak_risk": "none",
-                "self_critique": "ok", "reasons": []}
+            return {
+                "message": "What single number should each category collapse to?",
+                "check_question": None,
+                "confidence": 0.8,
+                "grasped": [],
+                "shaky": [],
+            }
+        return {
+            "needs_revision": False,
+            "confidence": 0.8,
+            "leak_risk": "none",
+            "self_critique": "ok",
+            "reasons": [],
+        }
 
 
 def _events(store, pid):
@@ -59,26 +87,42 @@ def _enable(monkeypatch, *, configured: bool, trace: bool = True):
     monkeypatch.setattr(settings, "distress_routing_enabled", True)
     monkeypatch.setattr(settings, "distress_trace_enabled", trace)
     if configured:
-        monkeypatch.setattr(settings, "distress_support_message",
-                            "Campus Wellbeing is available 24/7 at the student portal.")
-        monkeypatch.setattr(settings, "distress_escalation_target",
-                            "the on-call student support coordinator")
+        monkeypatch.setattr(
+            settings,
+            "distress_support_message",
+            "Campus Wellbeing is available 24/7 at the student portal.",
+        )
+        monkeypatch.setattr(
+            settings, "distress_escalation_target", "the on-call student support coordinator"
+        )
     # else: leave the [FILL-IN] defaults in place
 
 
 # ── detection seam: explicit-crisis-only, conservative ────────────────────────
 
+
 def test_detector_triggers_on_explicit_crisis_only():
-    for t in ("I want to die", "I'm going to kill myself", "I feel suicidal",
-              "thinking about self-harm", "no reason to live", "better off dead"):
+    for t in (
+        "I want to die",
+        "I'm going to kill myself",
+        "I feel suicidal",
+        "thinking about self-harm",
+        "no reason to live",
+        "better off dead",
+    ):
         assert distress.has_distress_signal(t) is True, t
     # NEGATIVE control — academic despair / frustration / idioms must NOT trigger
-    for t in (_DESPAIR_MSG, "I'm so stressed about this course",
-              "this homework is killing me", "I want to give up on this problem"):
+    for t in (
+        _DESPAIR_MSG,
+        "I'm so stressed about this course",
+        "this homework is killing me",
+        "I want to give up on this problem",
+    ):
         assert distress.has_distress_signal(t) is False, t
 
 
 # ── invariant 2: disabled by default → byte-identical, no detection, no event ─
+
 
 def test_disabled_default_runs_normal_tutoring_byte_identical():
     # settings.distress_routing_enabled defaults False (not enabled here).
@@ -96,6 +140,7 @@ def test_disabled_default_runs_normal_tutoring_byte_identical():
 
 
 # ── enabled + configured: route, suppress, content-free event ─────────────────
+
 
 def test_enabled_configured_routes_and_suppresses(monkeypatch):
     _enable(monkeypatch, configured=True)
@@ -116,8 +161,9 @@ def test_enabled_configured_routes_and_suppresses(monkeypatch):
 
 # ── invariant 3: enabled but NOT configured → safe generic frame, no [FILL-IN] ─
 
+
 def test_enabled_unconfigured_safe_generic_no_fillin(monkeypatch, caplog):
-    _enable(monkeypatch, configured=False)   # FILL-IN defaults remain
+    _enable(monkeypatch, configured=False)  # FILL-IN defaults remain
     store = InMemoryStore()
     with caplog.at_level(logging.WARNING, logger="peer_tutor.distress"):
         out = run_turn(_payload("p_unc", _DISTRESS_MSG), _CallStub(), store)
@@ -126,8 +172,7 @@ def test_enabled_unconfigured_safe_generic_no_fillin(monkeypatch, caplog):
     # safe generic wording instead, pointing outward (not isolating)
     assert "someone you trust" in out["message"] or "support channels" in out["message"]
     # operator config warning logged (no PII, no learner text)
-    assert any(r.levelno == logging.WARNING and "FILL-IN" in r.getMessage()
-               for r in caplog.records)
+    assert any(r.levelno == logging.WARNING and "FILL-IN" in r.getMessage() for r in caplog.records)
     # event records configured/routed = False
     evs = _events(store, "p_unc")
     assert evs[0]["payload"] == {"triggered": True, "configured": False, "routed": False}
@@ -135,24 +180,26 @@ def test_enabled_unconfigured_safe_generic_no_fillin(monkeypatch, caplog):
 
 # ── negative control (the boundary): academic despair runs normal tutoring ────
 
+
 def test_negative_control_academic_despair_does_not_route(monkeypatch):
     _enable(monkeypatch, configured=True)
     store = InMemoryStore()
     stub = _CallStub()
     out = run_turn(_payload("p_neg", _DESPAIR_MSG), stub, store)
-    assert "planner" in stub.roles and "reasoner" in stub.roles    # tutoring ran
+    assert "planner" in stub.roles and "reasoner" in stub.roles  # tutoring ran
     assert out["message"] == "What single number should each category collapse to?"
     assert "distress" not in [e["event_type"] for e in _events(store, "p_neg")]
 
 
 # ── intake: a distress-signaling goal is not honored and not stored verbatim ──
 
+
 def test_intake_goal_distress_not_honored_not_stored(monkeypatch):
     _enable(monkeypatch, configured=True)
     store = InMemoryStore()
     art = goals_mod.set_goals(store, "p_goal", "my goal is to stop existing, I want to die")
     assert art["honored"] is False and art["floor"] == "distress"
-    assert art["text"] is None                                  # not stored verbatim
+    assert art["text"] is None  # not stored verbatim
     stored = goals_mod.get_goals(store.get_learner_state("p_goal"))
     assert stored["text"] is None
     # the distinctive distress snippet appears NOWHERE in the trace
@@ -177,37 +224,50 @@ def test_intake_route_surfaces_frame(monkeypatch):
 
     from app.integrations.quad import build_router
     from app.store import ConsentRouter
+
     _enable(monkeypatch, configured=True)
     app = FastAPI()
-    app.include_router(build_router(ConsentRouter(InMemoryStore()), get_active_pack(),
-                                    lambda: None))
-    r = TestClient(app).post("/quad/v1/goals",
-                             json={"pseudo_id": "gh:9", "text": "I want to die, end my life"})
+    app.include_router(
+        build_router(ConsentRouter(InMemoryStore()), get_active_pack(), lambda: None)
+    )
+    r = TestClient(app).post(
+        "/quad/v1/goals", json={"pseudo_id": "gh:9", "text": "I want to die, end my life"}
+    )
     assert r.status_code == 200
     body = r.json()
-    assert "Campus Wellbeing is available" in body["distress_support"]   # frame surfaced
+    assert "Campus Wellbeing is available" in body["distress_support"]  # frame surfaced
     assert body["goals"]["honored"] is False and body["goals"]["text"] is None
-    assert "end my life" not in r.text                                   # no verbatim echo
+    assert "end my life" not in r.text  # no verbatim echo
 
 
 # ── privacy: no verbatim distress text and no PII in the trace ────────────────
+
 
 def test_no_verbatim_distress_text_or_pii_in_trace(monkeypatch):
     _enable(monkeypatch, configured=True)
     store = InMemoryStore()
     run_turn(_payload("p_priv", _DISTRESS_MSG), _CallStub(), store)
     export = store.export_jsonl("p_priv")
-    assert _DISTRESS_SNIPPET not in export                  # no verbatim distress text
-    assert "import pandas" not in export                    # no source either (no turn row)
+    assert _DISTRESS_SNIPPET not in export  # no verbatim distress text
+    assert "import pandas" not in export  # no source either (no turn row)
     evs = _events(store, "p_priv")
     # the distress event payload is EXACTLY the content-free signal — nothing else
     assert evs[0]["payload"] == {"triggered": True, "configured": True, "routed": True}
     # row shape stays the fixed 8 fields
-    assert set(evs[0]) == {"participant_id", "ts", "exercise_id", "mode",
-                           "event_type", "stance", "payload", "note"}
+    assert set(evs[0]) == {
+        "participant_id",
+        "ts",
+        "exercise_id",
+        "mode",
+        "event_type",
+        "stance",
+        "payload",
+        "note",
+    }
 
 
 # ── trace disable: with DISTRESS_TRACE_ENABLED false, no distress event ───────
+
 
 def test_trace_disabled_writes_no_distress_event(monkeypatch):
     _enable(monkeypatch, configured=True, trace=False)

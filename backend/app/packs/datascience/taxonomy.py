@@ -14,6 +14,7 @@ Strata (id prefix is informational only; ids are globally unique):
   4 regression-classification                        5 model-evaluation
   6 optimization-nn-fundamentals                     7 advanced-neural-networks
 """
+
 from __future__ import annotations
 
 from ...core.domain import Concept, Taxonomy
@@ -22,7 +23,11 @@ from ...core.domain import Concept, Taxonomy
 _CONCEPTS: list[tuple[str, str, tuple[str, ...]]] = [
     # ── 1. data foundations ──────────────────────────────────────────────────
     ("data-types", "Data types (numeric, categorical, ordinal, datetime)", ()),
-    ("tabular-structure", "Tabular data: rows as observations, columns as variables", ("data-types",)),
+    (
+        "tabular-structure",
+        "Tabular data: rows as observations, columns as variables",
+        ("data-types",),
+    ),
     ("tidy-data", "Tidy data principles", ("tabular-structure",)),
     ("missing-data", "Missing data and NA semantics", ("tabular-structure",)),
     ("data-io", "Reading and writing data (CSV, etc.)", ("tabular-structure",)),
@@ -66,7 +71,11 @@ _CONCEPTS: list[tuple[str, str, tuple[str, ...]]] = [
     ("cross-validation", "Cross-validation", ("train-test-split",)),
     ("overfitting-underfitting", "Overfitting vs underfitting", ("train-test-split",)),
     ("bias-variance", "Bias-variance tradeoff", ("overfitting-underfitting",)),
-    ("classification-metrics", "Classification metrics (precision/recall/F1)", ("classification-basics",)),
+    (
+        "classification-metrics",
+        "Classification metrics (precision/recall/F1)",
+        ("classification-basics",),
+    ),
     ("imbalanced-classes", "Accuracy on imbalanced classes", ("classification-metrics",)),
     ("regression-metrics", "Regression metrics (MSE, R^2)", ("linear-regression",)),
     ("roc-auc", "ROC and AUC", ("classification-metrics",)),
@@ -89,7 +98,11 @@ _CONCEPTS: list[tuple[str, str, tuple[str, ...]]] = [
     ("attention", "Attention mechanism", ("sequence-models",)),
     ("transformers", "Transformer architecture", ("attention",)),
     ("embeddings", "Embeddings", ("mlp",)),
-    ("regularization-nn", "Neural-net regularization (dropout, weight decay)", ("mlp", "regularization")),
+    (
+        "regularization-nn",
+        "Neural-net regularization (dropout, weight decay)",
+        ("mlp", "regularization"),
+    ),
     ("transfer-learning", "Transfer learning", ("mlp",)),
     ("batchnorm", "Normalization layers (batch/layer norm)", ("mlp", "feature-scaling")),
 ]
@@ -135,8 +148,9 @@ EXERCISE_PREREQS: dict[str, list[str]] = {
 
 
 def build_taxonomy() -> Taxonomy:
-    concepts = [Concept(id=cid, label=label, prereqs=tuple(prereqs))
-                for cid, label, prereqs in _CONCEPTS]
+    concepts = [
+        Concept(id=cid, label=label, prereqs=tuple(prereqs)) for cid, label, prereqs in _CONCEPTS
+    ]
     return Taxonomy(
         concepts,
         exercise_concept=EXERCISE_CONCEPT,
