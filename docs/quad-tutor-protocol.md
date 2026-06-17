@@ -203,6 +203,19 @@ the server) and the read-only grades firewall, the deployment keeps PII and
 student work inside the institution's boundary. Self-hosted inference is a privacy
 *strengthener*, not a new off-box data path.
 
+## Distress routing (pre-go-live, optional, IRB-owned)
+
+Distress routing is **off by default**. If you enable it (`DISTRESS_ROUTING_ENABLED=true`),
+you **must** also set `DISTRESS_SUPPORT_MESSAGE` and `DISTRESS_ESCALATION_TARGET` to your
+institution's IRB- and jurisdiction-approved resources. Enabling routing **without**
+configuring those is a pre-go-live **misconfiguration**: the tutor would render only a
+safe generic frame with no institution-specific resources. App startup and
+`python -m app.preflight` emit a prominent operator WARNING in exactly that state, so it
+is caught in deployment testing rather than at a learner's first triggered turn. The
+detector is a **narrow net and a supplement to human channels, never the primary
+safeguard** — false negatives are expected; it routes toward people, it does not replace
+them. See `docs/PRIVACY.md`. The framework invents no hotline, number, or service.
+
 ## Versioning
 
 The protocol is versioned in the path (`/quad/v1`). §6 schema additions are

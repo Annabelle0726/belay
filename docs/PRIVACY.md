@@ -119,6 +119,21 @@ the additive `distress` trace event (disable-able via `DISTRESS_TRACE_ENABLED`) 
 exactly `{triggered, configured, routed}`. Two decisions remain institution + IRB owned:
 the detection boundary, and whether the content-free trace event is recorded at all.
 
+**Honest framing of the detector.** The distress signal is a deliberately narrow net: a
+small, conservative, explicit-crisis lexical trigger. It is a **supplement to human
+channels, never the primary safeguard** — **false negatives are expected** (it will miss
+indirect or euphemistic expressions), and that is the accepted trade for not pathologizing
+normal academic struggle (false positives route to support, the low-harm direction). It
+does not assess severity. The real safeguards are people and the institution's support
+channels; this layer only routes toward them faster.
+
+**Deployment (pre-go-live).** Enabling `DISTRESS_ROUTING_ENABLED` **without** a configured
+`DISTRESS_SUPPORT_MESSAGE` / `DISTRESS_ESCALATION_TARGET` is a misconfiguration: the tutor
+would render the safe generic frame with no institution-specific resources. The Slice H
+**startup warning** (and `python -m app.preflight`) emits a prominent operator WARNING in
+exactly that state so it is caught in deployment testing, not at the first triggered turn.
+Configure both (under IRB and jurisdiction) before go-live.
+
 ## The export contract
 
 The research trace carries no PII: events are keyed by the pseudonymous id and the

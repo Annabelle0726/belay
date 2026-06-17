@@ -777,9 +777,40 @@ cd backend && python -m pytest tests/test_distress.py tests/test_import_boundari
 ## Slice H — CI quality gate (ruff + mypy) + distress startup warning
 
 **Baseline floor (pre-Slice-H, off HEAD `3fe1c54`): `335 passed, 1 skipped`.** Slice H
-adds DEV TOOLING and CI only — **no runtime behavior change**; the unchanged suite is the
-proof. (Full runbook: ruff/mypy local commands, the mypy baseline + ratchet, and the
-startup warning, appended in the docs step below.)
+adds DEV TOOLING + CI + one visibility log — **no runtime behavior change**. Those 335
+stay green (the proof); a single net-additive test for the distress startup warning
+takes the suite to **336 passed, 1 skipped**.
+
+**Tooling (dev-only, pinned in `requirements-dev.txt`: `ruff==0.8.6`, `mypy==1.14.1`).
+Config in `backend/pyproject.toml`. Run locally from `backend/`:**
+
+```bash
+ruff check .            # lint (E,F,W,I,UP,B; E501 + a few narrowed, see pyproject)
+ruff format --check .   # style; `ruff format .` to apply
+mypy                    # type-check (files=["app"]; py3.12 baseline)
+```
+
+CI runs all three once in the `quality` job (`.github/workflows/ci.yml`), alongside the
+unchanged `test` matrix (`sqlite`, `postgres`).
+
+- **ruff narrowed rules** (documented in `pyproject.toml`, each a reason, not a blanket
+  disable): `E501` (long prompt/persona string literals), `E402` (intentional late
+  imports), `E741` (test-only `l`), `B008` (FastAPI `Body/Depends` idiom), `B904`
+  (raise-from; ratchet), `UP031`/`UP038` (runtime-expression rewrites). Everything else
+  is enforced.
+- **mypy baseline (NOT strict):** `warn_unused_ignores`, `warn_redundant_casts`,
+  `no_implicit_optional`, `ignore_missing_imports` (third-party libs). Green via 4 small
+  annotations + 9 justified `# type: ignore[code]  # reason`. **Scope = `app/`**;
+  `core/runner/_child.py` is excluded (it monkeypatches `socket`, not type-checkable).
+  **Ratchet (later slices):** bring `tests/` and `evals/` under mypy, then raise
+  strictness incrementally (e.g. `disallow_untyped_defs` per-package).
+- **Distress startup warning:** when `DISTRESS_ROUTING_ENABLED=true` but support/
+  escalation are unset (`[FILL-IN]`), app startup and `python -m app.preflight` emit a
+  prominent operator WARNING / `[WARN]` line (no PII, no content) — visibility only.
+
+```bash
+cd backend && python -m pytest tests/test_distress.py -q   # incl. the startup-warning test
+```
 
 ---
 
@@ -807,12 +838,12 @@ No network, no DB, no key. This is the gate `main` must always pass.
 cd backend && python -m pytest
 ```
 
-**Expected (current, through Slice G, datascience active): `335 passed, 1
+**Expected (current, through Slice H, datascience active): `336 passed, 1
 skipped`.** The single skip is the gated live behavioral benchmark
 (`tests/evals/test_behavioral.py::test_live_benchmark_runs`), which skips unless
 `RUN_LLM_EVALS=1` and a reachable tutor + judge endpoint are configured (see §3).
 The running per-phase totals are recorded in the phase sections above (from `221
-passed, 11 skipped` at Phase 0 to `335 passed, 1 skipped` at Slice G). The
+passed, 11 skipped` at Phase 0 to `336 passed, 1 skipped` at Slice H). The
 quantum-era per-module table below is **historical** (those modules no longer
 exist, and the legacy `sol_behavior_evals.py` was retired into
 `evals/behavioral/` in Slice 6b); the current per-module inventory is the appended
