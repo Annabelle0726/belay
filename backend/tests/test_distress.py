@@ -266,6 +266,35 @@ def test_no_verbatim_distress_text_or_pii_in_trace(monkeypatch):
     }
 
 
+# ── startup warning (Slice H follow-up): visibility for a half-armed opt-in ───
+
+
+def test_startup_warning_fires_only_when_enabled_and_unconfigured(monkeypatch, caplog):
+    """The startup/config-load warning fires iff routing is enabled AND unconfigured.
+    Visibility only — it changes no runtime distress behavior."""
+    # enabled + unconfigured -> warns
+    monkeypatch.setattr(settings, "distress_routing_enabled", True)
+    with caplog.at_level(logging.WARNING, logger="peer_tutor.distress"):
+        assert distress.warn_if_misconfigured(settings) is True
+    assert any("DISTRESS_ROUTING_ENABLED" in r.getMessage() for r in caplog.records)
+
+    # disabled -> silent
+    caplog.clear()
+    monkeypatch.setattr(settings, "distress_routing_enabled", False)
+    with caplog.at_level(logging.WARNING, logger="peer_tutor.distress"):
+        assert distress.warn_if_misconfigured(settings) is False
+    assert caplog.records == []
+
+    # enabled + configured -> silent
+    caplog.clear()
+    monkeypatch.setattr(settings, "distress_routing_enabled", True)
+    monkeypatch.setattr(settings, "distress_support_message", "Campus Wellbeing, portal.")
+    monkeypatch.setattr(settings, "distress_escalation_target", "support coordinator")
+    with caplog.at_level(logging.WARNING, logger="peer_tutor.distress"):
+        assert distress.warn_if_misconfigured(settings) is False
+    assert caplog.records == []
+
+
 # ── trace disable: with DISTRESS_TRACE_ENABLED false, no distress event ───────
 
 

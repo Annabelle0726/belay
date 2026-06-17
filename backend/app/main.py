@@ -63,6 +63,11 @@ _durable = SqlStore() if settings.store_backend == "sql" else InMemoryStore()
 _router = ConsentRouter(_durable)
 _pack = get_active_pack()  # active DomainPack (TUTOR_PACK, default datascience)
 
+# Slice H visibility: at startup, warn (no PII/content) if distress routing is enabled
+# but unconfigured, so a half-armed opt-in is caught now, not at the first triggered
+# turn. Visibility only — no runtime behavior change.
+distress_mod.warn_if_misconfigured(settings)
+
 
 def _llm():
     # Constructed per-process lazily; uses the configured provider

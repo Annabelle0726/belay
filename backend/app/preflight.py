@@ -95,6 +95,15 @@ def main(argv=None) -> int:
     for name, (ok, msg) in run(probe_provider=not args.skip_provider):
         print(f"[{'PASS' if ok else 'FAIL'}] {name}: {msg}")
         all_ok = all_ok and ok
+    # Slice H/G visibility: a half-armed distress opt-in is a WARN, not a hard FAIL
+    # (it renders the safe generic frame). Surface it in deployment testing.
+    from .agent import distress as _distress
+
+    if _distress.warn_if_misconfigured(settings):
+        print(
+            "[WARN] distress: DISTRESS_ROUTING_ENABLED is on but support/escalation are "
+            "unset ([FILL-IN]); the safe generic frame will render. Set them before go-live."
+        )
     print("preflight: OK" if all_ok else "preflight: FAILED")
     return 0 if all_ok else 1
 

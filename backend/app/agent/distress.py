@@ -109,3 +109,19 @@ def extra_terms(settings) -> tuple:
     """Institution-configured extra detection terms (comma-separated), IRB-owned."""
     raw = getattr(settings, "distress_signal_terms", "") or ""
     return tuple(t.strip() for t in raw.split(",") if t.strip())
+
+
+def warn_if_misconfigured(settings) -> bool:
+    """STARTUP / config-load visibility (Slice H): if routing is ENABLED but NOT
+    configured, emit a prominent operator WARNING (no PII, no content) so a half-armed
+    opt-in is caught in deployment testing rather than at the first triggered turn.
+    Returns True iff it warned. Visibility ONLY — changes no runtime distress behavior."""
+    if settings.distress_routing_enabled and not settings.distress_configured:
+        log.warning(
+            "DISTRESS_ROUTING_ENABLED=true but DISTRESS_SUPPORT_MESSAGE / "
+            "DISTRESS_ESCALATION_TARGET are unset (still the [FILL-IN] defaults). Distress "
+            "turns will render the SAFE GENERIC frame with no institution resources. Set "
+            "both to your IRB-approved values before go-live."
+        )
+        return True
+    return False
