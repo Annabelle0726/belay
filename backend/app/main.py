@@ -73,8 +73,8 @@ def _llm():
     # Constructed per-process lazily; uses the configured provider
     # (openai_compatible by default). Raises a clear error if unreachable.
     if not hasattr(_llm, "_inst"):
-        _llm._inst = get_llm()
-    return _llm._inst
+        _llm._inst = get_llm()  # type: ignore[attr-defined]  # function-attribute memo cache (intentional)
+    return _llm._inst  # type: ignore[attr-defined]  # function-attribute memo cache (intentional)
 
 
 # Quad tutor-seam sidecar: a versioned /quad/v1 surface over the same tutor loop

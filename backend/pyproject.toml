@@ -54,3 +54,14 @@ files = ["app", "tests", "evals"]
 # and has no in-process callers to type against. Excluded with reason (narrow, not
 # `ignore_errors`). Everything else under app/ is gated.
 exclude = "(^|/)(\\.venv|build)/|/_child\\.py$"
+
+# Slice I strictness notch (one notch, not strict), applied to APP SOURCE ONLY: check
+# the bodies of untyped functions and flag returning Any from a typed function. It is
+# scoped to `app.*` (an importable package) rather than relaxed on tests, so pytest
+# fixtures / monkeypatching / stub doubles in tests+evals stay at the base level and do
+# not drown the signal. The NEXT ratchet notch is full annotation
+# (`disallow_untyped_defs`), deferred, app-first.
+[[tool.mypy.overrides]]
+module = ["app.*"]
+check_untyped_defs = true
+warn_return_any = true

@@ -69,12 +69,14 @@ def parse_json(text: str) -> dict | None:
     clean = re.sub(r"^```(?:json)?", "", clean).strip()
     clean = re.sub(r"```$", "", clean).strip()
     try:
-        return json.loads(clean)
+        loaded: dict = json.loads(clean)
+        return loaded
     except Exception:
         m = re.search(r"\{[\s\S]*\}", clean)
         if m:
             try:
-                return json.loads(m.group(0))
+                loaded2: dict = json.loads(m.group(0))
+                return loaded2
             except Exception:
                 return None
     return None
@@ -300,7 +302,8 @@ def provider_class(provider_id: str) -> type:
 
 def get_provider() -> Provider:
     """Construct the configured provider (PROVIDER, default openai_compatible)."""
-    return provider_class(settings.provider)()
+    inst: Provider = provider_class(settings.provider)()
+    return inst
 
 
 # Back-compat aliases.

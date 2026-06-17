@@ -34,7 +34,8 @@ def _tokenize(text: str) -> list[str]:
 def load_corpus(path: str = _CORPUS_PATH) -> list[dict]:
     """Load the shipped corpus (list of passage dicts)."""
     with open(path, encoding="utf-8") as fh:
-        return json.load(fh)
+        data: list[dict] = json.load(fh)
+        return data
 
 
 class DataScienceKB:

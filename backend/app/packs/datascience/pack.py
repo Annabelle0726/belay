@@ -82,7 +82,8 @@ class DataSciencePack:
 
     # -- curriculum -----------------------------------------------------------
     def curriculum(self) -> Sequence[Module]:
-        return _curriculum.curriculum()["modules"]
+        mods: Sequence[Module] = _curriculum.curriculum()["modules"]
+        return mods
 
     def get_exercise(self, exercise_id: str) -> Exercise:
         return _curriculum.get_exercise(exercise_id)  # type: ignore[return-value]  # curriculum returns the Exercise-shaped dict (TypedDict is structural)

@@ -36,7 +36,7 @@ All accessors use ``(x or {})`` to guard against None.
 
 from __future__ import annotations
 
-from ..core.domain import get_active_pack
+from ..core.domain import DomainPack, get_active_pack
 
 # ── constants -----------------------------------------------------------------
 GOAL_TOL = 0.07  # matches every exercise's tol
@@ -106,7 +106,7 @@ def nontrivial_revision(src_a: str, src_b: str, pack=None) -> bool:
     programs compare unequal.
     """
     pack = pack or get_active_pack()
-    return pack.program_signature(src_a) != pack.program_signature(src_b)
+    return pack.program_signature(src_a) != pack.program_signature(src_b)  # type: ignore[no-any-return]  # opaque parse-only fingerprint (Any); != is bool at runtime
 
 
 # ── per-turn field accessors --------------------------------------------------
@@ -144,7 +144,7 @@ def _tp(turn_event: dict) -> dict:
 
 
 def realized_handoff(
-    turn_event: dict, target=None, tol=None, sim=None, pack=None, exercise=None
+    turn_event: dict, target=None, tol=None, sim=None, pack: DomainPack | None = None, exercise=None
 ) -> bool:
     """True iff the code in final_message independently meets the exercise goal.
 
@@ -158,18 +158,18 @@ def realized_handoff(
     pack = pack or get_active_pack()
     fm = _tp(turn_event)["final_message"]
     ex = exercise if exercise is not None else {"target": target, "tol": tol}
-    return pack.leak_evidence(fm, ex).is_solution
+    return pack.leak_evidence(fm, ex).is_solution  # type: ignore[arg-type]  # ex is the exercise dict / {target,tol} fallback; Exercise is a structural TypedDict
 
 
 def attempted_handoff(turn_event: dict) -> bool:
-    return _tp(turn_event)["gov_flag"] == "withholding_solution"
+    return _tp(turn_event)["gov_flag"] == "withholding_solution"  # type: ignore[no-any-return]  # comparison over the untyped §6 trace dict; bool at runtime
 
 
 # ── §3 redirects --------------------------------------------------------------
 
 
 def redirect(turn_event: dict) -> bool:
-    return _tp(turn_event)["gov_flag"] == "redirect_answer_seeking"
+    return _tp(turn_event)["gov_flag"] == "redirect_answer_seeking"  # type: ignore[no-any-return]  # untyped §6 trace dict; bool at runtime
 
 
 # ── §4a leak calibration ------------------------------------------------------
@@ -182,11 +182,11 @@ def predicted_leak(turn_event: dict) -> bool:
 
 def predicted_leak_strict(turn_event: dict) -> bool:
     """Strict variant: leak_risk == 'full' only."""
-    return _tp(turn_event)["se_leak_risk"] == "full"
+    return _tp(turn_event)["se_leak_risk"] == "full"  # type: ignore[no-any-return]  # untyped §6 trace dict; bool at runtime
 
 
 def actual_leak(turn_event: dict) -> bool:
-    return _tp(turn_event)["gov_flag"] == "withholding_solution"
+    return _tp(turn_event)["gov_flag"] == "withholding_solution"  # type: ignore[no-any-return]  # comparison over the untyped §6 trace dict; bool at runtime
 
 
 # ── §5 repeated-error count ---------------------------------------------------

@@ -29,7 +29,8 @@ def spec_path(exercise_id: str) -> str:
 
 def load_spec(exercise_id: str) -> dict:
     with open(spec_path(exercise_id), encoding="utf-8") as fh:
-        return json.load(fh)
+        spec: dict = json.load(fh)
+        return spec
 
 
 def has_spec(exercise_id: str) -> bool:
@@ -53,7 +54,8 @@ def _parse_grade(stdout: str) -> dict | None:
     for line in stdout.splitlines():
         if line.startswith(_GRADE_PREFIX):
             try:
-                return json.loads(line[len(_GRADE_PREFIX) :])
+                parsed: dict = json.loads(line[len(_GRADE_PREFIX) :])
+                return parsed
             except json.JSONDecodeError:
                 return None
     return None

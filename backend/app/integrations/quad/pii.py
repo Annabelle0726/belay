@@ -65,7 +65,7 @@ def pii_reason(payload: dict) -> str | None:
             f"(provider:numeric-id); got {pid!r}"
         )
 
-    def walk(node, under_content: bool):
+    def walk(node, under_content: bool) -> str | None:
         if isinstance(node, dict):
             for k, v in node.items():
                 if _forbidden_key(k):
