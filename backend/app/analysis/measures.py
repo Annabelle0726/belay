@@ -557,9 +557,6 @@ def compute_calibration_pairs(
     Rows for non-guiding turns (observe) have outcome=None and are excluded
     from §4b ECE/Brier but retained for §4a (leak self-detection).
     """
-    target = exercise_meta.get("target", {})  # noqa: F841  quantum-era leftover, unused here; pure dict read (ratchet cleanup, not Slice H)
-    tol = exercise_meta.get("tol", GOAL_TOL)  # noqa: F841  (same; kept verbatim to avoid a logic edit this slice)
-
     turns = [e for e in events if e["event_type"] == "turn"]
     runs = [e for e in events if e["event_type"] == "run"]
 
