@@ -448,7 +448,21 @@ mechanically holds the line on the OUTPUT. That softener is real defense, but it
 heuristic, not an oracle. The wellbeing floor is as honestly verified as a no-oracle
 floor can be; it is not, and is not claimed to be, a deterministic gate.
 
-### FLAGGED DECISION (recorded, NOT built) - distress response
+### Distress response - IMPLEMENTED in Slice G (was a flagged decision)
+
+**Status: built (opt-in, institution + IRB owned).** The distress-routing layer
+(`agent/distress.py`, `orchestrator._distress_turn`, config in `config.py`) implements
+the safe defaults below. Off by default (`DISTRESS_ROUTING_ENABLED`); on an explicit,
+conservative, crisis-only signal (a routing trigger, not a judgment; must not fire on
+academic despair) it short-circuits to a deterministic frame that surfaces
+institution-configured support and routes to a human, suppressing normal tutoring. No
+hardcoded crisis content (the `[FILL-IN]` placeholder is never rendered; gated on
+`settings.distress_configured`). No verbatim distress text or PII is stored/logged/traced;
+the additive `distress` event is exactly `{triggered, configured, routed}` and disable-able
+(`DISTRESS_TRACE_ENABLED`). Tested in `tests/test_distress.py`. Two decisions remain IRB
+owned: the detection boundary, and whether the content-free trace event is recorded.
+
+The originally recorded safe defaults (now honored):
 
 Goals / reflection intake is a place a student may express GENUINE DISTRESS, not
 merely a counterproductive rule (e.g. "I feel hopeless and want to give up on this

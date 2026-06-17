@@ -718,6 +718,62 @@ cd backend && python -m pytest tests/test_knowledge.py tests/test_import_boundar
 
 ---
 
+## Slice G — distress-routing layer of the wellbeing floor (safety-critical)
+
+**Baseline floor (pre-Slice-G, off HEAD `fc1d78f`): `325 passed, 1 skipped`.** Coverage
+may not dip; the safety tests are net-additive.
+
+A third wellbeing-floor layer (built on Slice D, not duplicating it): when an explicit
+distress signal appears on a learner turn or at goal/reflection intake, the tutor
+short-circuits to a deterministic, kind frame that surfaces **institution-configured**
+support and routes to a human, and suppresses normal tutoring. It never counsels,
+diagnoses, assesses severity, names methods, or emits crisis content. **Decision in core
+(`agent/distress.py`, `orchestrator._distress_turn`), content in config.**
+
+- **OFF by default.** `DISTRESS_ROUTING_ENABLED=false` ⇒ no detection runs, no
+  short-circuit, behavior byte-identical to today (proved by
+  `test_disabled_default_runs_normal_tutoring_byte_identical`).
+- **Detection** (`distress.has_distress_signal`): a conservative, **explicit-crisis-only**
+  lexical signal (self-harm / suicidal ideation). It is a routing trigger, not a
+  judgment; it scores no severity and names no methods. It must NOT fire on academic
+  despair ("give up on this degree") — a tested negative control. The vocabulary is a
+  minimal starter, **IRB-review-required and tunable** (extend via `DISTRESS_SIGNAL_TERMS`).
+- **The FILL-IN placeholder is never rendered.** Displayed content is gated on
+  `settings.distress_configured` (true once both messages are replaced). Enabled but
+  unconfigured ⇒ a **safe generic frame** (no placeholder) + an operator config warning
+  (no PII, no learner text).
+- **Trace** (additive `distress` event, gated by `DISTRESS_TRACE_ENABLED`): payload is
+  **exactly** `{triggered, configured, routed}` — no text, no category, no PII, no
+  severity. §6 row stays the fixed 8 fields; `make_event`'s event-type list now includes
+  `distress`. No verbatim distressing content is stored at intake (the goal/reflection is
+  recorded `honored:false`, `floor:"distress"`, `text:None`).
+
+| Env var | Default | Owner | Purpose |
+|---|---|---|---|
+| `DISTRESS_ROUTING_ENABLED` | `false` | institution | master switch; off ⇒ byte-identical |
+| `DISTRESS_SUPPORT_MESSAGE` | `[FILL-IN: institution support resources]` | **institution + IRB** | resources surfaced to the learner |
+| `DISTRESS_ESCALATION_TARGET` | `[FILL-IN: institution escalation contact]` | **institution + IRB** | human escalation route |
+| `DISTRESS_TRACE_ENABLED` | `true` | **IRB** | disables the content-free distress event |
+| `DISTRESS_SIGNAL_TERMS` | `` (empty) | **institution + IRB** | extra detection terms (comma-separated) |
+
+**Two standing IRB items** (parallel decisions): (1) the **detection boundary** between
+academic despair and crisis (tune the vocabulary), and (2) whether even the
+**content-free `distress` trace event** may be recorded (`DISTRESS_TRACE_ENABLED`).
+
+Tests: `tests/test_distress.py` (10) — detector explicit-only + negative control;
+disabled byte-identical (no detection, no event); enabled+configured routes/suppresses
+with a content-free event; enabled+unconfigured safe generic frame with **no `[FILL-IN]`
+in learner output** + operator warning; intake goal/reflection not honored and not
+stored verbatim; the route surfaces the frame; no verbatim distress text or PII in the
+trace; trace-disable writes no event. `tests/test_import_boundaries.py` stays green.
+Suite: **335 passed, 1 skipped** (+10).
+
+```bash
+cd backend && python -m pytest tests/test_distress.py tests/test_import_boundaries.py -q
+```
+
+---
+
 ## 0. Environment (once) 🟢
 
 Use the project venv, and **always invoke the suite as `python -m pytest`** — a bare
@@ -742,12 +798,12 @@ No network, no DB, no key. This is the gate `main` must always pass.
 cd backend && python -m pytest
 ```
 
-**Expected (current, through Slice F, datascience active): `325 passed, 1
+**Expected (current, through Slice G, datascience active): `335 passed, 1
 skipped`.** The single skip is the gated live behavioral benchmark
 (`tests/evals/test_behavioral.py::test_live_benchmark_runs`), which skips unless
 `RUN_LLM_EVALS=1` and a reachable tutor + judge endpoint are configured (see §3).
 The running per-phase totals are recorded in the phase sections above (from `221
-passed, 11 skipped` at Phase 0 to `325 passed, 1 skipped` at Slice F). The
+passed, 11 skipped` at Phase 0 to `335 passed, 1 skipped` at Slice G). The
 quantum-era per-module table below is **historical** (those modules no longer
 exist, and the legacy `sol_behavior_evals.py` was retired into
 `evals/behavioral/` in Slice 6b); the current per-module inventory is the appended

@@ -42,9 +42,10 @@ import time
 from ..config import settings
 from ..core.domain import get_active_pack
 from ..store import Store, make_event
+from . import distress as distress_mod
 from . import governance, memory, overlay as overlay_mod, planner, reasoner, self_eval
 from . import telemetry as tel
-from .context import build_context
+from .context import _latest_student_message, build_context
 from .llm import LLMClient
 from .prompts import ABSTAIN_MESSAGE, CONTROL_MESSAGE
 
@@ -122,6 +123,64 @@ def _control_turn(payload: dict, ctx: dict, store: Store,
     return final
 
 
+def _distress_turn(ctx: dict, store: Store, pid: str, exercise: dict,
+                   mode: str, stance: str, pack) -> dict:
+    """Distress-routing short-circuit (Slice G). Deterministic, NO planner/reasoner/LLM
+    call. Surfaces a kind, non-amplifying frame that routes the learner to a human and
+    suppresses normal tutoring. The frame's crisis CONTENT is institution config; the
+    framework supplies only neutral scaffolding (and a safe generic frame when
+    unconfigured — the [FILL-IN] placeholder is never rendered). The only trace is the
+    additive, content-free `distress` event (gated by DISTRESS_TRACE_ENABLED)."""
+    learner = store.get_learner_state(pid)
+    configured = settings.distress_configured
+    final = {
+        "affective_state": "distress",
+        "affect_reasoning": "distress signal — routed to human support; tutoring paused",
+        "confidence": 1.0,
+        "intervention": "escalate",
+        "planner_note": "distress routing — surfaced configured support and routed to a human",
+        "self_critique": "—",
+        "governance": "flag_escalate",
+        "memory": {"grasped": learner.get("grasped", []),
+                   "shaky": learner.get("shaky", [])},
+        "message": distress_mod.frame_from_settings(settings),
+        "check_question": None,
+        "components": {
+            "planner": {"target_concept": "—"},
+            "reasoner": {"raw_confidence": 1.0},
+            "self_eval": {"leak_risk": "none", "reasons": []},
+            "governance": {"prose": "Distress routing → human support", "blocked": False,
+                           "reasons": []},
+            "wellbeing_softened": False,
+            "overlay_declined": [],
+            # Content-free distress signal (no text, no PII, no severity, no category).
+            "distress": {"triggered": True, "configured": configured, "routed": configured},
+            "refines": 0,
+            "reasoning_effort": None,
+            "escalated": True,
+            "abstained": False,
+            "confidence_trajectory": {"planner": None, "reasoner": None, "self_eval": None},
+            "misconception_id": None,
+            "worked_example": None,
+            "learner_model": None,
+            "timings_ms": {},
+            "component_usage": {},
+            "model_tiers": settings.model_tiers,
+            "pack": pack.id,
+            "provider": settings.provider,
+            "stance": stance,
+        },
+    }
+    # The ONLY trace for a distress turn is the additive, content-free event: no turn
+    # event, no source/message/dialogue is recorded. Payload is exactly the signal.
+    if settings.distress_trace_enabled:
+        store.append_event(make_event(
+            pid, exercise["id"], mode, "distress",
+            {"triggered": True, "configured": configured, "routed": configured},
+            stance=stance))
+    return final
+
+
 def _abstain(draft: dict) -> dict:
     """Override a low-confidence PEER draft into an honest abstention.
 
@@ -163,6 +222,16 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
     attempts = store.attempts(pid, exercise["id"])
     ctx = build_context(payload, learner, attempts)
     ctx["_exercise_full"] = exercise  # governance grades against the real target
+
+    # Distress-routing layer of the wellbeing floor (Slice G) — OFF by default. When
+    # enabled, scan the learner's latest message FIRST (before the control branch and
+    # the tutoring loop, in any stance); on an explicit distress signal, short-circuit
+    # to a deterministic support frame that routes to a human and suppress tutoring.
+    # When disabled, no detection runs and behavior is byte-identical to today.
+    if settings.distress_routing_enabled:
+        student_msg = _latest_student_message(ctx.get("recent_dialogue", []))
+        if distress_mod.has_distress_signal(student_msg, distress_mod.extra_terms(settings)):
+            return _distress_turn(ctx, store, pid, exercise, mode, stance, pack)
 
     if stance == "control":
         return _control_turn(payload, ctx, store, pid, exercise, mode, pack)

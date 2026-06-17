@@ -96,18 +96,28 @@ There is no wellbeing parity with the leak floor. The leak floor is a determinis
 gate backed by an oracle; the wellbeing floor is the best a no-oracle floor can be, and
 it is not claimed to be more.
 
-### Distress response is a recorded decision, not built
+### Distress response (built in Slice G; opt-in, institution + IRB owned)
 
-Goals and reflection intake is a place a student may express genuine distress rather
-than a merely counterproductive rule. How the tutor should respond to a
-distress-signaling goal or reflection is a product and IRB decision, deliberately left
-to whoever owns that call; no speculative distress handling has been built. The safe
-defaults recorded for the decider (`docs/EXTRACTION_PLAN.md` section (g), with a pointer
-note in `agent/goals.py`) are: do not honor a harmful directive (the wellbeing floor
-holds regardless); respond briefly and kindly without reinforcing or amplifying the
-distress; do not diagnose; leave deeper support to humans and the institution's own
-channels; and treat surfacing any support resource as a deliberate, reviewed choice,
-not a default the framework ships on its own.
+Goals and reflection intake, and any learner turn, is a place a student may express
+genuine distress rather than a merely counterproductive rule. This is now implemented as
+the distress-routing layer of the wellbeing floor (`agent/distress.py`,
+`orchestrator._distress_turn`), honoring the recorded safe defaults: on an explicit
+distress signal the tutor does not honor a harmful directive (the wellbeing floor holds
+regardless), responds briefly and kindly without reinforcing or amplifying the distress,
+does not counsel/diagnose/assess severity/name methods, routes the learner outward to a
+human, and surfaces support **only** from institution-configured resources.
+
+It is **off by default** (`DISTRESS_ROUTING_ENABLED=false` ⇒ byte-identical behavior).
+Detection is a conservative, explicit-crisis-only routing trigger, not a judgment, and
+must not fire on academic despair (a tested boundary). The framework ships a neutral
+frame and a `[FILL-IN]` placeholder only — it invents no hotline, number, or service;
+the placeholder is **never rendered** to a learner (displayed content is gated on
+`settings.distress_configured`, and an unconfigured-but-enabled deployment shows a safe
+generic frame). **Privacy holds:** no verbatim distressing content and no PII is stored,
+logged, or traced — intake records `honored:false` / `floor:"distress"` with no text, and
+the additive `distress` trace event (disable-able via `DISTRESS_TRACE_ENABLED`) carries
+exactly `{triggered, configured, routed}`. Two decisions remain institution + IRB owned:
+the detection boundary, and whether the content-free trace event is recorded at all.
 
 ## The export contract
 

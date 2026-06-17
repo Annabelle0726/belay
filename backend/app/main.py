@@ -31,6 +31,7 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from .agent import get_llm, run_turn
+from .agent import distress as distress_mod
 from .agent import goals as goals_mod
 from .agent import overlay as overlay_mod
 from .config import settings
@@ -155,7 +156,10 @@ def set_goals(req: GoalRequest):
     pseudonymously on the learner model, routed by consent like all learner state."""
     store = _router.store_for(req.participant_id)
     artifact = goals_mod.set_goals(store, req.participant_id, req.text)
-    return {"participant_id": req.participant_id, "goals": artifact}
+    resp = {"participant_id": req.participant_id, "goals": artifact}
+    if artifact and artifact.get("floor") == "distress":   # Slice G: surface the frame
+        resp["distress_support"] = distress_mod.frame_from_settings(settings)
+    return resp
 
 
 @app.get("/api/goals/{pid}")
@@ -171,7 +175,10 @@ def add_reflection(req: ReflectionRequest):
     goal. Stored pseudonymously on the learner model; never surfaced to an instructor."""
     store = _router.store_for(req.participant_id)
     reflection = goals_mod.add_reflection(store, req.participant_id, req.text)
-    return {"participant_id": req.participant_id, "reflection": reflection}
+    resp = {"participant_id": req.participant_id, "reflection": reflection}
+    if reflection and reflection.get("floor") == "distress":   # Slice G: surface the frame
+        resp["distress_support"] = distress_mod.frame_from_settings(settings)
+    return resp
 
 
 @app.post("/api/overlay")

@@ -137,5 +137,33 @@ class Settings:
         "CORS_ORIGINS", "http://localhost:5173,http://localhost:3000"
     ).split(","))
 
+    # --- Distress-routing layer (Slice G) — INSTITUTION + IRB OWNED ---------
+    # OFF by default: when disabled, no detection runs, no short-circuit happens, and
+    # behavior is byte-identical to today. The framework ships a neutral frame and a
+    # [FILL-IN] placeholder only — it invents no hotline, number, or named service.
+    distress_routing_enabled: bool = field(
+        default_factory=lambda: _envbool("DISTRESS_ROUTING_ENABLED", False))
+    # The support resources surfaced to the learner. The [FILL-IN] default is NEVER
+    # rendered (see config gating + `distress_configured`); the institution replaces it
+    # with its IRB- and jurisdiction-approved resources.
+    distress_support_message: str = field(default_factory=lambda: _env(
+        "DISTRESS_SUPPORT_MESSAGE", "[FILL-IN: institution support resources]"))
+    distress_escalation_target: str = field(default_factory=lambda: _env(
+        "DISTRESS_ESCALATION_TARGET", "[FILL-IN: institution escalation contact]"))
+    # Lets the IRB disable the (already content-free) distress trace event entirely.
+    distress_trace_enabled: bool = field(
+        default_factory=lambda: _envbool("DISTRESS_TRACE_ENABLED", True))
+    # Optional institution-configured extra detection terms (comma-separated, IRB-owned)
+    # on top of the conservative built-in vocabulary. Default empty.
+    distress_signal_terms: str = field(
+        default_factory=lambda: _env("DISTRESS_SIGNAL_TERMS", ""))
+
+    @property
+    def distress_configured(self) -> bool:
+        """True once BOTH FILL-IN defaults are replaced with real institution values.
+        Displayed crisis content is gated on this; the placeholder is never rendered."""
+        return ("[FILL-IN" not in self.distress_support_message
+                and "[FILL-IN" not in self.distress_escalation_target)
+
 
 settings = Settings()

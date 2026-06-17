@@ -24,6 +24,7 @@ from fastapi import APIRouter, Body, HTTPException
 from pydantic import ValidationError
 
 from ...agent import get_llm, run_turn
+from ...agent import distress as _distress
 from ...agent import goals as _goals
 from ...agent import overlay as _overlay
 from ...config import settings
@@ -149,7 +150,10 @@ def build_router(consent_router: ConsentRouter, pack, llm_factory: Callable[[], 
         consent_router.register_participant(pid, pid, bool(payload.get("consent", False)))
         store = consent_router.store_for(pid)
         artifact = _goals.set_goals(store, pid, payload.get("text", ""))
-        return {"ok": True, "pseudo_id": pid, "goals": artifact}
+        resp = {"ok": True, "pseudo_id": pid, "goals": artifact}
+        if artifact and artifact.get("floor") == "distress":   # Slice G: surface the frame
+            resp["distress_support"] = _distress.frame_from_settings(settings)
+        return resp
 
     @api.post("/reflection")
     def reflection(payload: dict = Body(...)):
@@ -165,7 +169,10 @@ def build_router(consent_router: ConsentRouter, pack, llm_factory: Callable[[], 
         consent_router.register_participant(pid, pid, bool(payload.get("consent", False)))
         store = consent_router.store_for(pid)
         refl = _goals.add_reflection(store, pid, payload.get("text", ""))
-        return {"ok": True, "pseudo_id": pid, "reflection": refl}
+        resp = {"ok": True, "pseudo_id": pid, "reflection": refl}
+        if refl and refl.get("floor") == "distress":   # Slice G: surface the frame
+            resp["distress_support"] = _distress.frame_from_settings(settings)
+        return resp
 
     @api.post("/overlay")
     def overlay(payload: dict = Body(...)):

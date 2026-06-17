@@ -16,7 +16,9 @@ import re
 from datetime import datetime, timezone
 from typing import Optional
 
+from ..config import settings
 from ..store import make_event
+from . import distress as _distress
 
 # Wellbeing floor (Slice B; broadened here): a deterministic, cautious detector for
 # self-destructive / berating self-rules. A student goal that directs the tutor to
@@ -73,15 +75,14 @@ def is_harmful(text: str) -> bool:
     return bool(_HARMFUL.search(text or ""))
 
 
-# FLAGGED DECISION (NOT implemented here) — distress response.
-# Goals/reflection intake is a place a student may express genuine DISTRESS, not
-# merely a counterproductive rule. How the tutor should respond to a distress-
-# signaling goal/reflection is a PRODUCT + IRB decision, deliberately left to whoever
-# owns that call. Safe defaults recorded for them (see docs/EXTRACTION_PLAN.md §(g)):
-# do NOT honor a harmful directive; respond briefly and kindly WITHOUT reinforcing or
-# amplifying the distress; do NOT diagnose; leave deeper support to humans and the
-# institution's channels; whether to surface any support resource is a deliberate
-# choice, not a default. No speculative distress handling is built.
+# DISTRESS RESPONSE — implemented in Slice G (`agent/distress.py`). Goals/reflection
+# intake is a place a student may express genuine DISTRESS, not merely a
+# counterproductive rule. When DISTRESS_ROUTING_ENABLED, an explicit distress signal in
+# goal/reflection text is NOT honored and NOT stored verbatim (recorded honored:false,
+# floor:"distress", text:None), and the route surfaces the configured support frame and
+# routes to a human (see set_goals / add_reflection below). Off by default. The
+# detection boundary and whether to record the content-free distress event remain
+# institution + IRB decisions.
 
 
 def _now_iso() -> str:
@@ -95,6 +96,15 @@ def _emit(store, participant_id: str, event_type: str, payload: dict) -> None:
         store.append_event(make_event(participant_id, "", "study", event_type, payload))
     except Exception:
         pass
+
+
+def _emit_distress(store, participant_id: str) -> None:
+    """Content-free distress trace event at intake (gated). No text, no PII, no
+    severity, no category — exactly the signal {triggered, configured, routed}."""
+    if settings.distress_trace_enabled:
+        _emit(store, participant_id, "distress",
+              {"triggered": True, "configured": settings.distress_configured,
+               "routed": settings.distress_configured})
 
 
 def get_goals(state: dict) -> Optional[dict]:
@@ -116,6 +126,18 @@ def set_goals(store, participant_id: str, text: str) -> Optional[dict]:
         _emit(store, participant_id, "goal_set",
               {"text": None, "honored": None, "action": "clear"})
         return None
+    # Distress-routing intake (Slice G; opt-in). An explicit distress signal in the
+    # goal text is NOT honored and NOT stored verbatim; the route surfaces the support
+    # frame. Only a non-PII, content-free marker + event are recorded.
+    if settings.distress_routing_enabled and _distress.has_distress_signal(
+            text, _distress.extra_terms(settings)):
+        artifact = {"text": None, "honored": False, "floor": "distress", "ts": _now_iso()}
+        state["goals"] = artifact
+        store.save_learner_state(participant_id, state)
+        _emit(store, participant_id, "goal_set",
+              {"text": None, "honored": False, "floor": "distress", "action": "distress"})
+        _emit_distress(store, participant_id)
+        return artifact
     # Wellbeing floor: a self-destructive/berating goal is recorded but NOT honored.
     honored = not is_harmful(text)
     artifact = {"text": text, "ts": _now_iso(), "honored": honored}
@@ -141,6 +163,18 @@ def add_reflection(store, participant_id: str, text: str,
     if not text:
         return None
     state = store.get_learner_state(participant_id)
+    # Distress-routing intake (Slice G; opt-in): a distress signal in a reflection is
+    # NOT stored verbatim; record a non-verbatim, floor-marked entry + content-free event.
+    if settings.distress_routing_enabled and _distress.has_distress_signal(
+            text, _distress.extra_terms(settings)):
+        reflection = {"text": None, "ts": _now_iso(), "goal_text": None,
+                      "concept": None, "floor": "distress"}
+        state["reflections"] = list(state.get("reflections") or []) + [reflection]
+        store.save_learner_state(participant_id, state)
+        _emit(store, participant_id, "reflection_recorded",
+              {"text": None, "goal_text": None, "concept": None, "floor": "distress"})
+        _emit_distress(store, participant_id)
+        return reflection
     goal = state.get("goals") or {}
     goal_text = goal.get("text")
     reflection = {"text": text, "ts": _now_iso(), "goal_text": goal_text, "concept": concept}
