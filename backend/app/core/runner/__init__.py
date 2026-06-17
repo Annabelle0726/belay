@@ -118,10 +118,10 @@ def run_python(
         except subprocess.TimeoutExpired as exc:
             timed_out = True
             exit_code = None
-            stdout = exc.stdout or ""
+            stdout = exc.stdout or ""  # type: ignore[assignment]  # bytes|str|None; decoded to str next line
             if isinstance(stdout, bytes):
                 stdout = stdout.decode("utf-8", "replace")
-            stderr = exc.stderr or ""
+            stderr = exc.stderr or ""  # type: ignore[assignment]  # bytes|str|None; decoded to str next line
             if isinstance(stderr, bytes):
                 stderr = stderr.decode("utf-8", "replace")
             error = f"wall timeout after {wall_seconds}s"

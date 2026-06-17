@@ -371,7 +371,7 @@ def _overlay_lines(overlay) -> tuple[list, bool]:
             if (f or {}).get("honored") is False or (raw and is_harmful(raw)):
                 declined = True
                 continue
-            phrase = _OVERLAY_PHRASES.get((sec, knob, (f or {}).get("value")))
+            phrase = _OVERLAY_PHRASES.get((sec, knob, (f or {}).get("value")))  # type: ignore[arg-type]  # an unset knob value is None -> a dict miss (intended)
             if phrase:
                 lines.append(phrase)
     lang = ((overlay or {}).get("accommodation") or {}).get("language") or {}

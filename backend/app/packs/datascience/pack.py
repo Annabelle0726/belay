@@ -13,6 +13,7 @@ from collections.abc import Sequence
 
 from ...core.domain import (
     Exercise,
+    KnowledgeBase,
     LeakEvidence,
     MisconceptionLibrary,
     Module,
@@ -77,14 +78,14 @@ class DataSciencePack:
     def __init__(self) -> None:
         self.taxonomy: Taxonomy = build_taxonomy()
         self._misconceptions = _DSMisconceptions()
-        self._kb = None  # lazily built on first knowledge() call
+        self._kb: KnowledgeBase | None = None  # lazily built on first knowledge() call
 
     # -- curriculum -----------------------------------------------------------
     def curriculum(self) -> Sequence[Module]:
         return _curriculum.curriculum()["modules"]
 
     def get_exercise(self, exercise_id: str) -> Exercise:
-        return _curriculum.get_exercise(exercise_id)
+        return _curriculum.get_exercise(exercise_id)  # type: ignore[return-value]  # curriculum returns the Exercise-shaped dict (TypedDict is structural)
 
     # -- runner (compile + execute + grade, in the sandbox) -------------------
     def run(self, source: str, exercise: Exercise) -> RunResult:
@@ -124,7 +125,7 @@ class DataSciencePack:
         claim_ok = None
         if expected is not None:
             stdout = (g.get("pack") or {}).get("stdout", "")
-            claim_ok = expected.strip() in stdout
+            claim_ok = expected.strip() in stdout  # type: ignore[attr-defined]  # guarded: expected is a str when not None
             if not claim_ok:
                 return {
                     "ok": False,
@@ -160,7 +161,7 @@ class DataSciencePack:
         )
 
     # -- knowledge (lexical retrieval over the shipped corpus) ----------------
-    def knowledge(self) -> object | None:
+    def knowledge(self) -> KnowledgeBase | None:
         """Return the pack's KnowledgeBase (built + cached on first use). Retrieved
         passages are NOT pre-screened here; core governance screens them via
         `pack.leak_evidence` before any can enter tutor context (Slice F)."""

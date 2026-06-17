@@ -384,7 +384,7 @@ def compute_attempt_measures(
     attempts_to_solve = solved_at_idx if solved else n_runs
 
     if solved:
-        solve_ts = runs[solved_at_idx]["ts"]
+        solve_ts = runs[solved_at_idx]["ts"]  # type: ignore[index]  # guarded by `if solved`: solved_at_idx is an int here
         turns_to_solve = sum(1 for t in turns if t["ts"] < solve_ts)
     else:
         turns_to_solve = n_turns

@@ -36,3 +36,23 @@ ignore = [
     "UP031",
     "UP038",
 ]
+
+[tool.mypy]
+# Pragmatic baseline — NOT strict (Slice H). The gate proves internal type consistency
+# of our code and catches new type errors going forward; full annotation is a later
+# ratchet (raise strictness incrementally). Run on py3.12 (the CI Python).
+python_version = "3.12"
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+# Third-party libs (fastapi, sqlalchemy, numpy, pandas, openai, ...) are not OUR types;
+# do not fail on their missing stubs. This is a baseline knob, not `ignore_errors`.
+ignore_missing_imports = true
+# Scope: the core packages (see the per-module note below). `tests`/`evals` are a
+# documented ratchet item, not yet under the gate.
+files = ["app"]
+# `_child.py` is the sandbox child harness: it deliberately monkeypatches `socket`
+# (assign-to-a-type) to disable the network, which is not meaningfully type-checkable
+# and has no in-process callers to type against. Excluded with reason (narrow, not
+# `ignore_errors`). Everything else under app/ is gated.
+exclude = "(^|/)(\\.venv|build)/|/_child\\.py$"

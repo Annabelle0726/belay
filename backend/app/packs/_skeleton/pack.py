@@ -13,6 +13,7 @@ from collections.abc import Sequence
 from ...core.domain import (
     Concept,
     Exercise,
+    KnowledgeBase,
     LeakEvidence,
     MisconceptionLibrary,
     Module,
@@ -112,5 +113,5 @@ class SkeletonPack:
             is_solution=False, redacted_message=draft, prose_disclosure=False, snippets=()
         )
 
-    def knowledge(self) -> object | None:
+    def knowledge(self) -> KnowledgeBase | None:
         return None

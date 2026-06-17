@@ -60,7 +60,11 @@ _ACCOMMODATION = {
     "language": (None, "en"),
 }
 
-_SECTIONS = {"persona": _PERSONA, "pedagogy": _PEDAGOGY, "accommodation": _ACCOMMODATION}
+_SECTIONS: dict[str, dict] = {
+    "persona": _PERSONA,
+    "pedagogy": _PEDAGOGY,
+    "accommodation": _ACCOMMODATION,
+}
 
 
 # A language code is a short alpha token (e.g. "en", "es", "pt-br"); anything else
@@ -93,7 +97,7 @@ def _normalize_field(field: str, raw, allowed, default) -> dict:
     harmful = bool(raw_str and is_harmful(raw_str))
     if field == "language":
         ok = raw_str is not None and _valid_language(raw_str) and not harmful
-        value = raw_str.strip().lower() if ok else default
+        value = raw_str.strip().lower() if ok else default  # type: ignore[union-attr]  # ok already asserts not-None
     else:
         norm = raw_str.strip().lower() if raw_str else None
         value = norm if (norm in allowed and not harmful) else default

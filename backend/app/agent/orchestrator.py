@@ -327,7 +327,7 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
                 reasoning_effort=reasoning_effort,
             )
             evaluation = self_eval.evaluate(ctx, plan, draft, llm, stance=stance)
-            we = pack.verify_worked_example(draft.get("worked_example") or {}, exercise)
+            we = pack.verify_worked_example(draft.get("worked_example") or {}, exercise)  # type: ignore[arg-type]  # worked_example is the WorkedExample-shaped dict
             retries += 1
         if we["ok"]:
             src = draft["worked_example"]["source"].strip()
@@ -467,7 +467,7 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
             "learner_model": lm_telemetry,
             "timings_ms": timings,
             # Per-component usage (additive §6): latency, tokens, cost per component.
-            "component_usage": tel.current_meter().by_component(),
+            "component_usage": tel.current_meter().by_component(),  # type: ignore[union-attr]  # the per-turn meter is set by run_turn for the turn's duration
             "model_tiers": settings.model_tiers,
             # §6 pack-agnostic envelope: pack id + generic execution provider
             # (replaces the former domain-specific telemetry.quantum_backend).

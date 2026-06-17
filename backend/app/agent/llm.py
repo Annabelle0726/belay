@@ -163,7 +163,10 @@ class OpenAICompatProvider:
             ]
             try:
                 resp = self._client.chat.completions.create(
-                    model=model, messages=retry_msgs, temperature=0.0, max_tokens=max_tokens
+                    model=model,
+                    messages=retry_msgs,  # type: ignore[arg-type]  # openai's over-specific message param; list[dict[str,str]] is fine at runtime
+                    temperature=0.0,
+                    max_tokens=max_tokens,
                 )
                 parsed = parse_json(self._extract_text(resp))
             except Exception:
