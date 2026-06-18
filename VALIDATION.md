@@ -889,6 +889,18 @@ cd backend && ruff check . && ruff format --check . && mypy && python -m pytest 
 
 ---
 
+## Slice K — de-brand (read as a generalist DS/CS tutor; zero behavior change)
+
+**Baseline floor (off HEAD `6421db4`): `337 passed, 1 skipped`; ruff + ruff-format + mypy
+green (86 files).** Slice K removes or generalizes Quantum Inventioneers functional,
+example, comment, and branding residue so the repository reads as a generalist data
+science and computer science tutor. This is naming, comments, examples, fixtures, and
+doc framing, **not logic** — no compatibility code is removed and nothing load-bearing is
+renamed without a flag. The unchanged suite is the proof. (Realization details and the
+provenance disposition appended on completion.)
+
+---
+
 ## 0. Environment (once) 🟢
 
 Use the project venv, and **always invoke the suite as `python -m pytest`** — a bare
