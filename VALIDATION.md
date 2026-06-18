@@ -896,8 +896,58 @@ green (86 files).** Slice K removes or generalizes Quantum Inventioneers functio
 example, comment, and branding residue so the repository reads as a generalist data
 science and computer science tutor. This is naming, comments, examples, fixtures, and
 doc framing, **not logic** — no compatibility code is removed and nothing load-bearing is
-renamed without a flag. The unchanged suite is the proof. (Realization details and the
-provenance disposition appended on completion.)
+renamed without a flag. The unchanged suite is the proof.
+
+What was done (each step a separable commit; suite green after each):
+
+- **Bucket (a) removed/generalized.** Backend comments/docstrings (context, governance,
+  orchestrator, measures, schemas, core, the datascience pack) drop quantum as the
+  canonical example for the datascience pack or neutral wording. The pytest fixtures are
+  de-branded by a consistent, suite-proven rename: concept ids (entanglement ->
+  overfitting, superposition -> regularization, phase -> normalization), the
+  misconception id (M2.1-superpose-both-is-entangle -> M2.1-scale-before-split), exercise
+  ids (bell -> ds-foundations, ghz -> ds-mlp), qubit(s) -> variable(s), and cosmetic
+  helper names. The front-end demos (api-client.js, dev-client.html, frontend/README.md),
+  the process-measure spec (both copies), the archive script, and the smoke scripts are
+  generalized to DS/CS and Sol.
+- **Bucket (b) surfaced, not edited.** Provenance/attribution (this runbook's
+  Extraction-status sections; the README origin line and its `docs/PROVENANCE.md`
+  pointer) is left intact and compiled into a list for a human disposition decision.
+  **The provenance disposition is PENDING the human's decision** (keep a minimal origin
+  line / move detailed lineage to the Quantum Inventioneers repo / remove).
+- **Bucket (c) left load-bearing, flagged.** The import-boundary guards
+  (`test_no_classiq_imports_in_core_or_packs`, `test_core_does_not_import_quantum`) are
+  kept — they prevent the removed Classiq dependency and quantum pack from returning and
+  document the old split. The pre-v6 result envelope fields `tvd`/`dist`/`bits` and the
+  process-measure output keys `tvd_slope`/`avg_tvd_slope` keep their quantum-era names
+  because production `measures.py`/`context.py` emit and parse them; renaming is a schema
+  migration (logic), out of scope. `app/agent/prompts.py` is left untouched: its quantum
+  content (the DSL op list, the `expected_dist`/bitstring worked-example schema, the M2.1
+  example) lives in LIVE prompt strings, so generalizing it changes model behavior the
+  stubbed suite cannot prove invariant; flagged for a deliberate prompt/logic change.
+- **Bucket (c) infra config left, flagged (the `qimvp`/`qi` DB naming).** The default
+  store DSN `sqlite:///./qimvp.db` (in `backend/app/config.py`, `backend/Dockerfile`,
+  `.env.example`) and the opt-in Postgres credentials/DB `qi:qi@.../qimvp` plus the
+  `qi_pgdata` volume (in `docker-compose.yml`, `.github/workflows/ci.yml`) are QI-era
+  identifiers, but they are coordinated, load-bearing config: changing the default
+  SQLite path changes which DB file a deployment uses (a runtime/behavior change the
+  suite cannot prove invariant), and the Postgres credentials/DB name must stay
+  consistent across compose, CI, Dockerfile, and any `DATABASE_URL`. Recommended as a
+  dedicated, coordinated infra rename (config default + Dockerfile + compose + CI +
+  .env.example + docs in one change, accepting the default-DB-path migration), not a
+  drive-by edit in a de-brand. The stale container-name example in the runbook
+  (`quantum-inventioneers-db-1`, now `peer-tutor-framework-db-1` by directory) falls
+  under the same item.
+- **Drive-by fix (flagged).** `scripts/smoke_inference.py` and `scripts/extract_measures.py`
+  still imported `get_active_pack` from `app.core.domain` (Slice J moved it to
+  `app.core.registry` but missed `scripts/`); repointed so they import cleanly.
+
+Suite: **337 passed, 1 skipped** (unchanged from the Slice K baseline). ruff + ruff-format
++ mypy green. No runtime behavior changed.
+
+```bash
+cd backend && ruff check . && ruff format --check . && mypy && python -m pytest -q
+```
 
 ---
 
