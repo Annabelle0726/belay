@@ -958,7 +958,44 @@ un-dead the DS worked-example prediction claim-check; it makes the current inert
 explicit and safe: a characterization test locks `claim_ok is None` for a DS prediction,
 the `claim_ok` consumers are audited to confirm `None` is never read as a pass or a fail,
 and the deferral is documented. The prompt, the contract field, and the safety gate are
-untouched. (Realization details appended on completion.)
+untouched.
+
+What was done (each step a separable commit; suite green after each):
+
+- **Characterization test (`tests/test_worked_example.py::test_ds_claim_check_is_inert_with_expected_dist`).**
+  Asserts that when a prediction is supplied the way the reasoner prompt actually supplies
+  it — via the quantum-shaped contract field `expected_dist` — `verify_worked_example`
+  returns `ok=True`, `reason="verified"`, and `claim_ok is None`: the claim-check does not
+  run, the supplied prediction is ignored, and the safety result is returned normally. The
+  pre-existing tests only exercised `expected_stdout` (the field DS reads), so this dead
+  branch was uncovered. This test is the guard that FLIPS when real DS expected-output
+  verification lands with the prompt de-quantum.
+- **`claim_ok` contract (three-valued).** `True` = prediction verified, `False` = prediction
+  mismatched, `None` = no claim-check performed (never a pass, never a fail). For DS it is
+  currently ALWAYS `None`.
+- **Consumer audit — no consumer misreads `None`; nothing needed fixing (no behavior change).**
+  - `orchestrator.py:348` records `we.get("claim_ok")` verbatim into
+    `telemetry.worked_example`. The decision to SHOW the example and every learner-facing
+    message branch only on `we["ok"]` (the safety result), never on `claim_ok`. The learner
+    is never told a prediction was correct/incorrect on the basis of a `None`.
+  - `process_measures.md` §5d: the aggregates key on `telemetry.worked_example.verified` /
+    `shown` / count, NOT on `claim_ok`; the spec already states `claim_ok == null` is "not a
+    failure". `measures.py` does not read `claim_ok` at all.
+  - The front-end and the learner model do not read `claim_ok`.
+- **Deferral documented** in the `WorkedExample` contract and `DataSciencePack.verify_worked_example`
+  docstrings: the real DS claim-check is bundled with the eval-gated reasoner-prompt
+  de-quantum, and must not be forced on without the DS-shaped prompt.
+- **Untouched (confirmed by diff against `346e548`):** `app/agent/prompts.py` (0 changes),
+  the contract field names `expected_dist`/`expected_stdout` (not renamed or populated), and
+  the safety gate / inert branch in `verify_worked_example` (only the docstring changed; no
+  logic line added or removed).
+
+Suite: **338 passed, 1 skipped** (337 baseline + the one characterization test). ruff +
+ruff-format + mypy green. The only diff to runtime code is docstrings; no behavior changed.
+
+```bash
+cd backend && ruff check . && ruff format --check . && mypy && python -m pytest -q
+```
 
 ---
 
