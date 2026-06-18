@@ -12,6 +12,8 @@ only the Apache contract (`core.domain`) plus stdlib. A pack supplies the source
 the resulting corpus through its own `knowledge()`.
 """
 
+from .corpus_kb import CorpusKB
+from .index import BM25Index, build_index, tokenize
 from .ingest import RejectedSource, ingest, write_corpus
 from .schema import (
     LICENSE_WHITELIST,
@@ -30,4 +32,8 @@ __all__ = [
     "ingest",
     "write_corpus",
     "RejectedSource",
+    "BM25Index",
+    "build_index",
+    "tokenize",
+    "CorpusKB",
 ]
