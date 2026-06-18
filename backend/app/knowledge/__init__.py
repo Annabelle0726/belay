@@ -12,6 +12,7 @@ only the Apache contract (`core.domain`) plus stdlib. A pack supplies the source
 the resulting corpus through its own `knowledge()`.
 """
 
+from .ingest import RejectedSource, ingest, write_corpus
 from .schema import (
     LICENSE_WHITELIST,
     CorpusPassage,
@@ -26,4 +27,7 @@ __all__ = [
     "is_allowed_license",
     "license_reason",
     "validate_record",
+    "ingest",
+    "write_corpus",
+    "RejectedSource",
 ]
