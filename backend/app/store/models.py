@@ -8,7 +8,7 @@ Three tables:
                   This is Sol's persistent learner model.
   events        - append-only trace. Every run and every tutor turn lands here
                   with full component telemetry. This IS the §6 data stream
-                  (see docs/PRIVACY.md); it is never updated, only inserted.
+                  (see PRIVACY.md); it is never updated, only inserted.
 
 LearnerState schema v2 (2026-06-03): added `concepts` JSON (canonical per-concept
 mastery). Shape: {concept_id: {"state":"shaky"|"grasped", "evidence":int,

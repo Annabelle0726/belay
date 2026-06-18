@@ -13,8 +13,8 @@ Legend:  🟢 offline (no network / DB / key)   🟡 needs Docker (local)   🔴
 
 ## Extraction status (Phase 0)
 
-This runbook was carried over from `quantum-inventioneers` @ `9b19cd5` — the codebase
-where the framework's first implementation was built — and adopted as the framework's
+This runbook was carried over from `quantum-inventioneers` @ `9b19cd5` (the codebase
+where the framework's first implementation was built) and adopted as the framework's
 canonical runbook. **Phase 0 deletes nothing**, so every step below
 still describes the copied quantum app and currently passes as-is
 (`221 passed, 11 skipped`). Entries that are **quantum-specific** are flagged
@@ -674,6 +674,9 @@ cd backend && python -m pytest tests/test_overlay.py -q
 
 ## Slice F — first real KnowledgeBase + leak-over-retrieval gate (safety-critical)
 
+> Cross-reference (Slice N): the governance gate (leak, leak-over-retrieval, wellbeing) is
+> summarized as-built in `ARCHITECTURE.md`. This section is kept as the build narrative.
+
 **Baseline floor (pre-Slice-F, off HEAD `3ea3a98`): `312 passed, 1 skipped`.** Coverage
 may not dip below this; the gate test is net-additive.
 
@@ -717,6 +720,10 @@ cd backend && python -m pytest tests/test_knowledge.py tests/test_import_boundar
 ---
 
 ## Slice G — distress-routing layer of the wellbeing floor (safety-critical)
+
+> Promoted (Slice N): the as-built distress and privacy posture, and the two standing IRB
+> items, now live in `PRIVACY.md` as the standalone IRB-facing record. This section is kept
+> as the build narrative; `PRIVACY.md` is the document to review.
 
 **Baseline floor (pre-Slice-G, off HEAD `fc1d78f`): `325 passed, 1 skipped`.** Coverage
 may not dip; the safety tests are net-additive.
@@ -1052,7 +1059,31 @@ standing IRB items), `ARCHITECTURE.md` (contract vs implementation, seams, runne
 governance gate, the §6 envelope), and `ROADMAP.md` (the consolidated forward edges). It
 cross-references those docs from here (no runbook records deleted) and repoints the four
 code/config comments that named deleted docs. Docs and comments only: no code logic
-changed. (Realization details appended on completion.)
+changed.
+
+What was done (each doc a separable commit; suite + gate green after each):
+
+- **Created `PRIVACY.md`** (IRB-facing): privacy-by-architecture and the as-built distress
+  posture, each section citing its source (agent/distress.py, orchestrator._distress_turn,
+  config.py distress fields, store/, the README/CONTRIBUTING privacy statements, and this
+  runbook's Slice G). Marks the two standing IRB items.
+- **Created `ARCHITECTURE.md`** (publish-facing): the Apache contract vs AGPL
+  implementation, the DomainPack/KnowledgeBase seams, the sandbox runner, the governance
+  gate, the §6 envelope, and the HTTP surface, accurate to the current module layout.
+- **Created `ROADMAP.md`**: the consolidated forward edges (next work, deferred edges, the
+  mypy ratchet), each item cited in-tree.
+- **Cross-references, no deletions:** Slice F and Slice G now point to ARCHITECTURE.md and
+  PRIVACY.md; all runbook records are retained.
+- **Stale comments repointed:** `agent/goals.py` (EXTRACTION_PLAN -> VALIDATION wellbeing
+  records), `integrations/quad/router.py` and `docker-compose.yml` (quad-tutor-protocol ->
+  ARCHITECTURE.md + VALIDATION; no separate protocol doc created, since the sidecar
+  protocol is covered by ARCHITECTURE.md, this runbook, and the self-describing
+  `/quad/v1/capabilities` endpoint), `store/models.py` (docs/PRIVACY.md -> PRIVACY.md).
+- **Em-dash fix:** the Phase 0 provenance line is now dash-free (house style).
+
+`PROVENANCE.md` was deliberately NOT recreated (provenance is the single factual line in
+the README). Suite: **338 passed, 1 skipped** (unchanged, docs/comments only); ruff +
+ruff-format + mypy green.
 
 ---
 

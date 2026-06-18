@@ -33,7 +33,7 @@ from . import distress as _distress
 # to the kind decline (acceptable); a false negative would honor a harmful goal (not
 # acceptable) — and it is only one layer of the wellbeing floor (see
 # `prompts._goals_block` never-honor-framing and `governance.soften_if_berating`).
-# The asymmetry vs. the leak gate is documented in docs/EXTRACTION_PLAN.md §(g).
+# The asymmetry vs. the leak gate is documented in VALIDATION.md (the wellbeing-floor records).
 _HARMFUL = re.compile(
     # direct insults / name-calling directed at the student
     r"(call me\s+(an?\s+)?(idiot|stupid|dumb|moron|loser|failure|fool)"

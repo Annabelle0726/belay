@@ -6,7 +6,7 @@
 # and the self-hosted OpenAI-compatible provider. Point OPENAI_BASE_URL at any
 # local or institutional model endpoint — no lock-in, no external API required.
 # With a self-hosted endpoint, student code and prompts stay on institutional
-# compute (FERPA posture; see docs/quad-tutor-protocol.md and VALIDATION).
+# compute (FERPA posture; see ARCHITECTURE.md (Quad sidecar) and VALIDATION).
 #
 # Postgres is OPT-IN (it is for scale, not a prerequisite):
 #   docker compose --profile postgres up --build

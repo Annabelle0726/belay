@@ -5,7 +5,7 @@ framework's existing evaluation-first tutor loop.
 
 Apache-2.0-compatible. Imports CORE ONLY (`app.agent`, `app.core`, `app.store`,
 `app.config`) — never `packs.*`; the active pack is resolved through the core
-registry. See docs/quad-tutor-protocol.md.
+registry. See ARCHITECTURE.md (HTTP surface / Quad sidecar) and VALIDATION.md.
 
 Hard constraints (EduCloud privacy posture):
   - Identity is pseudonymous ONLY: a host numeric user id namespaced by provider,
