@@ -17,8 +17,7 @@ This runbook was ported from the origin app `quantum-inventioneers` @ `9b19cd5` 
 the framework's canonical runbook. **Phase 0 deletes nothing**, so every step below
 still describes the copied quantum app and currently passes as-is
 (`221 passed, 11 skipped`). Entries that are **quantum-specific** are flagged
-`→ Phase 1 del` and are enumerated on the deletion list in
-[`docs/EXTRACTION_PLAN.md`](docs/EXTRACTION_PLAN.md) §(d); in Phase 1 they are
+`→ Phase 1 del`; in Phase 1 they are
 removed or re-based onto a pack fixture, and this runbook is updated in the same
 change. Quantum-specific items here: the simulator/functional-model/worked-example/
 quantum-leak test modules and eval fixtures (§1), the Classiq backend smoke (§6),
@@ -35,8 +34,7 @@ five core consumers (`agent/governance`, `agent/orchestrator`, `analysis/measure
 or `curriculum/*`. **No quantum code was deleted**; quantum is adapted in place
 (`quantum/pack.py`) and stays the active pack. The persona text moved out of core
 `agent/prompts.py` into `QUANTUM_PERSONA`; core prompts are now persona-parameterized
-builders. The §6 result/telemetry envelope was generalized (schema **v6**; see
-`docs/EXTRACTION_PLAN.md` §(c) schema note).
+builders. The §6 result/telemetry envelope was generalized (schema **v6**).
 
 The offline suite is **unchanged at `221 passed, 11 skipped`** — the inversion is
 behavior-preserving with quantum active. Validated by the same gate as §1:
@@ -308,8 +306,7 @@ reciprocate-in-teach, redirect-answer-seeking, calibration, encourage, and revis
 `backend/app/integrations/quad/` exposes the existing tutor loop to the EduCloud
 Quad control plane over a versioned HTTP/JSON sidecar. **Apache-2.0-compatible;
 imports core only** (never `packs.*`). Mounted on the main app and also buildable
-standalone via `build_router(consent_router, pack, llm_factory)`. Full protocol:
-`docs/quad-tutor-protocol.md`.
+standalone via `build_router(consent_router, pack, llm_factory)`.
 
 - **Four routes:** `GET /quad/v1/health`, `GET /quad/v1/capabilities`,
   `POST /quad/v1/turn` (one tutor turn over the existing loop), `POST /quad/v1/events`
@@ -431,7 +428,7 @@ framework's own deployability — not the Registry or the Coolify adapter).
 - **Embed demo** — `frontend/embed-demo.html` exercises **one `/quad/v1/turn`**
   against the `_skeleton` pack (`echo-1`), pseudonymous id only. Run the server with
   `TUTOR_PACK=_skeleton`; a `control`-stance turn needs no model.
-- **Registry / Coolify / FERPA** documented in `docs/quad-tutor-protocol.md`:
+- **Registry / Coolify / FERPA**:
   the container registers as a Registry agent object (its `/quad/v1/capabilities`
   is the discovery doc, `/quad/v1/health` the liveness probe), deploys through the
   Coolify adapter, and the resulting `deployed_url` is recorded back onto the
@@ -564,7 +561,7 @@ cd backend && python -m pytest tests/test_reflect.py -q
 ## Learner goals & reflection - Slice D: wellbeing floor, symmetry of rigor (safety-critical)
 
 The two floors that bound a student-set goal are **not symmetric, and the framework
-does not pretend they are** (full rationale: `docs/EXTRACTION_PLAN.md` §(g)). The
+does not pretend they are**. The
 **leak floor** is a post-hoc deterministic gate because leak-detection has a
 ground-truth oracle (the grader + the known solution). The **wellbeing floor** has
 **no oracle** for tone, so it is **defense-in-depth**, not one gate:
@@ -599,7 +596,7 @@ The **hard path** (a harmful goal that evades intake AND a complying, berating
 reasoner) is tested directly; with a deterministic worst-case stub the pre-hoc prompt
 protections cannot bind it, so the post-hoc softener is what mechanically holds the
 output. **Distress response** is a recorded, **NOT built**, product + IRB decision
-(safe defaults in `docs/EXTRACTION_PLAN.md` §(g) and the note in `agent/goals.py`).
+(safe defaults are recorded in the note in `agent/goals.py`).
 
 New tests in `tests/test_goal_safety.py` (now 11, +5): broadened cautious detector
 fixtures, honor-framing-never-for-harm (provable), the adversarial hard-path test, a
@@ -650,7 +647,7 @@ so existing families/tests stay green.
   pseudonymous, PII-checked 422); `/quad/v1/turn` and `/api/sol/turn` accept an inline
   `overlay`. `capabilities.customization` advertises the bounded vocabulary and that
   the floors are not customizable. No new env var.
-- **Embed contract + reference widget.** `docs/quad-tutor-protocol.md` documents the
+- **Embed contract + reference widget.** The embed contract covers the
   request/response shape, the floor guarantees, the PII boundary, and that the embed
   never authenticates. `frontend/widget.html` is a single-file, dependency-light,
   replaceable widget: three panes (chat / goals + reflection / trace + signals) plus
@@ -911,7 +908,7 @@ What was done (each step a separable commit; suite green after each):
   the process-measure spec (both copies), the archive script, and the smoke scripts are
   generalized to DS/CS and Sol.
 - **Bucket (b) surfaced, not edited.** Provenance/attribution (this runbook's
-  Extraction-status sections; the README origin line and its `docs/PROVENANCE.md`
+  Extraction-status sections; the README origin line and its provenance
   pointer) is left intact and compiled into a list for a human disposition decision.
   **The provenance disposition is PENDING the human's decision** (keep a minimal origin
   line / move detailed lineage to the Quantum Inventioneers repo / remove).

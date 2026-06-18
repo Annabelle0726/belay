@@ -6,8 +6,7 @@ gate runs the draft through the active domain's grader and strips any full solut
 rather than merely asking the model not to.
 
 > The repository name `peer-tutor-framework` is a placeholder. The final name is
-> pending and will be set in a single atomic commit at the publish step (see
-> `docs/PROVENANCE.md`).
+> pending and will be set in a single atomic commit at the publish step.
 
 ## What it is
 
@@ -23,11 +22,11 @@ Three properties distinguish it:
 - Deterministic governance. The no-leak rule is an executable gate, not a prompt
   instruction. Leak-detection has a ground-truth oracle (the pack's grader plus the
   known solution), so the gate decides post-hoc and is supreme over everything,
-  including a student goal that demands the answer. See `docs/ARCHITECTURE.md`.
+  including a student goal that demands the answer.
 - Privacy by architecture. Identity is a pseudonymous host id only (for example
   `gh:12345`); PII is rejected at the sidecar boundary; there is no write path to
   grades and no rankings. Goals and reflections are pseudonymous and never surfaced to
-  an instructor. See `docs/PRIVACY.md`.
+  an instructor.
 - Compute-agnostic, self-hosted first. The default provider is `openai_compatible`
   pointed at a local Ollama or vLLM endpoint, so the tutor can run entirely on
   institutional compute with no external API in the data path.
@@ -106,8 +105,7 @@ A versioned HTTP/JSON sidecar exposes the existing tutor loop to the EduCloud Qu
 control plane at base path `/quad/v1` (`backend/app/integrations/quad/`, mounted on the
 main app). It imports core only, advertises its posture at `/quad/v1/capabilities`
 (pseudonymous identity, grades read-only with no write path, Apache-2.0), runs one
-tutor turn at `/quad/v1/turn`, and rejects PII at the boundary with a 422. Full
-protocol: `docs/quad-tutor-protocol.md`.
+tutor turn at `/quad/v1/turn`, and rejects PII at the boundary with a 422.
 
 ## Behavioral benchmark
 
@@ -124,13 +122,12 @@ python -m evals.behavioral --pack datascience [--provider P] [--repeats N] \
 separate strong judge configured via `JUDGE_PROVIDER` / `JUDGE_MODEL`; if the judge
 model equals a tutor model under test the report marks those families
 `credible: false` / `self_judged: true`. The deterministic axes are credible today;
-the strong-judge run at higher repeats is pending (`docs/ROADMAP.md`).
+the strong-judge run at higher repeats is pending.
 
 ## License
 
 The framework core and the Quad integration are intended for open-source release and
-are written to be Apache-2.0-compatible, importing only from the framework core (see
-`docs/PROVENANCE.md` and the Quad constraint set in `docs/EXTRACTION_PLAN.md`). The
+are written to be Apache-2.0-compatible, importing only from the framework core. The
 `/quad/v1/capabilities` document advertises `"license": "Apache-2.0"`. Note honestly:
 there is no `LICENSE` file in the repository yet. Adding it is part of the
 name-and-publish step; until then the license is stated intent, not a file in the tree.

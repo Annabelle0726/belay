@@ -5,8 +5,7 @@
 Authoritative spec for Step 4 (calibration capture + trace→measure extraction).
 Every measure below is a **pure, deterministic function of the ordered event trace**
 (plus the grader for the leak re-check). No model calls. This file is part of the
-data dictionary: a change here is a **protocol change** and must be version-stamped
-(see `docs/PRIVACY.md`).
+data dictionary: a change here is a **protocol change** and must be version-stamped.
 
 > **Before implementing:** confirm the exact run-event result keys (`goalMet`,
 > `distance`) in the active pack's result envelope and `backend/app/store/models.py`,

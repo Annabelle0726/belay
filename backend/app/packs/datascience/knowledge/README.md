@@ -28,5 +28,4 @@ implementation of the `core/domain` `KnowledgeBase` protocol (Slice F).
 
 The corpus prose in `corpus/corpus.json` is original course concept notes authored for
 this framework and is released under **Creative Commons Attribution 4.0 (CC-BY 4.0)**.
-Attribute as: *"peer-tutor-framework course concept notes (CC-BY 4.0)."* See also
-`docs/PROVENANCE.md`.
+Attribute as: *"peer-tutor-framework course concept notes (CC-BY 4.0)."*
