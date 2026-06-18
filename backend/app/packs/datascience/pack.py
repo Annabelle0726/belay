@@ -107,9 +107,20 @@ class DataSciencePack:
     ) -> VerifyResult:
         """Verify a worked example is sound to show: it RUNS, and it does NOT
         solve the current exercise (the non-solution check reuses the
-        executable grader, so a verified example can never be a solution
-        leak). Optional ``expected_stdout`` is
-        checked when provided."""
+        executable grader, so a verified example can never be a solution leak).
+        This safety gate is correct and authoritative; it is what decides whether
+        the example is shown.
+
+        The prediction claim-check (``expected_stdout``) is DEFERRED and currently
+        INERT for DS: the reasoner prompt populates the quantum-shaped
+        ``expected_dist`` field, not ``expected_stdout``, so ``expected`` below is
+        always None, the claim branch never runs, and ``claim_ok`` is always None
+        ("no check performed", never a pass or a fail). Real DS expected-output
+        verification lands together with the DS-shaped reasoner-prompt de-quantum
+        (that prompt change is eval-gated, so it is not made here). Do NOT populate
+        ``expected_stdout`` or rename the field to force a claim-check: without the
+        DS-shaped prompt that would produce reliably-wrong claim results. See the
+        WorkedExample contract docstring."""
         source = (worked_example.get("source") or "").strip()
         if not source:
             return {"ok": False, "reason": "does_not_run", "dist": None, "claim_ok": None}

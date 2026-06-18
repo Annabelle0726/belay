@@ -187,6 +187,14 @@ class RunResult(TypedDict, total=False):
 
 class WorkedExample(TypedDict, total=False):
     source: str
+    # ``expected_dist`` is the quantum-shaped prediction field (a measurement
+    # distribution) the reasoner prompt still populates. The DS pack's
+    # verify_worked_example reads ``expected_stdout``, NOT this field, so today a
+    # prediction supplied here is ignored and the claim-check does not run for DS
+    # (VerifyResult.claim_ok stays None). DS expected-output verification is DEFERRED:
+    # it lands together with the DS-shaped reasoner-prompt de-quantum (the prompt change
+    # is eval-gated, so it is not done here). Do not treat the inert branch as working.
+    # See DataSciencePack.verify_worked_example.
     expected_dist: dict[str, float] | None
 
 
@@ -194,6 +202,9 @@ class VerifyResult(TypedDict, total=False):
     ok: bool
     reason: str
     dist: dict[str, float] | None
+    # ``claim_ok`` is three-valued: True = prediction verified, False = prediction
+    # mismatched, None = NO claim-check performed (never read as a pass or a fail).
+    # For DS it is currently ALWAYS None (the claim-check is inert; see WorkedExample).
     claim_ok: bool | None
 
 
