@@ -951,6 +951,17 @@ cd backend && ruff check . && ruff format --check . && mypy && python -m pytest 
 
 ---
 
+## Slice L — make the dead DS claim-check explicit and safe (zero behavior change)
+
+**Baseline floor (off HEAD `346e548`): `337 passed, 1 skipped`.** Slice L does NOT
+un-dead the DS worked-example prediction claim-check; it makes the current inert state
+explicit and safe: a characterization test locks `claim_ok is None` for a DS prediction,
+the `claim_ok` consumers are audited to confirm `None` is never read as a pass or a fail,
+and the deferral is documented. The prompt, the contract field, and the safety gate are
+untouched. (Realization details appended on completion.)
+
+---
+
 ## 0. Environment (once) 🟢
 
 Use the project venv, and **always invoke the suite as `python -m pytest`** — a bare
