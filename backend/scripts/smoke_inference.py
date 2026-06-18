@@ -16,9 +16,9 @@ Usage (off-instance, via Open WebUI proxy):
     python scripts/smoke_inference.py
 
 The sample turn used throughout:
-    Bell exercise, source = "allocate 2 / superpose q0 / superpose q1 / measure all"
-    (the superpose-both-for-Bell misconception, M2.1; exercises F6 too)
-    last_result = uniform 25 % each (goalMet false, TVD ≈ 0.5)
+    ds-foundations exercise, source = a partial pandas attempt that does not yet
+    meet the goal (a common "forgot to group before aggregating" misconception).
+    last_result = goalMet false.
 """
 
 from __future__ import annotations
@@ -39,31 +39,28 @@ from app.agent import self_eval as selfeval_mod
 from app.agent.context import build_context, serialize
 from app.agent.llm import OpenAICompatLLM, get_llm
 from app.config import settings
-from app.core.domain import get_active_pack
+from app.core.registry import get_active_pack
 from app.store import InMemoryStore
 
 # ── sample turn fixture ───────────────────────────────────────────────────────
 
-BELL = get_active_pack().get_exercise("ds-foundations")
+EX = get_active_pack().get_exercise("ds-foundations")
 
 _SAMPLE_PAYLOAD = {
     "participant_id": "smoke_inf",
-    "exercise": BELL,
+    "exercise": EX,
     "event": "run",
     "mode": "study",
     "stance": "peer",
-    "source": "allocate 2\nsuperpose q0\nsuperpose q1\nmeasure all",
+    "source": "import pandas as pd\ndf = pd.read_csv('data/sales.csv')\nresult = df['amount'].mean()",
     "result": {
         "ok": True,
         "goalMet": False,
-        "tvd": 0.5,
-        "dist": [
-            {"bits": "00", "p": 0.25},
-            {"bits": "01", "p": 0.25},
-            {"bits": "10", "p": 0.25},
-            {"bits": "11", "p": 0.25},
-        ],
-        "diff": "Your run has weight on |01⟩, |10⟩ that the target doesn't have",
+        "metric": None,
+        "pack": {
+            "id": "datascience",
+            "summary": "ran, but returns a single overall mean rather than a per-category breakdown",
+        },
     },
     "recent": [],
     "signals": {
@@ -75,23 +72,23 @@ _SAMPLE_PAYLOAD = {
 }
 
 _CTX = build_context(_SAMPLE_PAYLOAD, {"grasped": [], "shaky": []}, 2)
-_CTX["_exercise_full"] = BELL
+_CTX["_exercise_full"] = EX
 _CTX_JSON = serialize(_CTX)
 
 _SAMPLE_PLAN = {
     "affective_state": "confusion",
-    "affect_reasoning": "uniform distribution — superpose-both mistake",
+    "affect_reasoning": "computed one overall mean instead of grouping first",
     "intervention": "diagnose",
-    "target_concept": "entanglement",
-    "planner_note": "surface superpose-both vs entangle contrast",
+    "target_concept": "groupby-aggregation",
+    "planner_note": "surface group-then-aggregate vs aggregate-only contrast",
     "confidence": 0.7,
 }
 _SAMPLE_DRAFT = {
-    "message": "I see all four outcomes at ~25% — interesting. What does that tell you about whether q0 and q1 are actually linked?",
+    "message": "You are getting one number for the whole table. What would you need to do first to get one number per category?",
     "check_question": None,
     "confidence": 0.75,
     "grasped": [],
-    "shaky": ["entanglement"],
+    "shaky": ["groupby-aggregation"],
     "misconception_id": None,
 }
 

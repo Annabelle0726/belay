@@ -34,7 +34,7 @@ from app.analysis.measures import (
     compute_calibration_pairs,
     ece,
 )
-from app.core.domain import get_active_pack
+from app.core.registry import get_active_pack
 
 _CALIB_FIELDS = [
     "participant_id",

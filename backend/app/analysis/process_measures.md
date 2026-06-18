@@ -9,7 +9,7 @@ data dictionary: a change here is a **protocol change** and must be version-stam
 (see `docs/PRIVACY.md`).
 
 > **Before implementing:** confirm the exact run-event result keys (`goalMet`,
-> `distance`) in `backend/app/quantum/backend.py` and `backend/app/store/models.py`,
+> `distance`) in the active pack's result envelope and `backend/app/store/models.py`,
 > and recompute struggle trajectories from the ordered **run** events rather than
 > assuming per-turn `attempt_signals` were persisted. Field names below reflect the
 > current MVP contracts. Measures depending on `stance`, per-agent `plan.confidence`,
@@ -92,11 +92,11 @@ Per (participant × exercise), recomputed from the ordered run events:
 - `tvd_slope` := slope of `best_distance` over successive runs (negative = converging = productive)
 - `repeated_error_count` := consecutive runs sharing the same failing signature (reuse the `repeatedError` signal if persisted, else equality of error/outcome-distribution)
 - `engaged_span_without_handoff` := longest run of consecutive turns/runs with no `realized_handoff`
-- `nontrivial_revision_count` := successive `source` submissions whose **parsed op sequence** differs (an op added, removed, or retargeted). Reuse `quantum/functional_model.py` to parse each submission into its op list and diff them — more robust and semantically meaningful than character edit distance (a whitespace/rename-only change is correctly ignored). Proxy for student-generated reasoning/revision.
+- `nontrivial_revision_count` := successive `source` submissions whose **parsed op sequence** differs (an op added, removed, or retargeted). Use the active pack's `program_signature` (a parse-only structural fingerprint) to compare successive submissions — more robust and semantically meaningful than character edit distance (a whitespace/rename-only change is correctly ignored). Proxy for student-generated reasoning/revision.
 
   **Edge cases (no code change needed — these are intended behaviour):**
-  (a) *Semantically-equivalent rewrite:* two submissions that differ in variable names, qubit labels, or op ordering but lower to the same gate list (e.g. `superpose q0` vs `superpose 0`) are **not** counted as a revision, because `synthesize()` normalises both to `[{t:"H",q:0}]`. This is intentional: we want to count reasoning steps, not cosmetic edits.
-  (b) *Two consecutive parse-error submissions:* both fail `synthesize()` and lower to `[]`. The revision between them is **not** counted (the op-list diff `[]→[]` = no change). This is a known limitation: if a student writes two syntactically broken programmes in a row, the revision is invisible to this measure. Report parse-error runs separately via `result.ok == False` counts if editorial revision under error conditions is of independent interest.
+  (a) *Semantically-equivalent rewrite:* two submissions that differ only in whitespace, comments, or variable names but parse to the same structure are **not** counted as a revision, because `program_signature()` normalises them to the same fingerprint. This is intentional: we want to count reasoning steps, not cosmetic edits.
+  (b) *Two consecutive parse-error submissions:* both fail to parse and reduce to an empty signature. The revision between them is **not** counted (the op-list diff `[]→[]` = no change). This is a known limitation: if a student writes two syntactically broken programmes in a row, the revision is invisible to this measure. Report parse-error runs separately via `result.ok == False` counts if editorial revision under error conditions is of independent interest.
 - `self_directed_ratio` := student-initiated runs / (runs + Sol-prompted turns) — descriptive
 - **Span classification:** `productive` = ≥2 attempts with net TVD decrease and eventual progress; `unproductive/stuck` = ≥3 attempts with no progress **and** `repeated_error`.
 
@@ -153,9 +153,9 @@ measure, not pure self-knowledge. Report alongside 4b.
 
 On a `worked_analogy` turn the reasoner emits a structured `worked_example`
 (`source` + optional `expected_dist`); the orchestrator runs the deterministic
-verifier (`quantum/worked_example.py`) and records the outcome in
+verifier (the pack's `verify_worked_example`) and records the outcome in
 `telemetry.worked_example = {verified, reason, retries, shown, claim_ok}`.
-Verification passes iff the example **compiles** (`synthesize` ok), **does not meet
+Verification passes iff the example **runs** (executes without error), **does not meet
 the current exercise goal** (the same `is_goal_meeting` grader §2/§4a use — so it is
 genuinely a *different* problem and cannot leak the solution), and — when a
 prediction was given — its simulated distribution **matches `expected_dist`** within

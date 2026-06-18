@@ -116,14 +116,14 @@ NESTED_PAYLOAD = {
     "event": "turn",
     "mode": "study",
     "stance": "peer",
-    "final_message": "What do you think links the qubits?",
+    "final_message": "What do you think links the variables?",
     "governance": {"flag": "none", "block": False, "reasons": []},
     "telemetry": {
         "escalated": False,
         "abstained": False,
         "reasoning_effort": "medium",
         "confidence_trajectory": {"planner": 0.7, "reasoner": 0.8, "self_eval": 0.75},
-        "misconception_id": "M2.1-superpose-both-is-entangle",
+        "misconception_id": "M2.1-scale-before-split",
         "stance": "peer",
     },
 }
@@ -141,24 +141,26 @@ try:
     step("store_for(consenter) is durable", True)
 
     store.save_learner_state(
-        PID, {"grasped": ["superposition"], "shaky": ["entanglement"], "attempts": 3}
+        PID, {"grasped": ["regularization"], "shaky": ["overfitting"], "attempts": 3}
     )
     step("save_learner_state succeeds", True)
 
     store.append_event(
         make_event(
             PID,
-            "bell",
+            "ds-foundations",
             "study",
             "run",
             {
-                "source": "allocate 2\nsuperpose q0\nmeasure all",
+                "source": "import pandas as pd\ndf = pd.read_csv('data/sales.csv')",
                 "result": {"ok": True, "goalMet": False, "tvd": 0.5},
             },
             stance="peer",
         )
     )
-    store.append_event(make_event(PID, "bell", "study", "turn", NESTED_PAYLOAD, stance="peer"))
+    store.append_event(
+        make_event(PID, "ds-foundations", "study", "turn", NESTED_PAYLOAD, stance="peer")
+    )
     step("append run + turn events", True)
 except Exception as e:
     step("round-trip setup", False, str(e))
@@ -174,13 +176,13 @@ try:
     state = s2.get_learner_state(PID)
     step(
         "get_learner_state round-trips",
-        state["grasped"] == ["superposition"]
-        and state["shaky"] == ["entanglement"]
+        state["grasped"] == ["regularization"]
+        and state["shaky"] == ["overfitting"]
         and state["attempts"] == 3,
         repr(state),
     )
 
-    count = s2.attempts(PID, "bell")
+    count = s2.attempts(PID, "ds-foundations")
     step("attempts() counts only run events", count == 1, f"got {count}")
 
     jsonl = s2.export_jsonl(PID)
@@ -194,7 +196,7 @@ try:
         tel = turn_row["payload"].get("telemetry", {})
         step(
             "nested payload intact (misconception_id)",
-            tel.get("misconception_id") == "M2.1-superpose-both-is-entangle",
+            tel.get("misconception_id") == "M2.1-scale-before-split",
             repr(tel.get("misconception_id")),
         )
         traj = tel.get("confidence_trajectory", {})
@@ -217,7 +219,7 @@ try:
     state3 = s3.get_learner_state(PID)
     step(
         "fresh SqlStore: learner state persists",
-        state3["grasped"] == ["superposition"],
+        state3["grasped"] == ["regularization"],
         repr(state3),
     )
 
