@@ -999,6 +999,17 @@ cd backend && ruff check . && ruff format --check . && mypy && python -m pytest 
 
 ---
 
+## Slice M — doc + provenance cleanup (docs only, zero behavior change)
+
+**Baseline floor (off HEAD `e77e053`): `338 passed, 1 skipped`.** Slice M resolves the
+dangling `docs/*.md` references (none of the six targets exist anywhere, so each is
+removed, not stubbed) and reframes provenance concept-first: Sol is the original
+framework, its first implementation was built within the quantum tutor, and the
+domain-agnostic core was extracted from it. Docs and links only: no code edited, git
+history untouched, no stub docs manufactured. (Realization details appended on completion.)
+
+---
+
 ## 0. Environment (once) 🟢
 
 Use the project venv, and **always invoke the suite as `python -m pytest`** — a bare
