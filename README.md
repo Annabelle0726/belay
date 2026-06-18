@@ -86,6 +86,16 @@ combined leak evidence). Register the pack's factory in
 `backend/app/core/domain/registry.py` and select it with `TUTOR_PACK`. Core never
 imports a pack at module load; the dependency arrow points from packs to core.
 
+A pack's optional `knowledge()` is backed by the domain-reusable corpus pipeline
+(`backend/app/knowledge/`): a license-gated ingestion step produces a normalized,
+pack-scoped corpus (only public-domain / CC0 / CC-BY / MIT / Apache-2.0 / BSD content is
+admitted, with per-passage license and attribution recorded), and a separate lexical (BM25)
+indexing step serves it behind the unchanged `KnowledgeBase` contract. Retrieval is lexical
+now; a local-embedding vector index can be added later behind the same contract with no
+re-ingest. Only a tiny seed corpus ships in-tree; ingesting real sources is a later operator
+step. Retrieved passages pass through the same deterministic leak gate as a generated draft,
+so retrieving an answer is not a loophole. See `ARCHITECTURE.md` and `ROADMAP.md`.
+
 ## Pointing at a provider
 
 `PROVIDER` selects the provider; the fast/strong tier policy (Planner fast, Reasoner

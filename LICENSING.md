@@ -27,6 +27,18 @@ AGPL-3.0, everything that implements the contract:
 
 The line is exactly this: the contract is permissive, every concrete implementation is copyleft. If you want the runner interface or anything else moved across the line, say so and the files adjust.
 
+## Corpus content (knowledge bases)
+
+A pack's knowledge corpus is content, not code, and carries its own licensing. The
+ingestion pipeline (`backend/app/knowledge/`) admits only redistributable, openly-licensed
+or public-domain material: the whitelist is public-domain, CC0, CC-BY, MIT, Apache-2.0, and
+BSD. Share-alike (CC-BY-SA), non-commercial (CC-BY-NC), no-derivatives (CC-BY-ND), and
+GPL/AGPL content are excluded by default and may be added only by a deliberate decision, not
+by accident of ingestion. Every passage records its own license and attribution, and that
+attribution travels with the passage when it is surfaced. The shipped seed corpus is
+original course concept notes released under CC-BY-4.0; ingesting real sources is a later
+operator step that the license gate polices.
+
 ## Placement (at publish time)
 
 - AGPL-3.0 full text at the repository root as `LICENSE`. Drop in the verbatim text from the FSF (gnu.org); do not modify it.

@@ -35,11 +35,22 @@ schedule or a commitment.
   Source: `README.md` ("the strong-judge run at higher repeats is pending"),
   `VALIDATION.md` ("A SEPARATE strong judge for the qualitative rubrics"; "pending a local
   endpoint").
-- **Knowledge corpus.** The datascience KnowledgeBase ships a small curated CC-BY corpus
-  (nine conceptual passages); expanding it is a natural next step. The retriever and the
-  leak-over-retrieval gate are already in place.
-  Source: `backend/app/packs/datascience/knowledge/` (`corpus/`, `kb.py`, `README.md`),
-  `VALIDATION.md` Slice F.
+- **Knowledge corpus: real source ingestion (operator step).** The license-gated,
+  pack-scoped ingestion pipeline is in place (`app/knowledge/`), and only a tiny DS+CS seed
+  corpus ships in-tree. Ingesting real, openly-licensed sources into a larger corpus is a
+  deliberate operator step (point the pipeline at sources; it rejects anything not on the
+  license whitelist), not a code change.
+  Source: `app/knowledge/ingest.py`, `backend/app/packs/datascience/knowledge/`,
+  `VALIDATION.md` Slice O.
+- **Per-pack corpora, including a future quantum corpus.** The pipeline is pack-parameterized;
+  a future quantum pack builds its own corpus with the same tool and loads it through its own
+  `knowledge()`. No shared global blob.
+  Source: `app/knowledge/ingest.py` (pack id parameter), `ARCHITECTURE.md` (the pipeline).
+- **Local-embedding vector indexing (future option).** Indexing is decoupled from ingestion
+  and sits behind the `KnowledgeBase` contract; a local-embedding vector index could replace
+  or supplement the lexical BM25 index without re-ingesting or touching the contract.
+  Embeddings, if added, run locally, never a hosted API.
+  Source: `app/knowledge/index.py`, `app/knowledge/corpus_kb.py`, `ARCHITECTURE.md`.
 - **Instructor mode.** There is no authenticated role or privileged mode today: the API has
   no auth, and "instructor" appears only as prompt wording and the `flag_escalate` label
   ("Flagged for instructor"). An instructor-facing mode would be net-new (identity, authz,

@@ -38,14 +38,43 @@ pack module; the dependency arrow points from packs to core.
   dependency-free echo pack for core-only tests is `packs/_skeleton/`.
 - **`KnowledgeBase`** (`core/domain/pack.py`, `search(query, k) -> list[Passage]`): an
   optional per-pack retrieval source. The datascience KB
-  (`packs/datascience/knowledge/kb.py`) is a hermetic, pure-Python TF-IDF cosine retriever
-  over a curated CC-BY corpus; no network, model, embeddings, or secrets.
+  (`packs/datascience/knowledge/kb.py`) is a hermetic, pure-Python retriever over a
+  curated, license-gated corpus; no network, model, embeddings, or secrets.
 - **Selection**: the active pack is chosen at runtime by `TUTOR_PACK` via the registry
   (`core/registry.py`); core never imports a pack at module load.
 
-Source: `backend/app/core/domain/pack.py`, `backend/app/packs/datascience/`,
-`backend/app/core/registry.py`, `README.md` ("Adding a domain pack"), `VALIDATION.md`
-Slice F (KnowledgeBase) and the Phase 1a/1b extraction records.
+### The knowledge-corpus pipeline (`app/knowledge/`)
+
+A domain-reusable, AGPL tool that produces and serves a pack's corpus, with ingestion
+decoupled from indexing so the retrieval method stays swappable behind the contract.
+
+- **Pack-scoped corpus.** The pipeline is parameterized by pack id and sources; the
+  normalized corpus is the pack's own, loaded through that pack's `knowledge()`. There is no
+  shared global blob; a future quantum pack would build its own corpus with the same tool.
+- **License gate (non-negotiable).** Ingestion (`app/knowledge/ingest.py`) admits only
+  whitelisted-license content (public-domain, CC0, CC-BY, MIT, Apache-2.0, BSD), records
+  per-passage license and attribution, and rejects everything else (share-alike,
+  non-commercial, no-derivatives, GPL/AGPL) with a logged reason
+  (`app/knowledge/schema.py`).
+- **Decoupled indexing.** Ingestion writes a normalized corpus artifact and nothing else;
+  indexing (`app/knowledge/index.py`) is a separate step. Retrieval is lexical (BM25) now;
+  a local-embedding vector index could replace or supplement it later behind the same
+  `KnowledgeBase` contract with no re-ingest. Any future embeddings run locally, never a
+  hosted API.
+- **Attribution travels with the passage.** The corpus-backed KB (`app/knowledge/corpus_kb.py`)
+  surfaces each passage's attribution + license in the contract's `Passage.citation` field,
+  which the context layer already passes to the prompt.
+- **One leak gate, at scale.** Retrieved passages flow through the same Slice F
+  `governance.screen_passages` (reusing `pack.leak_evidence`) before any can enter context;
+  there is no second screen. Proven to drop a seeded solution-bearing passage at corpus
+  scale.
+- **Seed only.** Only a tiny DS+CS seed corpus ships in-tree; ingesting real sources is a
+  later operator step. See `ROADMAP.md`.
+
+Source: `backend/app/core/domain/pack.py`, `backend/app/knowledge/`,
+`backend/app/packs/datascience/knowledge/`, `backend/app/core/registry.py`, `README.md`
+("Adding a domain pack"), `VALIDATION.md` Slice F (the leak-over-retrieval gate) and
+Slice O (the corpus pipeline).
 
 ## The agent loop
 

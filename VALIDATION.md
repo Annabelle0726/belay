@@ -1098,7 +1098,39 @@ passages flow through the existing Slice F `screen_passages` leak gate (no secon
 proven at corpus scale. Per-passage license + attribution are recorded and travel with a
 surfaced passage end to end (in `Passage.citation`). Only a tiny DS+CS seed corpus ships;
 real sources are a later operator ingestion step. Additive: the None path stays
-byte-identical. (Realization details appended on completion.)
+byte-identical.
+
+What was built (each step a separable commit; suite + gate green after each):
+
+- **Schema + license gate** (`app/knowledge/schema.py`): the `CorpusPassage` record
+  (`id, pack, source, license, attribution, tags, text`) and a family-aware whitelist
+  (public-domain, CC0, CC-BY, MIT, Apache-2.0, BSD) that rejects share-alike / non-commercial
+  / no-derivatives / GPL-AGPL first, so CC-BY-SA / CC-BY-NC are refused despite the CC-BY
+  prefix.
+- **Ingestion** (`app/knowledge/ingest.py`): pack-parameterized, source-agnostic; gates each
+  source, logs and reports rejections, normalizes admitted content, writes the corpus
+  artifact, and builds no index.
+- **Indexing + KB** (`app/knowledge/index.py`, `corpus_kb.py`): a separate Okapi BM25 index
+  step and `CorpusKB` implementing the unchanged Apache `KnowledgeBase` contract; attribution
+  + license ride in `Passage.citation`.
+- **Seed corpus + wiring**: `corpus/corpus.json` migrated to the normalized schema (9 DS
+  passages preserved + 4 CS passages), `DataScienceKB` reimplemented as a corpus-backed BM25
+  subclass; `knowledge()` unchanged in shape; the `_skeleton`/None path byte-identical. A
+  test-only `corpus/leak_fixture.json` holds the solution-bearing passage, kept out of the
+  production corpus.
+- **Tests** (`tests/test_knowledge_corpus.py`, +8): license-gate rejection; ingestion/index
+  decoupling; pack-scoped reuse; BM25 relevance + determinism; leak-over-retrieval blocked at
+  corpus scale (unit + end to end, no leak text in prompt/trace); attribution end to end.
+
+Reused the Slice F `screen_passages` gate unchanged (no second screen). Suite: **346 passed,
+1 skipped** (338 baseline + 8); ruff + ruff-format + mypy green; `tests/test_import_boundaries.py`
+green. Docs updated (`ARCHITECTURE.md`, `README.md`, `ROADMAP.md`, `LICENSING.md`, the pack
+knowledge README) with the operator-ingestion note and the lexical-now / local-vector-later
+swap.
+
+```bash
+cd backend && ruff check . && ruff format --check . && mypy && python -m pytest -q
+```
 
 ---
 
