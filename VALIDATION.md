@@ -1004,7 +1004,42 @@ dangling `docs/*.md` references (none of the six targets exist anywhere, so each
 removed, not stubbed) and reframes provenance concept-first: Sol is the original
 framework, its first implementation was built within the quantum tutor, and the
 domain-agnostic core was extracted from it. Docs and links only: no code edited, git
-history untouched, no stub docs manufactured. (Realization details appended on completion.)
+history untouched, no stub docs manufactured.
+
+What was done (each step a separable commit; suite + gate green after each):
+
+- **Census.** All six referenced `docs/*.md` targets exist NOWHERE in the repo (there is
+  no `docs/` directory and no root alias): `PROVENANCE.md`, `ARCHITECTURE.md`,
+  `PRIVACY.md`, `ROADMAP.md`, `EXTRACTION_PLAN.md`, `quad-tutor-protocol.md`. Living root
+  docs: `README.md`, `VALIDATION.md`, `LICENSING.md`, `CONTRIBUTING.md`,
+  `CODE_OF_CONDUCT.md`, `DCO` (plus `process_measures.md` at root and duplicated under
+  `backend/app/analysis/`, and the pack docs under `backend/app/packs/datascience/`).
+- **Link fixes (Step 3).** Every dangling `docs/*.md` reference in the markdown docs was
+  removed (none repointable — no target exists; no stub created). Touched: `README.md`,
+  `VALIDATION.md`, both `process_measures.md` copies, the datascience knowledge `README.md`.
+  After this, a scan for internal markdown doc links finds none broken.
+- **Provenance reframe (Step 4).** README single origin line: "This framework is original;
+  its first implementation was built within a quantum tutor, and the domain-agnostic core
+  was extracted from that codebase. The quantum-specific application stays in its own
+  repository and is not part of this framework." (was: "the quantum application it was
+  extracted from stays in its origin repo ... (`docs/PROVENANCE.md`)"). VALIDATION Phase 0:
+  "carried over from `quantum-inventioneers` @ `9b19cd5` — the codebase where the
+  framework's first implementation was built" (was: "ported from the origin app
+  `quantum-inventioneers` @ `9b19cd5`"). The commit ref and all build-phase / extraction
+  records are kept verbatim.
+- **Out of scope (no code edits), reported not fixed.** Prose `docs/*.md` mentions remain
+  in code/config comments — `agent/goals.py` (EXTRACTION_PLAN), `integrations/quad/router.py`
+  (quad-tutor-protocol), `store/models.py` (PRIVACY), `docker-compose.yml`
+  (quad-tutor-protocol). These are source comments, not markdown doc links; the no-code-edits
+  invariant leaves them for a future comment-cleanup.
+- **Untouched:** git history (first commit `7cd6b11` immutable; no amend/squash/rebase), all
+  code, and no new doc file manufactured.
+
+Suite: **338 passed, 1 skipped** (unchanged — docs only). ruff + ruff-format + mypy green.
+
+```bash
+cd backend && ruff check . && ruff format --check . && mypy && python -m pytest -q
+```
 
 ---
 
