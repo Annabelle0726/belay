@@ -1043,6 +1043,19 @@ cd backend && ruff check . && ruff format --check . && mypy && python -m pytest 
 
 ---
 
+## Slice N — doc consolidation (standalone publish + IRB docs, zero behavior change)
+
+**Baseline floor (off HEAD `3e22d2f`): `338 passed, 1 skipped`.** Slice N promotes the
+real decision records out of this runbook into standalone publish/IRB-facing docs, sourced
+from the code and this file as-built: `PRIVACY.md` (privacy + distress safety + the two
+standing IRB items), `ARCHITECTURE.md` (contract vs implementation, seams, runner,
+governance gate, the §6 envelope), and `ROADMAP.md` (the consolidated forward edges). It
+cross-references those docs from here (no runbook records deleted) and repoints the four
+code/config comments that named deleted docs. Docs and comments only: no code logic
+changed. (Realization details appended on completion.)
+
+---
+
 ## 0. Environment (once) 🟢
 
 Use the project venv, and **always invoke the suite as `python -m pytest`** — a bare
