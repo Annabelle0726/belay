@@ -106,9 +106,9 @@ class DataSciencePack:
         self, worked_example: WorkedExample, exercise: Exercise
     ) -> VerifyResult:
         """Verify a worked example is sound to show: it RUNS, and it does NOT
-        solve the current exercise (same gate semantics as quantum's verifier —
-        the non-solution check reuses the executable grader, so a verified
-        example can never be a solution leak). Optional ``expected_stdout`` is
+        solve the current exercise (the non-solution check reuses the
+        executable grader, so a verified example can never be a solution
+        leak). Optional ``expected_stdout`` is
         checked when provided."""
         source = (worked_example.get("source") or "").strip()
         if not source:

@@ -59,8 +59,8 @@ def _last_result(result: dict | None) -> object:
             "summary": None,
         }
     # Pack-agnostic (§6): the per-pack human-readable detail is in result.pack.summary
-    # (quantum: distribution + mismatch; DS: check results). Fall back to the legacy
-    # quantum dist/diff so pre-v6 payloads still render something useful.
+    # (e.g. the DS pack's check results). Fall back to the legacy dist/diff fields so
+    # pre-v6 payloads (an older envelope shape) still render something useful.
     pack_env = result.get("pack") or {}
     summary = pack_env.get("summary")
     if summary is None and (pack_env.get("dist") or result.get("dist") or result.get("diff")):

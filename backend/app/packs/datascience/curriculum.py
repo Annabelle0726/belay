@@ -7,7 +7,7 @@ that run end to end through `run` (grade + leak paths):
   ds-regression   — fit + evaluate a regression on a held-out split (seeded).
   ds-mlp          — train a tiny numpy MLP to a loss threshold (seeded).
 
-Exercises carry no quantum-style ``target``/``tol``; grading is spec-driven
+Exercises carry no numeric ``target``/``tol``; grading is spec-driven
 (specs/<id>.json) and executed in the sandbox runner.
 """
 

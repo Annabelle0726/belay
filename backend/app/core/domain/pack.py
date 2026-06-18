@@ -63,8 +63,7 @@ class DomainPack(Protocol):
     """A pluggable teaching domain.
 
     Core components depend on this interface, never on a concrete domain module.
-    The quantum pack is the first implementation; a data-science pack follows in
-    Phase 1b.
+    The datascience pack is the reference implementation.
     """
 
     # -- identity & persona ----------------------------------------------------

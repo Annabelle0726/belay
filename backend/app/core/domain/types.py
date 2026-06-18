@@ -8,8 +8,8 @@ flow into the §6 trace (and therefore must JSON-serialize unchanged) are kept a
 ``TypedDict`` aliases over the existing dict shapes; value objects the core
 passes around in-process are ``dataclass``es.
 
-Pack-agnostic is the whole point: nothing here names a domain (no quantum, no
-data-science). A concrete domain fills these in via its `DomainPack`.
+Pack-agnostic is the whole point: nothing here names a concrete domain (not data
+science, not any specific subject). A concrete domain fills these in via its `DomainPack`.
 """
 
 from __future__ import annotations
@@ -165,13 +165,13 @@ class RunResult(TypedDict, total=False):
       - ``ok``      — did it run / compile without error?
       - ``goalMet`` — did it meet the exercise goal? (primary progress signal)
       - ``metric``  — the pack's primary scalar for this exercise, or None. NOT
-                      direction-normalized across packs (quantum: tvd; DS
-                      regression: held-out score; DS MLP: final loss); it is a
+                      direction-normalized across packs (DS regression: held-out
+                      score; DS MLP: final loss); it is a
                       display/telemetry slot, not a cross-pack-comparable number.
       - ``error``   — error string, or None.
       - ``pack``    — namespaced domain envelope: ``{"id": <pack id>, ...}``. ALL
-                      domain-specific result data lives here (quantum tvd / gates /
-                      dist / diff; DS checks / stdout). Packs SHOULD include a
+                      domain-specific result data lives here (e.g. DS checks /
+                      stdout). Packs SHOULD include a
                       human-readable ``summary`` for the tutor context.
     """
 

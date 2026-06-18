@@ -15,7 +15,7 @@ deterministic. It consumes `LeakEvidence` supplied by the active `DomainPack`
 decision is core's. The pack owns the domain-specific redaction (which surface to
 strip); core owns the peer-voiced redirect that replaces it.
 
-Note on leak heuristics: the quantum pack's leak evidence is executable-
+Note on leak heuristics: the datascience pack's leak evidence is executable-
 comparison-only (it runs candidate snippets through the grader). There are no
 domain-agnostic *prose*-leak heuristics to host in core today (no "the answer is
 X" detector) — only the answer-seeking detector below, which reads the STUDENT's

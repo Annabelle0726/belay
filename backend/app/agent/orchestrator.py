@@ -107,7 +107,7 @@ def _control_turn(
             "component_usage": {},
             "model_tiers": settings.model_tiers,
             # §6 pack-agnostic envelope: pack id + generic execution provider
-            # (replaces the former domain-specific telemetry.quantum_backend).
+            # (replaces a former domain-specific execution-backend telemetry field).
             "pack": pack.id,
             "provider": settings.provider,
             "stance": "control",
@@ -471,7 +471,7 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
             "component_usage": tel.current_meter().by_component(),  # type: ignore[union-attr]  # the per-turn meter is set by run_turn for the turn's duration
             "model_tiers": settings.model_tiers,
             # §6 pack-agnostic envelope: pack id + generic execution provider
-            # (replaces the former domain-specific telemetry.quantum_backend).
+            # (replaces a former domain-specific execution-backend telemetry field).
             "pack": pack.id,
             "provider": settings.provider,
             "stance": stance,

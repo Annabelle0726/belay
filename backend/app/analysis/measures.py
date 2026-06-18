@@ -154,7 +154,7 @@ def realized_handoff(
     oracle governance.check() uses — so realized_handoff and withholding_solution
     can never disagree on whether a snippet solves the exercise. Pass the full
     ``exercise`` (the pack may need its id to load a spec); the legacy
-    ``target``/``tol`` form is kept for quantum callers. (``sim`` is accepted for
+    ``target``/``tol`` form is kept for legacy callers. (``sim`` is accepted for
     backward compatibility; the pack's grader is deterministic.)
     """
     pack = pack or get_active_pack()
@@ -199,7 +199,7 @@ def _fail_sig(run_event: dict):
 
     Pack-agnostic: keys off the generic ``ok`` / ``goalMet`` / ``metric`` fields,
     so two consecutive failing runs at the same primary metric read as a repeated
-    error in any pack (quantum tvd, DS held-out score / loss). No domain-specific
+    error in any pack (e.g. the DS held-out score / loss). No domain-specific
     distribution shape is read.
     """
     res = (run_event.get("payload") or {}).get("result") or {}
@@ -358,7 +358,7 @@ def compute_attempt_measures(
 
     `events` must be pre-sorted by ts (ascending).
     `exercise_meta` is the exercise dict; packs that grade by spec (DS) need only
-    its id, so ``target``/``tol`` are optional (quantum uses them).
+    its id, so ``target``/``tol`` are optional (legacy execution-graded packs use them).
     """
     target = exercise_meta.get("target", {})
     tol = exercise_meta.get("tol", GOAL_TOL)

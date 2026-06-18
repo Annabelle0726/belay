@@ -20,8 +20,7 @@ import re
 
 from .solutions import SOLUTIONS
 
-# Fenced code blocks (require newline after the tag, like governance's quantum
-# FENCE) and inline `code` spans.
+# Fenced code blocks (require newline after the tag) and inline `code` spans.
 _FENCE = re.compile(r"```[a-zA-Z0-9_+\-]*\n(.*?)```", re.DOTALL)
 _INLINE = re.compile(r"`([^`\n]+)`")
 
