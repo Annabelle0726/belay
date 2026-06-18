@@ -14,8 +14,10 @@ The tutor runs an evaluation-first loop per turn: a Planner picks one pedagogica
 move, a Peer-Reasoner writes the message, a Self-Evaluation critiques it against a
 stance rubric, a bounded refine fixes a failing draft, a deterministic Governance gate
 runs last, and Memory merges what the student now grasps. The reference domain is
-general data science (the "Robin" pack); the quantum application it was extracted from
-stays in its origin repo and is not part of this framework (`docs/PROVENANCE.md`).
+general data science (the "Robin" pack). This framework is original; its first
+implementation was built within a quantum tutor, and the domain-agnostic core was
+extracted from that codebase. The quantum-specific application stays in its own
+repository and is not part of this framework.
 
 Three properties distinguish it:
 

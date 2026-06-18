@@ -13,8 +13,9 @@ Legend:  🟢 offline (no network / DB / key)   🟡 needs Docker (local)   🔴
 
 ## Extraction status (Phase 0)
 
-This runbook was ported from the origin app `quantum-inventioneers` @ `9b19cd5` as
-the framework's canonical runbook. **Phase 0 deletes nothing**, so every step below
+This runbook was carried over from `quantum-inventioneers` @ `9b19cd5` — the codebase
+where the framework's first implementation was built — and adopted as the framework's
+canonical runbook. **Phase 0 deletes nothing**, so every step below
 still describes the copied quantum app and currently passes as-is
 (`221 passed, 11 skipped`). Entries that are **quantum-specific** are flagged
 `→ Phase 1 del`; in Phase 1 they are
