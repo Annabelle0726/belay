@@ -1087,6 +1087,21 @@ ruff-format + mypy green.
 
 ---
 
+## Slice O — pack-scoped knowledge-corpus pipeline (license-gated, decoupled indexing)
+
+**Baseline floor (off HEAD `6bb53b4`): `338 passed, 1 skipped`.** Slice O adds a
+domain-reusable, license-gated ingestion pipeline that produces a normalized per-pack
+corpus artifact (`app/knowledge/`), a separate lexical (BM25) indexing step over it, and a
+corpus-backed `KnowledgeBase` behind the unchanged Apache contract. Ingestion is decoupled
+from indexing (the corpus is the durable asset; the index is a separate build). Retrieved
+passages flow through the existing Slice F `screen_passages` leak gate (no second screen),
+proven at corpus scale. Per-passage license + attribution are recorded and travel with a
+surfaced passage end to end (in `Passage.citation`). Only a tiny DS+CS seed corpus ships;
+real sources are a later operator ingestion step. Additive: the None path stays
+byte-identical. (Realization details appended on completion.)
+
+---
+
 ## 0. Environment (once) 🟢
 
 Use the project venv, and **always invoke the suite as `python -m pytest`** — a bare
