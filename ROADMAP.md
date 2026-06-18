@@ -1,0 +1,88 @@
+# Roadmap
+
+The forward edges, consolidated from where they are recorded in-tree (VALIDATION.md and
+code comments) into one document. Each item cites its in-tree source so it can be checked
+against ground truth. This is a description of what is recorded as deferred or next, not a
+schedule or a commitment.
+
+## Known next work
+
+- **Reasoner-prompt de-quantum.** The live reasoner prompt still carries quantum-shaped
+  worked-example guidance (the DSL op list, the `expected_dist` / bitstring schema). The
+  DS-shaped prompt is deferred; it is eval-gated because a prompt change alters model
+  behavior the stubbed suite cannot prove invariant.
+  Source: `backend/app/core/domain/types.py` (the `WorkedExample` deferral comment),
+  `backend/app/packs/datascience/pack.py` (`verify_worked_example` docstring),
+  `VALIDATION.md` Slice L ("the real DS claim-check is bundled with the eval-gated
+  reasoner-prompt de-quantum").
+- **DS worked-example claim-check.** The optional prediction claim-check is currently inert
+  for DS (the prompt populates `expected_dist`; the verifier reads `expected_stdout`, which
+  is never populated, so `claim_ok` stays None). It lands with the prompt de-quantum above.
+  A characterization test locks the inert state today and will flip when it is wired.
+  Source: `backend/app/packs/datascience/pack.py` (`verify_worked_example`),
+  `backend/tests/test_worked_example.py::test_ds_claim_check_is_inert_with_expected_dist`,
+  `VALIDATION.md` Slice L.
+- **Measure-key cleanup and fallback retirement.** The process-measure output keys
+  `tvd_slope` / `avg_tvd_slope` keep quantum-era names, and `measures.py` / `context.py`
+  retain a legacy `tvd` / `dist` / `bits` fallback for pre-v6 traces. Renaming the keys and
+  retiring the fallback is a coordinated schema change, deferred.
+  Source: `backend/app/analysis/measures.py` (the `tvd_slope` keys and the `_metric`
+  legacy fallback), `VALIDATION.md` (the bucket-c note that these keep quantum-era names
+  because production code emits/parses them).
+- **Live strong-judge benchmark.** The deterministic benchmark axes (`no_solution`,
+  `never_leak`) are credible today; the separate strong-judge run at higher repeats for the
+  qualitative rubrics is pending a local endpoint.
+  Source: `README.md` ("the strong-judge run at higher repeats is pending"),
+  `VALIDATION.md` ("A SEPARATE strong judge for the qualitative rubrics"; "pending a local
+  endpoint").
+- **Knowledge corpus.** The datascience KnowledgeBase ships a small curated CC-BY corpus
+  (nine conceptual passages); expanding it is a natural next step. The retriever and the
+  leak-over-retrieval gate are already in place.
+  Source: `backend/app/packs/datascience/knowledge/` (`corpus/`, `kb.py`, `README.md`),
+  `VALIDATION.md` Slice F.
+- **Instructor mode.** There is no authenticated role or privileged mode today: the API has
+  no auth, and "instructor" appears only as prompt wording and the `flag_escalate` label
+  ("Flagged for instructor"). An instructor-facing mode would be net-new (identity, authz,
+  and a gated surface) and is not yet designed in-tree.
+  Source: `backend/app/agent/orchestrator.py` (`flag_escalate` label),
+  `backend/app/main.py` (no auth dependency on the routes), `PRIVACY.md` (grades firewall,
+  goals/reflections never surfaced to an instructor).
+
+## Deferred edges
+
+- **Containerized runner.** The current runner is an out-of-process sandbox; a
+  containerized runner (matching Quad's adversarial-containment posture) is the recorded
+  roadmap convergence point.
+  Source: `VALIDATION.md` ("the containerized runner is the roadmap convergence point";
+  the Phase 1b closing roadmap step), `backend/app/packs/datascience/specs/GRADING_SPEC.md`
+  ("containerized runner is the roadmap convergence point").
+- **Facilitator benchmark family.** The behavioral benchmark registry takes new families
+  via `@family(name, category)`; the Phase 5 facilitator family slots in there and is
+  documented as pending.
+  Source: `VALIDATION.md` (the family registry note; "the Phase 5 facilitator family slots
+  in here and is documented as pending").
+- **Cohort-level analysis.** The per-attempt measures already carry a `cohort` field;
+  condition-level comparison is downstream (the mixed-effects models), not part of this
+  layer.
+  Source: `process_measures.md` / `backend/app/analysis/process_measures.md` (the
+  `measures_by_attempt` row carrying `cohort`; "Condition-level comparison is downstream").
+- **More packs.** The pack seam and the `_skeleton` echo pack make additional domains a
+  matter of implementing `DomainPack`; the datascience pack is the reference.
+  Source: `README.md` ("Adding a domain pack"), `backend/app/packs/_skeleton/`,
+  `ARCHITECTURE.md` (Domain seams).
+- **Export/import + migration tooling.** Recorded as out of scope for the current store
+  posture, on the roadmap.
+  Source: `VALIDATION.md` ("Export/import + migration tooling is out of scope (roadmap)").
+
+## Quality ratchet
+
+- **mypy strictness.** The app source is at a strictness notch above the base; the recorded
+  next ratchet is `disallow_untyped_defs` (full annotation), app-first.
+  Source: `VALIDATION.md` Slice I ("Next ratchet notch (deferred): `disallow_untyped_defs`
+  (full annotation), app-first").
+
+## Related records
+
+- As-built privacy and distress safety: `PRIVACY.md`.
+- System architecture: `ARCHITECTURE.md`.
+- Build-phase narrative and the canonical runbook: `VALIDATION.md`.
