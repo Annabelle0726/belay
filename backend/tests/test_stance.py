@@ -85,19 +85,19 @@ class StubLLM:
                 "affective_state": "curious",
                 "affect_reasoning": "first attempt",
                 "intervention": self.planner_intervention,
-                "target_concept": "entanglement",
+                "target_concept": "overfitting",
                 "planner_note": "guide them",
                 "confidence": self.planner_confidence,
             }
         if role == "reasoner":
             self.seen_efforts.append(reasoning_effort)
-            msg = _SOLUTION_MSG if self.leak else "Think about what links the two qubits."
+            msg = _SOLUTION_MSG if self.leak else "Think about what links the two variables."
             return {
                 "message": msg,
                 "check_question": None,
                 "confidence": self.reasoner_confidence,
-                "grasped": ["superposition"],
-                "shaky": ["entanglement"],
+                "grasped": ["regularization"],
+                "shaky": ["overfitting"],
             }
         if role == "self_eval":
             self.seen_eval_systems.append(system)
@@ -163,7 +163,7 @@ class TestPeerStance:
     def test_memory_updated(self):
         store = InMemoryStore()
         run_turn(_payload("p4", "peer"), StubLLM(), store)
-        assert "superposition" in store.get_learner_state("p4")["grasped"]
+        assert "regularization" in store.get_learner_state("p4")["grasped"]
 
     def test_self_eval_uses_peer_rubric(self):
         llm = StubLLM()
@@ -218,7 +218,7 @@ class TestOracleStance:
     def test_memory_updated(self):
         store = InMemoryStore()
         run_turn(_payload("o4", "oracle"), StubLLM(), store)
-        assert "superposition" in store.get_learner_state("o4")["grasped"]
+        assert "regularization" in store.get_learner_state("o4")["grasped"]
 
     def test_self_eval_uses_oracle_rubric(self):
         llm = StubLLM()

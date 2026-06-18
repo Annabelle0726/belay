@@ -33,7 +33,7 @@ def _ctx(mode="study", goal_met=False, repeated_error=False):
             "distanceTrend": [],
             "attempts": 1,
         },
-        "exercise": {"concept": "entanglement"},
+        "exercise": {"concept": "overfitting"},
     }
 
 
@@ -42,7 +42,7 @@ def _plan(affect="curious", intervention="co_reason"):
         "affective_state": affect,
         "intervention": intervention,
         "planner_note": "",
-        "target_concept": "entanglement",
+        "target_concept": "overfitting",
         "confidence": 0.7,
     }
 

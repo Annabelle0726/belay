@@ -3,8 +3,8 @@
 Process-measure unit tests (pure offline, no LLM/network).
 
 Each test class owns a focused synthetic trace for exactly the case being
-exercised. The Bell exercise (target {"00":0.5,"11":0.5}, tol=0.07) is used
-throughout because the full solution is deterministic and short.
+exercised. The ds-foundations exercise is used throughout because its full
+solution is deterministic and short.
 
 Synthetic event layout:
   make_run(ts, source, tvd, goal_met)  → run event dict
@@ -35,11 +35,11 @@ from app.core.registry import get_active_pack
 from app.packs.datascience.solutions import SOLUTIONS
 
 EX = get_active_pack().get_exercise("ds-foundations")  # DS pack active in 1c
-SIM = None  # no quantum simulator; the DS grader is deterministic
+SIM = None  # no execution simulator; the DS grader is deterministic
 
 # Full working DS solution in a fenced block — the executable oracle grades it.
-_BELL_SRC = SOLUTIONS["ds-foundations"]["source"]
-_ORACLE_MSG = "Here's the full solution:\n```python\n" + _BELL_SRC + "```"
+_DS_SOLUTION_SRC = SOLUTIONS["ds-foundations"]["source"]
+_ORACLE_MSG = "Here's the full solution:\n```python\n" + _DS_SOLUTION_SRC + "```"
 # Stripped peer message — no code
 _STRIPPED_MSG = "I don't want to paste the whole thing — what's the next step?"
 
@@ -51,7 +51,7 @@ def _ts(n: int) -> str:
 
 def make_run(
     n: int,
-    source: str = _BELL_SRC,
+    source: str = _DS_SOLUTION_SRC,
     tvd: float = 0.5,
     goal_met: bool = False,
     dist=None,
@@ -103,7 +103,7 @@ def make_turn(
             "plan": {
                 "intervention": intervention,
                 "confidence": plan_confidence,
-                "target_concept": "entanglement",
+                "target_concept": "overfitting",
             },
             "self_eval": {
                 "confidence": se_confidence,
@@ -136,7 +136,7 @@ def make_turn(
 
 class TestHandoffs:
     def test_oracle_realized_handoff_true(self):
-        """Oracle final_message with the Bell solution → realized_handoff=True."""
+        """Oracle final_message with the full DS solution → realized_handoff=True."""
         t = make_turn(0, stance="oracle", final_message=_ORACLE_MSG)
         assert realized_handoff(t, exercise=EX, sim=SIM) is True
 
@@ -190,7 +190,10 @@ class TestRedirects:
     def test_oracle_no_redirect(self):
         """Oracle answers answer-seeking → flag=none → redirect=False."""
         t = make_turn(
-            0, stance="oracle", gov_flag="none", final_message="Here is the answer: " + _BELL_SRC
+            0,
+            stance="oracle",
+            gov_flag="none",
+            final_message="Here is the answer: " + _DS_SOLUTION_SRC,
         )
         assert redirect(t) is False
 
@@ -358,12 +361,12 @@ class TestAbstentionCalibration:
 # ── §5 struggle markers ───────────────────────────────────────────────────────
 
 # Two structurally different DS programs (parse-only program_signature differs).
-_SRC_SUPERPOSE = "import pandas as pd\ndf = pd.read_csv('data/sales.csv')\nresult = {}"
-_SRC_ENTANGLE = (
+_SRC_NOAGG = "import pandas as pd\ndf = pd.read_csv('data/sales.csv')\nresult = {}"
+_SRC_AGG = (
     "import pandas as pd\ndf = pd.read_csv('data/sales.csv')\n"
     "result = df.groupby('category')['amount'].mean().to_dict()"
 )
-_BELL_DIST = [{"bits": "00", "p": 0.5}, {"bits": "11", "p": 0.5}]
+_GOAL_DIST = [{"bits": "00", "p": 0.5}, {"bits": "11", "p": 0.5}]
 _STUCK_DIST = [{"bits": "00", "p": 0.5}, {"bits": "10", "p": 0.5}]
 
 
@@ -371,8 +374,8 @@ class TestStruggle:
     def test_productive_span(self):
         """TVD decreasing over ≥2 attempts, eventual solve → span_class=productive."""
         runs = [
-            make_run(0, source=_SRC_SUPERPOSE, tvd=0.5),
-            make_run(2, source=_SRC_ENTANGLE, tvd=0.0, goal_met=True, dist=_BELL_DIST),
+            make_run(0, source=_SRC_NOAGG, tvd=0.5),
+            make_run(2, source=_SRC_AGG, tvd=0.0, goal_met=True, dist=_GOAL_DIST),
         ]
         turn = make_turn(1)
         events = [runs[0], turn, runs[1]]
@@ -386,9 +389,9 @@ class TestStruggle:
     def test_unproductive_stuck_span(self):
         """≥3 attempts, no progress, repeated error signature → unproductive_stuck."""
         runs = [
-            make_run(0, source=_SRC_SUPERPOSE, tvd=0.5, dist=_STUCK_DIST),
-            make_run(2, source=_SRC_SUPERPOSE, tvd=0.5, dist=_STUCK_DIST),
-            make_run(4, source=_SRC_SUPERPOSE, tvd=0.5, dist=_STUCK_DIST),
+            make_run(0, source=_SRC_NOAGG, tvd=0.5, dist=_STUCK_DIST),
+            make_run(2, source=_SRC_NOAGG, tvd=0.5, dist=_STUCK_DIST),
+            make_run(4, source=_SRC_NOAGG, tvd=0.5, dist=_STUCK_DIST),
         ]
         turns = [make_turn(1), make_turn(3)]
         events = sorted([*runs, *turns], key=lambda e: e["ts"])
@@ -402,7 +405,7 @@ class TestStruggle:
         runs = [
             make_run(0, tvd=0.5),
             make_run(1, tvd=0.3),
-            make_run(2, tvd=0.0, goal_met=True, dist=_BELL_DIST),
+            make_run(2, tvd=0.0, goal_met=True, dist=_GOAL_DIST),
         ]
         m = compute_attempt_measures("p_test", "ds-foundations", runs, EX, SIM)
         assert m["solved"] is True
@@ -414,27 +417,27 @@ class TestStruggle:
 
 class TestNontrivialRevision:
     def test_op_added_is_nontrivial(self):
-        """Adding entangle to a superpose-only submission → nontrivial."""
-        assert nontrivial_revision(_SRC_SUPERPOSE, _SRC_ENTANGLE) is True
+        """Adding aggregate to a scale-only submission → nontrivial."""
+        assert nontrivial_revision(_SRC_NOAGG, _SRC_AGG) is True
 
     def test_whitespace_only_change_is_trivial(self):
         """Adding a comment or blank line with the same ops → trivial."""
         src_with_comment = "import pandas as pd\n# this is a comment\ndf = pd.read_csv('data/sales.csv')\nresult = {}"
-        assert nontrivial_revision(_SRC_SUPERPOSE, src_with_comment) is False
+        assert nontrivial_revision(_SRC_NOAGG, src_with_comment) is False
 
     def test_identical_submission_trivial(self):
-        assert nontrivial_revision(_SRC_SUPERPOSE, _SRC_SUPERPOSE) is False
+        assert nontrivial_revision(_SRC_NOAGG, _SRC_NOAGG) is False
 
     def test_revision_count_in_measures(self):
-        """Run sequence A → A+comment (trivial) → A+entangle (nontrivial) → count=1."""
+        """Run sequence A → A+comment (trivial) → A+aggregate (nontrivial) → count=1."""
         src_comment = "import pandas as pd\n# note\ndf = pd.read_csv('data/sales.csv')\nresult = {}"
         runs = [
-            make_run(0, source=_SRC_SUPERPOSE, tvd=0.5),
+            make_run(0, source=_SRC_NOAGG, tvd=0.5),
             make_run(1, source=src_comment, tvd=0.5),
-            make_run(2, source=_SRC_ENTANGLE, tvd=0.0, goal_met=True, dist=_BELL_DIST),
+            make_run(2, source=_SRC_AGG, tvd=0.0, goal_met=True, dist=_GOAL_DIST),
         ]
         m = compute_attempt_measures("p_test", "ds-foundations", runs, EX, SIM)
-        assert m["nontrivial_revision_count"] == 1  # only A+entangle step
+        assert m["nontrivial_revision_count"] == 1  # only A+aggregate step
 
 
 # ── §5b escalation rate ───────────────────────────────────────────────────────
@@ -571,7 +574,7 @@ class TestCompileErrorTVD:
         runs = [
             self._compile_error_run(0),  # tvd = 1.0 (max)
             make_run(1, tvd=0.5),  # improving
-            make_run(2, tvd=0.0, goal_met=True, dist=_BELL_DIST),
+            make_run(2, tvd=0.0, goal_met=True, dist=_GOAL_DIST),
         ]
         m = compute_attempt_measures("p_test", "ds-foundations", runs, EX, SIM)
         assert m["tvd_slope"] is not None
@@ -583,7 +586,7 @@ class TestCompileErrorTVD:
         runs = [
             self._compile_error_run(0),
             make_run(1, tvd=0.5),
-            make_run(2, tvd=0.0, goal_met=True, dist=_BELL_DIST),
+            make_run(2, tvd=0.0, goal_met=True, dist=_GOAL_DIST),
         ]
         m = compute_attempt_measures("p_test", "ds-foundations", runs, EX, SIM)
         assert m["span_class"] == "productive"
@@ -834,9 +837,9 @@ class TestLearnerModelMeasures:
     def test_shaky_resolved_rate(self):
         """One shaky concept that's grasped in end state → resolution rate=1.0."""
         run0 = make_run(0, tvd=0.5)
-        t1 = _make_lm_turn(1, shaky_concepts=["entanglement"])
+        t1 = _make_lm_turn(1, shaky_concepts=["overfitting"])
         end_concepts = {
-            "entanglement": {
+            "overfitting": {
                 "state": "grasped",
                 "evidence": 2,
                 "last_seen": "ts",
@@ -852,9 +855,9 @@ class TestLearnerModelMeasures:
     def test_shaky_unresolved_rate_zero(self):
         """Shaky concept still shaky at end → resolution rate=0."""
         run0 = make_run(0, tvd=0.5)
-        t1 = _make_lm_turn(1, shaky_concepts=["entanglement"])
+        t1 = _make_lm_turn(1, shaky_concepts=["overfitting"])
         end_concepts = {
-            "entanglement": {
+            "overfitting": {
                 "state": "shaky",
                 "evidence": 1,
                 "last_seen": "ts",
@@ -870,8 +873,8 @@ class TestLearnerModelMeasures:
         run0 = make_run(0, tvd=0.5)
         t1 = _make_lm_turn(
             1,
-            shaky_concepts=["superposition"],
-            revisit_concept="superposition",
+            shaky_concepts=["regularization"],
+            revisit_concept="regularization",
             intervention="revisit",
         )
         m = compute_learner_model_measures("p_test", [run0, t1], {})
@@ -884,19 +887,19 @@ class TestLearnerModelMeasures:
         run0 = make_run(0, tvd=0.5)
         t1 = _make_lm_turn(
             1,
-            shaky_concepts=["superposition", "entanglement"],
-            revisit_concept="superposition",
+            shaky_concepts=["regularization", "overfitting"],
+            revisit_concept="regularization",
             intervention="revisit",
         )
         end_concepts = {
-            "superposition": {
+            "regularization": {
                 "state": "grasped",
                 "evidence": 2,
                 "last_seen": "ts",
                 "last_review": None,
                 "last_review_ex": None,
             },
-            "entanglement": {
+            "overfitting": {
                 "state": "grasped",
                 "evidence": 2,
                 "last_seen": "ts",
@@ -914,19 +917,19 @@ class TestLearnerModelMeasures:
         run0 = make_run(0, tvd=0.5)
         t1 = _make_lm_turn(
             1,
-            shaky_concepts=["superposition", "entanglement"],
-            revisit_concept="superposition",
+            shaky_concepts=["regularization", "overfitting"],
+            revisit_concept="regularization",
             intervention="revisit",
         )
         end_concepts = {
-            "superposition": {
+            "regularization": {
                 "state": "grasped",
                 "evidence": 2,
                 "last_seen": "ts",
                 "last_review": None,
                 "last_review_ex": None,
             },
-            "entanglement": {
+            "overfitting": {
                 "state": "shaky",
                 "evidence": 1,
                 "last_seen": "ts",

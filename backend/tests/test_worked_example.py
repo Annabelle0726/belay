@@ -3,8 +3,8 @@
 Self-verifying worked-example tests (DS fixtures; deterministic, sandboxed).
 
 Verification runs the worked example through core/runner and reuses the executable
-grader for the non-solution check — same gate semantics as before, now on the DS
-pack: a verified example RUNS and does NOT solve the current exercise.
+grader for the non-solution check on the DS pack: a verified example RUNS and does
+NOT solve the current exercise.
 """
 
 from __future__ import annotations

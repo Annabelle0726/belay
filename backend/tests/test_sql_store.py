@@ -95,11 +95,11 @@ class TestLearnerStateRoundTrip:
         _mk_participant(pid)
         store = _mk_store()
         store.save_learner_state(
-            pid, {"grasped": ["entanglement"], "shaky": ["phase"], "attempts": 5}
+            pid, {"grasped": ["overfitting"], "shaky": ["normalization"], "attempts": 5}
         )
         got = store.get_learner_state(pid)
-        assert got["grasped"] == ["entanglement"]
-        assert got["shaky"] == ["phase"]
+        assert got["grasped"] == ["overfitting"]
+        assert got["shaky"] == ["normalization"]
         assert got["attempts"] == 5
 
     def test_concepts_column_round_trips(self):
@@ -108,28 +108,28 @@ class TestLearnerStateRoundTrip:
         _mk_participant(pid)
         store = _mk_store()
         snapshot = {
-            "entanglement": {
+            "overfitting": {
                 "state": "shaky",
                 "evidence": 2,
                 "last_seen": "2026-06-03T00:00:00+00:00",
                 "last_review": None,
                 "last_review_ex": None,
             },
-            "superposition": {
+            "regularization": {
                 "state": "grasped",
                 "evidence": 3,
                 "last_seen": "2026-06-03T00:00:00+00:00",
                 "last_review": "2026-06-03T00:01:00+00:00",
-                "last_review_ex": "bell",
+                "last_review_ex": "ds-foundations",
             },
         }
         store.save_learner_state(
             pid, {"grasped": [], "shaky": [], "attempts": 0, "concepts": snapshot}
         )
         got = store.get_learner_state(pid)
-        assert got["concepts"]["entanglement"]["state"] == "shaky"
-        assert got["concepts"]["superposition"]["state"] == "grasped"
-        assert got["concepts"]["superposition"]["last_review_ex"] == "bell"
+        assert got["concepts"]["overfitting"]["state"] == "shaky"
+        assert got["concepts"]["regularization"]["state"] == "grasped"
+        assert got["concepts"]["regularization"]["last_review_ex"] == "ds-foundations"
 
 
 # ── 5. save twice upserts (no duplicate row) ─────────────────────────────────
@@ -161,7 +161,14 @@ class TestAppendAndExport:
         _mk_participant(pid)
         store = _mk_store()
         store.append_event(
-            make_event(pid, "bell", "study", "run", {"source": "allocate 2"}, stance="peer")
+            make_event(
+                pid,
+                "ds-foundations",
+                "study",
+                "run",
+                {"source": "import pandas as pd"},
+                stance="peer",
+            )
         )
         jsonl = store.export_jsonl(pid)
         rows = [json.loads(l) for l in jsonl.strip().split("\n") if l.strip()]
@@ -180,7 +187,7 @@ class TestAppendOnly:
         store = _mk_store()
         for _ in range(4):
             store.append_event(
-                make_event(pid, "bell", "study", "run", {"source": "x"}, stance="peer")
+                make_event(pid, "ds-foundations", "study", "run", {"source": "x"}, stance="peer")
             )
         rows = [l for l in store.export_jsonl(pid).strip().split("\n") if l.strip()]
         assert len(rows) == 4
@@ -194,10 +201,10 @@ class TestAttemptsCountsOnlyRun:
         pid = _pid()
         _mk_participant(pid)
         store = _mk_store()
-        store.append_event(make_event(pid, "bell", "study", "run", {}, stance="peer"))
-        store.append_event(make_event(pid, "bell", "study", "turn", {}, stance="peer"))
-        store.append_event(make_event(pid, "bell", "study", "run", {}, stance="peer"))
-        assert store.attempts(pid, "bell") == 2
+        store.append_event(make_event(pid, "ds-foundations", "study", "run", {}, stance="peer"))
+        store.append_event(make_event(pid, "ds-foundations", "study", "turn", {}, stance="peer"))
+        store.append_event(make_event(pid, "ds-foundations", "study", "run", {}, stance="peer"))
+        assert store.attempts(pid, "ds-foundations") == 2
 
 
 # ── 9. attempts() scoped by participant_id AND exercise_id ────────────────────
@@ -209,12 +216,12 @@ class TestAttemptsIsolation:
         _mk_participant(p1)
         _mk_participant(p2)
         store = _mk_store()
-        store.append_event(make_event(p1, "bell", "study", "run", {}, stance="peer"))
-        store.append_event(make_event(p1, "superpose", "study", "run", {}, stance="peer"))
-        store.append_event(make_event(p2, "bell", "study", "run", {}, stance="peer"))
-        assert store.attempts(p1, "bell") == 1
-        assert store.attempts(p1, "superpose") == 1
-        assert store.attempts(p2, "bell") == 1
+        store.append_event(make_event(p1, "ds-foundations", "study", "run", {}, stance="peer"))
+        store.append_event(make_event(p1, "scale", "study", "run", {}, stance="peer"))
+        store.append_event(make_event(p2, "ds-foundations", "study", "run", {}, stance="peer"))
+        assert store.attempts(p1, "ds-foundations") == 1
+        assert store.attempts(p1, "scale") == 1
+        assert store.attempts(p2, "ds-foundations") == 1
 
 
 # ── 10. export_jsonl(None) returns all rows, ordered by ts ────────────────────
@@ -226,8 +233,8 @@ class TestExportAll:
         _mk_participant(p1)
         _mk_participant(p2)
         store = _mk_store()
-        store.append_event(make_event(p1, "bell", "study", "run", {}, stance="peer"))
-        store.append_event(make_event(p2, "bell", "study", "run", {}, stance="peer"))
+        store.append_event(make_event(p1, "ds-foundations", "study", "run", {}, stance="peer"))
+        store.append_event(make_event(p2, "ds-foundations", "study", "run", {}, stance="peer"))
         all_rows = [
             json.loads(l) for l in store.export_jsonl(None).strip().split("\n") if l.strip()
         ]
@@ -247,8 +254,8 @@ class TestExportFiltered:
         _mk_participant(p1)
         _mk_participant(p2)
         store = _mk_store()
-        store.append_event(make_event(p1, "bell", "study", "run", {}, stance="peer"))
-        store.append_event(make_event(p2, "bell", "study", "run", {}, stance="peer"))
+        store.append_event(make_event(p1, "ds-foundations", "study", "run", {}, stance="peer"))
+        store.append_event(make_event(p2, "ds-foundations", "study", "run", {}, stance="peer"))
         rows_p1 = [json.loads(l) for l in store.export_jsonl(p1).strip().split("\n") if l.strip()]
         assert all(r["participant_id"] == p1 for r in rows_p1)
         assert len(rows_p1) == 1
@@ -270,14 +277,16 @@ class TestNestedPayloadRoundTrip:
                 "abstained": False,
                 "reasoning_effort": "high",
                 "confidence_trajectory": {"planner": 0.65, "reasoner": 0.82, "self_eval": 0.71},
-                "misconception_id": "M2.1-superpose-both-is-entangle",
+                "misconception_id": "M2.1-scale-before-split",
             },
         }
-        store.append_event(make_event(pid, "bell", "study", "turn", payload, stance="peer"))
+        store.append_event(
+            make_event(pid, "ds-foundations", "study", "turn", payload, stance="peer")
+        )
         rows = [json.loads(l) for l in store.export_jsonl(pid).strip().split("\n") if l.strip()]
         assert len(rows) == 1
         got = rows[0]["payload"]
-        assert got["telemetry"]["misconception_id"] == "M2.1-superpose-both-is-entangle"
+        assert got["telemetry"]["misconception_id"] == "M2.1-scale-before-split"
         assert got["telemetry"]["confidence_trajectory"] == {
             "planner": 0.65,
             "reasoner": 0.82,
@@ -295,7 +304,7 @@ class TestStanceNull:
         pid = _pid()
         _mk_participant(pid)
         store = _mk_store()
-        store.append_event(make_event(pid, "bell", "study", "run", {}, stance=None))
+        store.append_event(make_event(pid, "ds-foundations", "study", "run", {}, stance=None))
         rows = [json.loads(l) for l in store.export_jsonl(pid).strip().split("\n") if l.strip()]
         assert len(rows) == 1
         assert rows[0]["stance"] is None
@@ -309,15 +318,17 @@ class TestDurability:
         pid = _pid()
         _mk_participant(pid)
         store1 = _mk_store()
-        store1.save_learner_state(pid, {"grasped": ["ghz"], "shaky": [], "attempts": 7})
+        store1.save_learner_state(pid, {"grasped": ["ds-mlp"], "shaky": [], "attempts": 7})
         store1.append_event(
-            make_event(pid, "ghz", "study", "run", {"source": "allocate 3"}, stance="oracle")
+            make_event(
+                pid, "ds-mlp", "study", "run", {"source": "import numpy as np"}, stance="oracle"
+            )
         )
 
         # Fresh SqlStore — cold start, no in-process state
         store2 = _mk_store()
         state = store2.get_learner_state(pid)
-        assert state["grasped"] == ["ghz"]
+        assert state["grasped"] == ["ds-mlp"]
         assert state["attempts"] == 7
 
         rows = [json.loads(l) for l in store2.export_jsonl(pid).strip().split("\n") if l.strip()]

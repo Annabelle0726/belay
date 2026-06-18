@@ -34,17 +34,17 @@ class _StubLLM:
                 "affective_state": "curious",
                 "affect_reasoning": "stub",
                 "intervention": "co_reason",
-                "target_concept": "entanglement",
+                "target_concept": "overfitting",
                 "planner_note": "guide them",
                 "confidence": 0.7,
             }
         if role == "reasoner":
             return {
-                "message": "Think about what links the qubits.",
+                "message": "Think about what links the variables.",
                 "check_question": None,
                 "confidence": 0.8,
-                "grasped": ["superposition"],
-                "shaky": ["entanglement"],
+                "grasped": ["regularization"],
+                "shaky": ["overfitting"],
             }
         if role == "self_eval":
             return {
@@ -147,7 +147,7 @@ class TestConsentingParticipant:
         run_turn(_payload(pid), _StubLLM(), store)
         # Learner state persisted to durable
         state = router.durable.get_learner_state(pid)
-        assert "superposition" in state["grasped"] or "entanglement" in state["shaky"]
+        assert "regularization" in state["grasped"] or "overfitting" in state["shaky"]
 
     def test_export_non_empty_for_consented(self):
         router = _make_router()
