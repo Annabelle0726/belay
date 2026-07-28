@@ -5,8 +5,9 @@ tutor cannot leak an exercise solution because a deterministic, executable Gover
 gate runs the draft through the active domain's grader and strips any full solution,
 rather than merely asking the model not to.
 
-> The repository name `peer-tutor-framework` is a placeholder. The final name is
-> pending and will be set in a single atomic commit at the publish step.
+> The repository name `peer-tutor-framework` is a placeholder. The settled name
+> is **Belay** (see `../educloud/SYSTEM.md`); it is applied in a single atomic
+> commit at the publish step.
 
 ## What it is
 

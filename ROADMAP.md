@@ -53,8 +53,11 @@ schedule or a commitment.
   Source: `app/knowledge/index.py`, `app/knowledge/corpus_kb.py`, `ARCHITECTURE.md`.
 - **Instructor mode.** There is no authenticated role or privileged mode today: the API has
   no auth, and "instructor" appears only as prompt wording and the `flag_escalate` label
-  ("Flagged for instructor"). An instructor-facing mode would be net-new (identity, authz,
-  and a gated surface) and is not yet designed in-tree.
+  ("Flagged for instructor"). **Now designed in-tree: `INSTRUCTOR_MODE.md`** (July 2026) —
+  pluggable auth dependency (token / OIDC via Waypoint Keycloak), a deterministic,
+  content-free instructor surface (escalation queue, aggregates with a suppression floor,
+  status), the `events.jsonl` exposure closed, goals/reflections and grades excluded by
+  test. Alpha targeted end of August (Line E, E0); build scope in its §5.
   Source: `backend/app/agent/orchestrator.py` (`flag_escalate` label),
   `backend/app/main.py` (no auth dependency on the routes), `PRIVACY.md` (grades firewall,
   goals/reflections never surfaced to an instructor).
