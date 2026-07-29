@@ -8,6 +8,12 @@ read the code against the claim.
 This describes behavior as built. Where a decision is still open, it is marked as a
 standing IRB item.
 
+Platform-level policy — which infrastructure may hold which class of data, and who
+authorizes an exception — lives in one place:
+[`educloud/docs/policy/data-destinations.md`](../educloud/docs/policy/data-destinations.md).
+This document is that policy's Belay-side pointer; the module-level posture below is what
+implements it here.
+
 ## Privacy by architecture
 
 Privacy is a structural property, not a policy bolted on afterward.
