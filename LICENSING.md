@@ -1,6 +1,6 @@
 # Licensing
 
-Status: in force as of 2026-08-06. The personal-time-work IP release originally anticipated here is not the path forward; the University of Arizona will instead administer grants for this work, which resolves the condition this file was written under. The licenses below are now a grant, not a plan.
+Status: in force, 2026-08-05.
 
 ## The split, and why
 
