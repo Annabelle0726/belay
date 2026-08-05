@@ -31,6 +31,29 @@ from __future__ import annotations
 import re
 
 from ..core.registry import get_active_pack
+from . import leak_profile
+
+# Belay's human-facing wording for each contract leak signal. The contract's
+# vocabulary is the registry-governed `reason_code`; these strings are Belay's and
+# stay on Belay's side of the call (SPEC.md §10 — "could a different caller, in a
+# different language, with a different product, want it?"). Keyed by signal name
+# so the reconstruction survives the reason_code being singular: when BOTH signals
+# fire, the verdict names `leak.is_solution` as the primary reason and carries both
+# in `evidence`, and `check()` rebuilds both strings in the original order.
+_LEAK_REASON_TEXT = {
+    "is_solution": "draft contained code that solves the exercise",
+    "prose_disclosure": "draft prose disclosed the solution",
+}
+
+
+def _reasons_from_verdict(verdict: dict) -> list[str]:
+    """Belay's `reasons` list, rebuilt from a contract verdict's evidence."""
+    return [
+        _LEAK_REASON_TEXT[e["signal"]]
+        for e in verdict["evidence"]
+        if e.get("fired") and e.get("signal") in _LEAK_REASON_TEXT
+    ]
+
 
 _ANSWER_SEEKING = re.compile(
     r"\b(just tell me|what'?s the answer|give me the (answer|code|solution)|"
@@ -106,15 +129,25 @@ def check(
     # prose-disclosure signal — running a draft through the grader catches code
     # leaks but not a prose disclosure of the answer (EXTRACTION_PLAN §(f)).
     # Oracle stance is explicitly allowed to hand over the solution.
-    if stance == "peer":
-        ev = pack.leak_evidence(draft.get("message", ""), exercise)
-        if ev.is_solution or ev.prose_disclosure:
-            blocked = True
-            flag = "withholding_solution"
-            if ev.is_solution:
-                reasons.append("draft contained code that solves the exercise")
-            if ev.prose_disclosure:
-                reasons.append("draft prose disclosed the solution")
+    #
+    # The decision now travels THROUGH THE VERIFIER CONTRACT: a request document in,
+    # a verdict document out (`leak_profile`, and `SPEC.md` in the sibling
+    # verifier-contract repo). Only the boundary moved — the predicate is the same
+    # one, still `pack.leak_evidence` supplying evidence and core making the
+    # decision, still gated on the peer stance, still failing on
+    # `is_solution OR prose_disclosure`. What stays here is everything that is not
+    # a judgement about the candidate: the `block` action, the flag vocabulary, the
+    # human-readable reason strings, and the routing signals below.
+    verdict = leak_profile.verify(
+        leak_profile.build_request(
+            candidate=draft.get("message", ""), exercise=exercise, stance=stance
+        ),
+        pack=pack,
+    )
+    if verdict["verdict"] == "fail":
+        blocked = True
+        flag = "withholding_solution"
+        reasons = _reasons_from_verdict(verdict)
 
     # Redirecting answer-seeking is a PEER move. In oracle, answering the request
     # is the whole point, so an answered answer-seeking turn must read as "none"
@@ -163,15 +196,31 @@ def screen_passages(passages, exercise: dict, pack=None) -> dict:
     Returns ``{"kept": [Passage...], "dropped": [{"id","reason"}...], "retrieved": int}``.
     A dropped passage is recorded by id + reason ONLY; its text is never returned here
     and must never be written to the trace.
+
+    CALLER-SIDE FAN-OUT (SPEC.md §9). Since the contract port this is a LOOP over the
+    same `leak` profile the draft gate calls, one invocation per passage, with the
+    fan-out staying here. It is deliberately NOT a second profile and NOT a second
+    reason code: either would be the "parallel screen" the paragraph above forbids,
+    and where a candidate came from is the caller's knowledge, not the predicate's.
+    The passage id rides in ``context.subject_id`` and comes back in the verdict's
+    evidence (SPEC.md §6.2), which is how a drop is identified without the text
+    coming back — the contract's evidence non-reproduction rule and this docstring's
+    trace rule are the same rule.
     """
     pack = pack or get_active_pack()
     kept, dropped = [], []
     for p in passages:
-        ev = pack.leak_evidence(p.text, exercise)
-        if ev.is_solution or ev.prose_disclosure:
-            dropped.append(
-                {"id": p.id, "reason": "is_solution" if ev.is_solution else "prose_disclosure"}
-            )
+        verdict = leak_profile.verify(
+            leak_profile.build_request(
+                candidate=p.text, exercise=exercise, stance="peer", subject_id=p.id
+            ),
+            pack=pack,
+        )
+        if verdict["verdict"] == "fail":
+            # `reason_code` is `leak.<signal>`; the drop record keeps the bare signal
+            # it has always used. The primary-reason precedence in the contract is the
+            # same `is_solution`-before-`prose_disclosure` this line used to spell out.
+            dropped.append({"id": p.id, "reason": verdict["reason_code"].split(".", 1)[1]})
         else:
             kept.append(p)
     return {"kept": kept, "dropped": dropped, "retrieved": len(passages)}

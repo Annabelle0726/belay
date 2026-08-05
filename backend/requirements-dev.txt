@@ -7,6 +7,13 @@
 
 pytest>=8.0
 
+# Verifier-contract conformance (tests/test_verifier_contract_leak.py). DEV-ONLY:
+# the leak profile itself has no schema dependency at runtime — it emits documents
+# and the tests check them against the draft 2020-12 schemas in the sibling
+# `verifier-contract` checkout. Offline; jsonschema bundles the metaschema. If the
+# sibling checkout is absent those tests skip and the rest of the gate still runs.
+jsonschema>=4.20
+
 # CI quality gate (Slice H/I) — DEV-ONLY, no runtime dependency. Pinned for a
 # reproducible gate (ruff lint + format, mypy type-check); run in CI on py3.12.
 ruff==0.8.6
