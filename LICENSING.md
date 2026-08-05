@@ -1,6 +1,6 @@
 # Licensing
 
-Status: prepared, not yet in force. Sol is published, and these licenses take effect, only once the University of Arizona IP release for the personal-time work has cleared. Until then this file is a plan, not a grant.
+Status: in force as of 2026-08-06. The personal-time-work IP release originally anticipated here is not the path forward; the University of Arizona will instead administer grants for this work, which resolves the condition this file was written under. The licenses below are now a grant, not a plan.
 
 ## The split, and why
 
