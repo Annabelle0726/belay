@@ -371,6 +371,16 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
 
     # Governance runs LAST, unchanged. In an abstention there is no solution to
     # strip; the no-leak gate is independent of escalate/abstain.
+    #
+    # THE CONTRACT BOUNDARY IS INSIDE `governance.check`, on purpose. The leak
+    # DECISION travels as a request document in / verdict document out through
+    # `leak_profile` (SPEC.md in the sibling verifier-contract repo); what
+    # `check` returns to this response path is Belay's own `{flag, block,
+    # reasons}`, which is not a verdict and does not belong in the contract
+    # (SPEC.md §10). Calling the profile from here instead would push the wire
+    # format into the response path and duplicate the reason-string
+    # reconstruction, and it would put the `block` action — Belay's policy, not
+    # the contract's judgement — on the wrong side of the call.
     gov = governance.check(ctx, plan, draft, evaluation, stance=stance)
     if gov["block"]:
         draft = governance.safe_rewrite(draft, gov, exercise)

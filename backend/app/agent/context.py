@@ -169,6 +169,15 @@ def build_context(payload: dict, learner_state: dict, attempts: int) -> dict:
     # never passage text) rides in ctx["_retrieval"] for the orchestrator to trace.
     # When knowledge() is None or there is no student query, no retrieval runs and the
     # context is byte-identical to before.
+    #
+    # Since the verifier-contract port, `screen_passages` is a CALLER-SIDE FAN-OUT
+    # (SPEC.md §9 in the sibling verifier-contract repo): it loops over passages and
+    # calls the SAME `leak` profile the draft gate calls, once per passage, with the
+    # passage id riding in `context.subject_id`. It is deliberately not a second
+    # profile and not a second reason code. The fan-out lives on this side of the
+    # call — the contract verifies exactly one candidate per invocation — and so does
+    # everything below: which passages were retrieved, how many, which survived, and
+    # what goes in the trace are decisions the verifier never sees.
     if stance != "control":
         kb = get_active_pack().knowledge()
         student_msg = _latest_student_message(payload.get("recent", []))
