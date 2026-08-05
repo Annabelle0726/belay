@@ -12,9 +12,9 @@ The Sol implementation is AGPL-3.0. The running tutor, its governance gate, and 
 
 This is the same principle Cairn uses: the interoperability primitives are Apache, the platform that implements them is AGPL.
 
-## Confirmed boundary (realized in code; the grant is not yet in force)
+## Confirmed boundary, realized in code
 
-This boundary is confirmed and now realized in the source tree as a single-license directory plus per-file SPDX headers. The realization changed no runtime behavior; only the license *grant* waits on the IP release (see Status above).
+This boundary is confirmed and now realized in the source tree as a single-license directory plus per-file SPDX headers. The realization changed no runtime behavior; the license *grant* is in force (see Status above).
 
 Apache-2.0, the contract only, realized in `backend/app/core/domain/`:
 
@@ -43,7 +43,7 @@ operator step that the license gate polices.
 
 - AGPL-3.0 full text at the repository root as `LICENSE`. Drop in the verbatim text from the FSF (gnu.org); do not modify it.
 - Apache-2.0 full text alongside the contract module as its `LICENSE`, or in `LICENSES/Apache-2.0.txt`. Drop in the verbatim text from apache.org; do not modify it.
-- Per-file SPDX headers (`SPDX-License-Identifier: AGPL-3.0-only` or `Apache-2.0`) so the boundary is legible file by file, not just by directory. These headers are already in place on every source file; they are declarations of intent that become a grant only when the two license texts are dropped in and the Status above flips to in force.
+- Per-file SPDX headers (`SPDX-License-Identifier: AGPL-3.0-only` or `Apache-2.0`) so the boundary is legible file by file, not just by directory. These headers are in place on every source file, the two license texts are dropped in, and the Status above is in force, so they carry the grant rather than declaring an intent.
 
 ## Contributions: DCO, not a CLA
 
