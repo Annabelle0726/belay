@@ -677,6 +677,12 @@ cd backend && python -m pytest tests/test_overlay.py -q
 > Cross-reference (Slice N): the governance gate (leak, leak-over-retrieval, wellbeing) is
 > summarized as-built in `ARCHITECTURE.md`. This section is kept as the build narrative.
 
+> Cross-reference (2026-08-08): `ARCHITECTURE.md`'s governance-gate section now cites two
+> 2026 papers landing close to this gate's design (ACL 2026 adversarial-leakage benchmark;
+> "Auditable Release Control for Pedagogical Leakage") plus a concrete CS50 stat on why
+> prompt-only leak prevention fails at scale. See that section for the citations; not
+> repeated here to avoid the two drifting apart.
+
 **Baseline floor (pre-Slice-F, off HEAD `3ea3a98`): `312 passed, 1 skipped`.** Coverage
 may not dip below this; the gate test is net-additive.
 

@@ -7,6 +7,26 @@ schedule or a commitment.
 
 ## Known next work
 
+- **Jailbreak/prompt-injection detection — none exists today.** A 2026-08-08 provider scan
+  (`morph-full-and-provider-landscape-2026-08-08.md`, Cowork project) found this gate has no
+  counterpart in the framework: the governance gate covers leak, tone, and explicit-crisis
+  distress, but nothing screens for prompt injection or jailbreak attempts on the tutor
+  itself. Two open-weight, self-hostable classifier models were identified as the sovereign
+  fix (Meta's Prompt Guard 86M for injection/jailbreak specifically; IBM's Granite Guardian,
+  Apache-2.0, for broader harm/groundedness plus bulk async reclassification of historical
+  traces) — both runnable on Portage's existing sovereign inference tier, no hosted API.
+  Queued: `docs/prompts/CC-B1-local-guardrail-model.md`.
+- **Adversarial leak-gate regression benchmark.** The leak gate has no automated adversarial
+  test suite today — only the fixed corpus/exercise tests in `tests/test_knowledge.py` and
+  the draft gate's own tests. ACL 2026's adversarial-student-agent methodology
+  (arXiv 2604.18660) is a reusable reference design for one. Queued:
+  `docs/prompts/CC-B2-adversarial-leak-benchmark.md`.
+- **Citation-grounded retrieval answers.** The datascience KB (`kb.py`) retrieves passages
+  but nothing constrains or attributes the tutor's generated answer back to a specific
+  retrieved passage — the "retrieve first, generate second, cite every claim" pattern
+  Perplexity's Sonar/Internal Knowledge Search popularized, buildable locally on the
+  existing hermetic corpus with no vendor dependency. Queued:
+  `docs/prompts/CC-B3-citation-grounded-retrieval.md`.
 - **Reasoner-prompt de-quantum.** The live reasoner prompt still carries quantum-shaped
   worked-example guidance (the DSL op list, the `expected_dist` / bitstring schema). The
   DS-shaped prompt is deferred; it is eval-gated because a prompt change alters model

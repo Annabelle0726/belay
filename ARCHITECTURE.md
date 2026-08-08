@@ -124,6 +124,32 @@ Source: `backend/app/agent/governance.py`, `backend/app/agent/goals.py`,
 `backend/app/agent/distress.py`, `PRIVACY.md`, `VALIDATION.md` Slice F (leak-over-retrieval)
 and Slice G (distress).
 
+**Academic grounding, added 2026-08-08 after a provider/prior-art scan** (full scan:
+`morph-full-and-provider-landscape-2026-08-08.md`, Cowork project). Two 2026 papers land
+close enough to this gate's own design to be citable prior art rather than internal
+rationale alone:
+
+- Harvard's CS50 Duck reports that **prompt-only** leak prevention measurably degrades at
+  scale — 22% of responses still contained full code despite explicit anti-leak
+  instructions, once the system prompt passed ~1,000 tokens ("Improving AI in CS50:
+  Leveraging Human Feedback for Better Learning," ACM 2024/2025,
+  `dl.acm.org/doi/10.1145/3641554.3701945`). Direct empirical evidence for why this gate is
+  a ground-truth oracle and not a system-prompt instruction.
+- **"Evaluating Answer Leakage Robustness of LLM Tutors against Adversarial Student
+  Attacks"** (ACL 2026, arXiv 2604.18660) builds a fine-tuned adversarial-student-agent
+  benchmark for jailbreaking tutors into leaking answers — the reference methodology for
+  a regression suite against this gate. Not yet built here; queued as
+  `docs/prompts/CC-B2-adversarial-leak-benchmark.md`.
+- **"Auditable Release Control for Pedagogical Leakage in LLM Tutors"** (arXiv 2608.00515)
+  describes a modular disclosure-control system — deterministic fast-checker plus optional
+  semantic verifier, a graduated 5-level disclosure contract (A₀–A₄), fail-safe fallback on
+  any check failure — close enough to this gate's shape to be worth reading directly if the
+  binary leak/no-leak decision is ever revisited for something more graduated.
+
+This gate remains a ground-truth oracle (`pack.leak_evidence`), not a learned classifier —
+nothing above changes that; it only means the design now has published backing rather than
+resting on internal rationale alone.
+
 ## The trace and the pack-result envelope
 
 - **Run-result envelope** (`RunResult`, `core/domain/types.py`): pack-agnostic top level
