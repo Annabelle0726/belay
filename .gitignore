@@ -41,5 +41,6 @@ build/
 *.swp
 
 # --- Claude ------------------------------------------------------------------
-.claude/
+.claude/*
+!.claude/commands/
 _git_locks_to_delete/
