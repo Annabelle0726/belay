@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Peer-Tutor — minimal embed demo (/quad/v1)</title>
+  <style>
+    body { font: 14px/1.5 system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { font-size: 1.2rem; } label { display:block; margin:.6rem 0 .2rem; font-weight:600; }
+    input, textarea, select { width: 100%; box-sizing: border-box; padding: .4rem; font: inherit; }
+    button { margin-top: 1rem; padding: .5rem 1rem; font: inherit; cursor: pointer; }
+    pre { background:#0b1020; color:#d6e2ff; padding:1rem; border-radius:8px; overflow:auto; }
+    .muted { color:#666; font-size: .85rem; }
+  </style>
+</head>
+<body>
+  <h1>Peer-Tutor — minimal embed demo</h1>
+  <p class="muted">
+    Exercises <strong>one <code>/quad/v1/turn</code></strong> against the
+    <code>_skeleton</code> pack (exercise <code>echo-1</code>). Run the server with
+    <code>TUTOR_PACK=_skeleton</code>. Identity is a pseudonymous id only
+    (<code>gh:12345</code>); no PII is sent. A <code>control</code>-stance turn needs
+    no model; switch to <code>peer</code> once a provider endpoint is configured.
+  </p>
+
+  <label for="backend">Backend base URL</label>
+  <input id="backend" value="http://localhost:8000" />
+
+  <label for="pseudo">pseudo_id (pseudonymous only)</label>
+  <input id="pseudo" value="gh:12345" />
+
+  <label for="stance">stance</label>
+  <select id="stance">
+    <option value="control">control (no model)</option>
+    <option value="peer">peer (needs a provider)</option>
+  </select>
+
+  <label for="source">source</label>
+  <textarea id="source" rows="3">print('ok')</textarea>
+
+  <button id="run">Run one /quad/v1 turn</button>
+
+  <h2 style="font-size:1rem">Response</h2>
+  <pre id="out">(click the button)</pre>
+
+  <script>
+    document.getElementById('run').addEventListener('click', async () => {
+      const out = document.getElementById('out');
+      out.textContent = 'running…';
+      const base = document.getElementById('backend').value.replace(/\/$/, '');
+      const body = {
+        pseudo_id: document.getElementById('pseudo').value,
+        exercise_id: 'echo-1',                       // the _skeleton pack exercise
+        stance: document.getElementById('stance').value,
+        source: document.getElementById('source').value,
+        event: 'run', mode: 'study'
+      };
+      try {
+        const resp = await fetch(base + '/quad/v1/turn', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const data = await resp.json();
+        out.textContent = 'HTTP ' + resp.status + '\n' + JSON.stringify(data, null, 2);
+      } catch (e) {
+        out.textContent = 'error: ' + e;
+      }
+    });
+  </script>
+</body>
+</html>

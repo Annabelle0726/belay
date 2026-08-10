@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Consent-gated store router (DMP §3 / IRB).
 
@@ -33,9 +34,8 @@ Usage (in main.py):
     # Export reads ONLY the durable store:
     _router.durable.export_jsonl(pid)
 """
-from __future__ import annotations
 
-from typing import Dict
+from __future__ import annotations
 
 from .repository import InMemoryStore, SqlStore
 
@@ -54,10 +54,10 @@ class ConsentRouter:
     def __init__(self, durable: SqlStore | InMemoryStore) -> None:
         self._durable = durable
         # Per-pid ephemeral stores for non-consenting / unregistered participants.
-        self._ephemeral: Dict[str, InMemoryStore] = {}
+        self._ephemeral: dict[str, InMemoryStore] = {}
         # In-process consent cache: populated by register_participant and
         # (for SqlStore) lazily by _lookup_consent on cross-session lookups.
-        self._consent_cache: Dict[str, bool] = {}
+        self._consent_cache: dict[str, bool] = {}
 
     # ── participant registration (ALWAYS durable) ─────────────────────────────
 
@@ -71,6 +71,7 @@ class ConsentRouter:
         if isinstance(self._durable, SqlStore):
             from .db import SessionLocal
             from .models import Participant
+
             with SessionLocal() as s:
                 row = Participant(id=pid, anon_code=anon_code, consent=consent)
                 s.add(row)
@@ -94,6 +95,7 @@ class ConsentRouter:
             try:
                 from .db import SessionLocal
                 from .models import Participant
+
                 with SessionLocal() as s:
                     row = s.get(Participant, pid)
                     if row is not None:

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 §6 Process-measure extraction (pure, offline, no model/network).
 
@@ -33,33 +34,41 @@ snapshot (passed as end_concepts to compute_learner_model_measures).
 Note: control turns have plan/self_eval/governance = None in the payload.
 All accessors use ``(x or {})`` to guard against None.
 """
+
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Tuple
-
-from ..quantum.leak_check import is_goal_meeting
+from ..core.domain import DomainPack
+from ..core.registry import get_active_pack
 
 # ── constants -----------------------------------------------------------------
-GOAL_TOL = 0.07          # matches every exercise's tol
-HANDOFF_WINDOW = 2       # §1 "next 2 run events"
-ECE_BINS = 10            # §4b
+GOAL_TOL = 0.07  # matches every exercise's tol
+HANDOFF_WINDOW = 2  # §1 "next 2 run events"
+ECE_BINS = 10  # §4b
 
 
 # ── §1 progress primitives ---------------------------------------------------
 
-def _tvd(run_event: dict) -> float:
-    """TVD from a run event.
 
-    Compile errors return 1.0 (the maximum TVD for any probability distribution)
-    rather than float("inf").  Using inf causes 0 * inf = nan in the linear-slope
-    sum when the very first run fails to compile, poisoning tvd_slope and all
-    downstream aggregates.  1.0 is semantically correct: a failed compile
-    produces no outcome distribution, so the worst-case distance applies.
+def _metric(run_event: dict) -> float:
+    """Pack-agnostic primary scalar from a run event (§6 ``result.metric``).
+
+    Reads the generic top-level ``metric`` slot, falling back to the legacy
+    ``tvd`` (top level, then inside ``result.pack``) so pre-v6 traces still parse.
+
+    Errors / missing metric return 1.0 rather than float("inf"): inf causes
+    0 * inf = nan in the linear-slope sum when the first run fails, poisoning
+    metric_slope and all downstream aggregates. The metric is used as a
+    lower-is-better progress proxy alongside the authoritative goalMet signal.
     """
     res = (run_event.get("payload") or {}).get("result") or {}
     if not res.get("ok"):
         return 1.0
-    return float(res.get("tvd", 1.0))
+    val = res.get("metric")
+    if val is None:
+        val = res.get("tvd")
+    if val is None:
+        val = (res.get("pack") or {}).get("tvd")
+    return float(val) if val is not None else 1.0
 
 
 def _goal_met(run_event: dict) -> bool:
@@ -71,7 +80,7 @@ def _source(run_event: dict) -> str:
     return (run_event.get("payload") or {}).get("source") or ""
 
 
-def _linear_slope(values: List[float]) -> Optional[float]:
+def _linear_slope(values: list[float]) -> float | None:
     """Slope of a simple OLS fit of values vs index.  Returns None for <2 points."""
     n = len(values)
     if n < 2:
@@ -80,7 +89,7 @@ def _linear_slope(values: List[float]) -> Optional[float]:
     sx = sum(xs)
     sy = sum(values)
     sxx = sum(x * x for x in xs)
-    sxy = sum(x * y for x, y in zip(xs, values))
+    sxy = sum(x * y for x, y in zip(xs, values, strict=False))
     denom = n * sxx - sx * sx
     if denom == 0:
         return 0.0
@@ -89,23 +98,21 @@ def _linear_slope(values: List[float]) -> Optional[float]:
 
 # ── op-level revision (§5) ---------------------------------------------------
 
-def _ops(source: str) -> List[dict]:
-    """Parse source → gate list; [] on parse error (treated as no-op)."""
-    from ..quantum.functional_model import synthesize
-    r = synthesize(source)
-    return r["gates"] if r.get("ok") else []
 
+def nontrivial_revision(src_a: str, src_b: str, pack=None) -> bool:
+    """True iff the two submissions are structurally different programs.
 
-def nontrivial_revision(src_a: str, src_b: str) -> bool:
-    """True iff the parsed op/gate sequence differs between two submissions.
-
-    Ignores whitespace, comments, and capitalisation because synthesize() strips
-    those before producing the gate list.
+    Pack-agnostic: delegates to ``pack.program_signature`` — a parse-only
+    structural fingerprint (no execution) that ignores whitespace/comments. Two
+    sources differing only in formatting compare equal; meaningfully different
+    programs compare unequal.
     """
-    return _ops(src_a) != _ops(src_b)
+    pack = pack or get_active_pack()
+    return pack.program_signature(src_a) != pack.program_signature(src_b)  # type: ignore[no-any-return]  # opaque parse-only fingerprint (Any); != is bool at runtime
 
 
 # ── per-turn field accessors --------------------------------------------------
+
 
 def _tp(turn_event: dict) -> dict:
     """Safe flattened view of a turn payload; guards against None sub-dicts."""
@@ -115,51 +122,60 @@ def _tp(turn_event: dict) -> dict:
     gov = p.get("governance") or {}
     tel = p.get("telemetry") or {}
     return {
-        "intervention":     plan.get("intervention", "observe"),
-        "plan_confidence":  plan.get("confidence"),
-        "se_confidence":    se.get("confidence"),
-        "se_leak_risk":     se.get("leak_risk", "none"),
-        "se_needs_revision":se.get("needs_revision", False),
-        "gov_flag":         gov.get("flag", "none"),
-        "gov_block":        gov.get("block", False),
-        "escalated":        tel.get("escalated", False),
-        "abstained":        tel.get("abstained", False),
+        "intervention": plan.get("intervention", "observe"),
+        "plan_confidence": plan.get("confidence"),
+        "se_confidence": se.get("confidence"),
+        "se_leak_risk": se.get("leak_risk", "none"),
+        "se_needs_revision": se.get("needs_revision", False),
+        "gov_flag": gov.get("flag", "none"),
+        "gov_block": gov.get("block", False),
+        "escalated": tel.get("escalated", False),
+        "abstained": tel.get("abstained", False),
         "reasoning_effort": tel.get("reasoning_effort"),
         "confidence_trajectory": tel.get("confidence_trajectory") or {},
-        "final_message":    p.get("final_message") or "",
-        "stance":           p.get("stance") or turn_event.get("stance"),
+        "final_message": p.get("final_message") or "",
+        "stance": p.get("stance") or turn_event.get("stance"),
         # §5d worked-example verification (None for non-worked_analogy turns)
-        "we_tel":           tel.get("worked_example"),
+        "we_tel": tel.get("worked_example"),
         # §5c affect-response: affective_state from the Planner (None for control turns)
-        "affect":           plan.get("affective_state"),
+        "affect": plan.get("affective_state"),
     }
 
 
 # ── §2 hand-offs --------------------------------------------------------------
 
-def realized_handoff(turn_event: dict, target: Dict[str, float],
-                     tol: float, sim=None) -> bool:
+
+def realized_handoff(
+    turn_event: dict, target=None, tol=None, sim=None, pack: DomainPack | None = None, exercise=None
+) -> bool:
     """True iff the code in final_message independently meets the exercise goal.
 
-    Delegates to quantum.leak_check.is_goal_meeting — the identical function
-    that governance.check() uses, so realized_handoff and withholding_solution
-    can never disagree on whether a snippet solves the exercise.
+    Delegates to the active pack's `leak_evidence` — the identical executable
+    oracle governance.check() uses — so realized_handoff and withholding_solution
+    can never disagree on whether a snippet solves the exercise. Pass the full
+    ``exercise`` (the pack may need its id to load a spec); the legacy
+    ``target``/``tol`` form is kept for legacy callers. (``sim`` is accepted for
+    backward compatibility; the pack's grader is deterministic.)
     """
+    pack = pack or get_active_pack()
     fm = _tp(turn_event)["final_message"]
-    return is_goal_meeting(fm, target, tol, sim)
+    ex = exercise if exercise is not None else {"target": target, "tol": tol}
+    return pack.leak_evidence(fm, ex).is_solution  # type: ignore[arg-type]  # ex is the exercise dict / {target,tol} fallback; Exercise is a structural TypedDict
 
 
 def attempted_handoff(turn_event: dict) -> bool:
-    return _tp(turn_event)["gov_flag"] == "withholding_solution"
+    return _tp(turn_event)["gov_flag"] == "withholding_solution"  # type: ignore[no-any-return]  # comparison over the untyped §6 trace dict; bool at runtime
 
 
 # ── §3 redirects --------------------------------------------------------------
 
+
 def redirect(turn_event: dict) -> bool:
-    return _tp(turn_event)["gov_flag"] == "redirect_answer_seeking"
+    return _tp(turn_event)["gov_flag"] == "redirect_answer_seeking"  # type: ignore[no-any-return]  # untyped §6 trace dict; bool at runtime
 
 
 # ── §4a leak calibration ------------------------------------------------------
+
 
 def predicted_leak(turn_event: dict) -> bool:
     """Primary: leak_risk in {partial, full}."""
@@ -168,43 +184,50 @@ def predicted_leak(turn_event: dict) -> bool:
 
 def predicted_leak_strict(turn_event: dict) -> bool:
     """Strict variant: leak_risk == 'full' only."""
-    return _tp(turn_event)["se_leak_risk"] == "full"
+    return _tp(turn_event)["se_leak_risk"] == "full"  # type: ignore[no-any-return]  # untyped §6 trace dict; bool at runtime
 
 
 def actual_leak(turn_event: dict) -> bool:
-    return _tp(turn_event)["gov_flag"] == "withholding_solution"
+    return _tp(turn_event)["gov_flag"] == "withholding_solution"  # type: ignore[no-any-return]  # comparison over the untyped §6 trace dict; bool at runtime
 
 
 # ── §5 repeated-error count ---------------------------------------------------
 
+
 def _fail_sig(run_event: dict):
-    """Fingerprint of a failing run; None means goal met (not a failure)."""
+    """Fingerprint of a failing run; None means goal met (not a failure).
+
+    Pack-agnostic: keys off the generic ``ok`` / ``goalMet`` / ``metric`` fields,
+    so two consecutive failing runs at the same primary metric read as a repeated
+    error in any pack (e.g. the DS held-out score / loss). No domain-specific
+    distribution shape is read.
+    """
     res = (run_event.get("payload") or {}).get("result") or {}
     if not res.get("ok"):
         return ("compile_error", (res.get("error") or "")[:80])
     if res.get("goalMet"):
-        return None   # success — resets the streak
-    dist = res.get("dist") or []
-    sig = tuple(sorted((d["bits"], round(d["p"], 2)) for d in dist))
-    return ("runtime", sig)
+        return None  # success — resets the streak
+    return ("runtime", round(_metric(run_event), 4))
 
 
 def _repeated_error_count(run_events: list) -> int:
     """Number of consecutive run-pairs sharing the same failing signature."""
     count = 0
-    prev: object = object()   # sentinel: never equal to a real sig
+    prev: object = object()  # sentinel: never equal to a real sig
     for run in run_events:
         sig = _fail_sig(run)
         if sig is not None and sig == prev:
             count += 1
-        prev = sig   # goal_met gives sig=None, which resets prev
+        prev = sig  # goal_met gives sig=None, which resets prev
     return count
 
 
 # ── §4b outcome computation ---------------------------------------------------
 
-def _outcome_for_turn(turn_event: dict, run_events: list,
-                      window: int = HANDOFF_WINDOW) -> Optional[bool]:
+
+def _outcome_for_turn(
+    turn_event: dict, run_events: list, window: int = HANDOFF_WINDOW
+) -> bool | None:
     """True/False outcome for a guiding turn; None if no subsequent run exists.
 
     outcome = any run within the next `window` runs (after this turn's ts)
@@ -216,14 +239,14 @@ def _outcome_for_turn(turn_event: dict, run_events: list,
         key=lambda r: r["ts"],
     )[:window]
     if not subsequent:
-        return None   # excluded from §4b per §7
+        return None  # excluded from §4b per §7
     prior_best = min(
-        (_tvd(r) for r in run_events if r["ts"] <= ts),
+        (_metric(r) for r in run_events if r["ts"] <= ts),
         default=float("inf"),
     )
     current_best = prior_best
     for run in subsequent:
-        tvd = _tvd(run)
+        tvd = _metric(run)
         if _goal_met(run) or tvd < current_best:
             return True
         current_best = min(current_best, tvd)
@@ -232,11 +255,12 @@ def _outcome_for_turn(turn_event: dict, run_events: list,
 
 # ── §4b/4c calibration stats -------------------------------------------------
 
-def ece(pairs: List[Tuple[float, int]], n_bins: int = ECE_BINS) -> float:
+
+def ece(pairs: list[tuple[float, int]], n_bins: int = ECE_BINS) -> float:
     """Expected Calibration Error (equal-width bins)."""
     if not pairs:
         return 0.0
-    bins: List[List[Tuple[float, int]]] = [[] for _ in range(n_bins)]
+    bins: list[list[tuple[float, int]]] = [[] for _ in range(n_bins)]
     for conf, out in pairs:
         b = min(int(conf * n_bins), n_bins - 1)
         bins[b].append((conf, out))
@@ -250,7 +274,7 @@ def ece(pairs: List[Tuple[float, int]], n_bins: int = ECE_BINS) -> float:
     return err / total
 
 
-def brier_score(pairs: List[Tuple[float, int]]) -> float:
+def brier_score(pairs: list[tuple[float, int]]) -> float:
     """Mean squared error of confidence vs binary outcome."""
     if not pairs:
         return 0.0
@@ -259,12 +283,12 @@ def brier_score(pairs: List[Tuple[float, int]]) -> float:
 
 # ── §5 struggle span classification ------------------------------------------
 
-def _span_class(run_events: list, tvd_slope: Optional[float],
-                repeated_error_count: int) -> str:
+
+def _span_class(run_events: list, tvd_slope: float | None, repeated_error_count: int) -> str:
     """productive / unproductive_stuck / neutral (per §5)."""
     n = len(run_events)
     has_progress = any(
-        _tvd(r) < min((_tvd(p) for p in run_events[:i]), default=float("inf"))
+        _metric(r) < min((_metric(p) for p in run_events[:i]), default=float("inf"))
         for i, r in enumerate(run_events)
         if i > 0
     )
@@ -276,6 +300,7 @@ def _span_class(run_events: list, tvd_slope: Optional[float],
 
 
 # ── §5 engaged span without handoff ------------------------------------------
+
 
 def _engaged_span(all_events: list, rh_set: set) -> int:
     """Longest run of consecutive events (turn + run) with no realized handoff.
@@ -296,21 +321,20 @@ def _engaged_span(all_events: list, rh_set: set) -> int:
 
 # ── §4c abstention calibration ------------------------------------------------
 
-def _abstention_calibration(turns: list, run_events: list,
-                             window: int = HANDOFF_WINDOW) -> dict:
+
+def _abstention_calibration(turns: list, run_events: list, window: int = HANDOFF_WINDOW) -> dict:
     """Abstention precision and false abstention rate (§4c)."""
     abstained_turns = [t for t in turns if _tp(t)["abstained"]]
     if not abstained_turns:
-        return {"abstention_precision": None, "false_abstention_rate": None,
-                "n_abstained": 0}
-    correct = 0   # no progress in window (abstention was warranted)
-    false_a = 0   # student did/would progress
+        return {"abstention_precision": None, "false_abstention_rate": None, "n_abstained": 0}
+    correct = 0  # no progress in window (abstention was warranted)
+    false_a = 0  # student did/would progress
     for t in abstained_turns:
         outcome = _outcome_for_turn(t, run_events, window)
         if outcome is True:
             false_a += 1
         else:
-            correct += 1   # None (no window) counts as "could not progress" here
+            correct += 1  # None (no window) counts as "could not progress" here
     total = len(abstained_turns)
     return {
         "abstention_precision": correct / total,
@@ -320,6 +344,7 @@ def _abstention_calibration(turns: list, run_events: list,
 
 
 # ── top-level per-(participant × exercise) computation -----------------------
+
 
 def compute_attempt_measures(
     pid: str,
@@ -332,9 +357,10 @@ def compute_attempt_measures(
     """All §2–§5b measures for one (participant_id × exercise_id) slice.
 
     `events` must be pre-sorted by ts (ascending).
-    `exercise_meta` must have `target` (dict) and `tol` (float).
+    `exercise_meta` is the exercise dict; packs that grade by spec (DS) need only
+    its id, so ``target``/``tol`` are optional (legacy execution-graded packs use them).
     """
-    target = exercise_meta["target"]
+    target = exercise_meta.get("target", {})
     tol = exercise_meta.get("tol", GOAL_TOL)
 
     runs = [e for e in events if e["event_type"] == "run"]
@@ -343,10 +369,10 @@ def compute_attempt_measures(
     n_runs = len(runs)
 
     # ── §1 progress primitives ───────────────────────────────────────────────
-    run_tvds = [_tvd(r) for r in runs]
+    run_tvds = [_metric(r) for r in runs]
     run_goals = [_goal_met(r) for r in runs]
 
-    best_so_far: List[float] = []
+    best_so_far: list[float] = []
     cur_best = float("inf")
     for tvd in run_tvds:
         cur_best = min(cur_best, tvd)
@@ -360,7 +386,7 @@ def compute_attempt_measures(
     attempts_to_solve = solved_at_idx if solved else n_runs
 
     if solved:
-        solve_ts = runs[solved_at_idx]["ts"]
+        solve_ts = runs[solved_at_idx]["ts"]  # type: ignore[index]  # guarded by `if solved`: solved_at_idx is an int here
         turns_to_solve = sum(1 for t in turns if t["ts"] < solve_ts)
     else:
         turns_to_solve = n_turns
@@ -368,11 +394,11 @@ def compute_attempt_measures(
     tvd_slope = _linear_slope(best_so_far)
 
     # ── §2 hand-offs ─────────────────────────────────────────────────────────
-    rh_set: set = set()   # id(turn) for realized handoff turns
+    rh_set: set = set()  # id(turn) for realized handoff turns
     realized_hc = 0
     attempted_hc = 0
     for turn in turns:
-        rh = realized_handoff(turn, target, tol, sim)
+        rh = realized_handoff(turn, target, tol, sim, exercise=exercise_meta)
         if rh:
             rh_set.add(id(turn))
             realized_hc += 1
@@ -390,10 +416,10 @@ def compute_attempt_measures(
     lp_list = [predicted_leak(t) for t in turns]
     lp_strict_list = [predicted_leak_strict(t) for t in turns]
     la_list = [actual_leak(t) for t in turns]
-    leak_tp = sum(p and a for p, a in zip(lp_list, la_list))
-    leak_fp = sum(p and not a for p, a in zip(lp_list, la_list))
-    leak_fn = sum(not p and a for p, a in zip(lp_list, la_list))
-    leak_tn = sum(not p and not a for p, a in zip(lp_list, la_list))
+    leak_tp = sum(p and a for p, a in zip(lp_list, la_list, strict=False))
+    leak_fp = sum(p and not a for p, a in zip(lp_list, la_list, strict=False))
+    leak_fn = sum(not p and a for p, a in zip(lp_list, la_list, strict=False))
+    leak_tn = sum(not p and not a for p, a in zip(lp_list, la_list, strict=False))
     n_actual_leak = leak_tp + leak_fn
     leak_miss_rate = leak_fn / n_actual_leak if n_actual_leak else None
     n_predicted_leak = sum(lp_list)
@@ -408,8 +434,7 @@ def compute_attempt_measures(
 
     sources = [_source(r) for r in runs]
     nr_count = sum(
-        1 for a, b in zip(sources, sources[1:])
-        if nontrivial_revision(a, b)
+        1 for a, b in zip(sources, sources[1:], strict=False) if nontrivial_revision(a, b)
     )
 
     self_directed = n_runs / (n_runs + n_turns) if (n_runs + n_turns) > 0 else 0.0
@@ -418,7 +443,8 @@ def compute_attempt_measures(
 
     # ── §5b escalation rate ──────────────────────────────────────────────────
     n_escalated = sum(
-        1 for t in turns
+        1
+        for t in turns
         if (t.get("payload") or {}).get("telemetry") is not None
         and ((t.get("payload") or {}).get("telemetry") or {}).get("escalated", False)
     )
@@ -432,20 +458,17 @@ def compute_attempt_measures(
     we_verified_count = sum(1 for w in we_tps if w.get("verified"))
     we_verified_rate = we_verified_count / we_count if we_count else None
     we_retries_list = [w.get("retries", 0) for w in we_tps]
-    we_retry_rate = (sum(we_retries_list) / len(we_retries_list)
-                     if we_retries_list else None)
+    we_retry_rate = sum(we_retries_list) / len(we_retries_list) if we_retries_list else None
 
     # ── §5c affect-response measures ─────────────────────────────────────────
     # plan_turns = turns that have a non-null plan (control turns excluded).
     # All three measures are None when negative_affect_count == 0 (null-not-0 rule).
     _NEEDS_SUPPORT = {"frustration", "disengaged"}
-    plan_tps = [_tp(t) for t in turns
-                if (t.get("payload") or {}).get("plan") is not None]
+    plan_tps = [_tp(t) for t in turns if (t.get("payload") or {}).get("plan") is not None]
     negative_affect_count = sum(1 for tp in plan_tps if tp["affect"] in _NEEDS_SUPPORT)
-    negative_affect_rate  = negative_affect_count / n_turns if n_turns else 0.0
-    affect_support_count  = sum(
-        1 for tp in plan_tps
-        if tp["affect"] in _NEEDS_SUPPORT and tp["intervention"] == "encourage"
+    negative_affect_rate = negative_affect_count / n_turns if n_turns else 0.0
+    affect_support_count = sum(
+        1 for tp in plan_tps if tp["affect"] in _NEEDS_SUPPORT and tp["intervention"] == "encourage"
     )
     affect_support_rate = (
         affect_support_count / negative_affect_count if negative_affect_count else None
@@ -460,9 +483,7 @@ def compute_attempt_measures(
             with_next_count += 1
             if plan_tps[i + 1]["affect"] not in _NEEDS_SUPPORT:
                 recovered_count += 1
-    affect_recovery_rate = (
-        recovered_count / with_next_count if with_next_count else None
-    )
+    affect_recovery_rate = recovered_count / with_next_count if with_next_count else None
 
     # stance from the first turn event (all turns in a session have same stance)
     stance_val = None
@@ -532,15 +553,12 @@ def compute_calibration_pairs(
     exercise_meta: dict,
     sim=None,
     window: int = HANDOFF_WINDOW,
-) -> List[dict]:
+) -> list[dict]:
     """One row per turn combining §4a, §4b, §4c raw signals.
 
     Rows for non-guiding turns (observe) have outcome=None and are excluded
     from §4b ECE/Brier but retained for §4a (leak self-detection).
     """
-    target = exercise_meta["target"]
-    tol = exercise_meta.get("tol", GOAL_TOL)
-
     turns = [e for e in events if e["event_type"] == "turn"]
     runs = [e for e in events if e["event_type"] == "run"]
 
@@ -549,21 +567,23 @@ def compute_calibration_pairs(
         tp = _tp(turn)
         is_guiding = tp["intervention"] != "observe"
         outcome = _outcome_for_turn(turn, runs, window) if is_guiding else None
-        rows.append({
-            "participant_id": pid,
-            "exercise_id": exercise_id,
-            "turn_index": i,
-            "confidence": tp["se_confidence"],
-            "outcome": int(outcome) if outcome is not None else None,
-            "leak_predicted": predicted_leak(turn),
-            "leak_predicted_strict": predicted_leak_strict(turn),
-            "leak_actual": actual_leak(turn),
-            "abstained": tp["abstained"],
-        })
+        rows.append(
+            {
+                "participant_id": pid,
+                "exercise_id": exercise_id,
+                "turn_index": i,
+                "confidence": tp["se_confidence"],
+                "outcome": int(outcome) if outcome is not None else None,
+                "leak_predicted": predicted_leak(turn),
+                "leak_predicted_strict": predicted_leak_strict(turn),
+                "leak_actual": actual_leak(turn),
+                "abstained": tp["abstained"],
+            }
+        )
     return rows
 
 
-def aggregate_participant(pid: str, attempt_rows: List[dict]) -> dict:
+def aggregate_participant(pid: str, attempt_rows: list[dict]) -> dict:
     """Aggregate all (pid, exercise) rows into a per-participant summary."""
 
     def _mean(vals):
@@ -609,7 +629,10 @@ def aggregate_participant(pid: str, attempt_rows: List[dict]) -> dict:
         "attempted_handoff_rate": _rate("attempted_handoff_count", "n_turns"),
         "redirect_rate": _rate("redirect_count", "n_turns"),
         # §4a 2×2
-        "leak_tp": tp, "leak_fp": fp, "leak_fn": fn, "leak_tn": tn,
+        "leak_tp": tp,
+        "leak_fp": fp,
+        "leak_fn": fn,
+        "leak_tn": tn,
         "leak_precision": leak_precision,
         "leak_recall": leak_recall,
         "leak_miss_rate": leak_miss_rate,
@@ -619,7 +642,9 @@ def aggregate_participant(pid: str, attempt_rows: List[dict]) -> dict:
         "false_abstention_rate": _mean([r.get("false_abstention_rate") for r in attempt_rows]),
         # §5
         "avg_tvd_slope": _mean([r.get("tvd_slope") for r in attempt_rows]),
-        "avg_nontrivial_revisions": _mean([r.get("nontrivial_revision_count") for r in attempt_rows]),
+        "avg_nontrivial_revisions": _mean(
+            [r.get("nontrivial_revision_count") for r in attempt_rows]
+        ),
         "avg_engaged_span": _mean([r.get("engaged_span_without_handoff") for r in attempt_rows]),
         # §5b escalation
         "escalation_rate": total_esc / total_turns if total_turns else None,
@@ -627,10 +652,12 @@ def aggregate_participant(pid: str, attempt_rows: List[dict]) -> dict:
         "escalation_rate_oracle": oracle_esc / oracle_turns if oracle_turns else None,
         # §5d worked-example verification
         "worked_example_count": sum(r.get("worked_example_count", 0) for r in attempt_rows),
-        "worked_example_verified_rate": _mean([r.get("worked_example_verified_rate")
-                                               for r in attempt_rows]),
-        "worked_example_retry_rate": _mean([r.get("worked_example_retry_rate")
-                                            for r in attempt_rows]),
+        "worked_example_verified_rate": _mean(
+            [r.get("worked_example_verified_rate") for r in attempt_rows]
+        ),
+        "worked_example_retry_rate": _mean(
+            [r.get("worked_example_retry_rate") for r in attempt_rows]
+        ),
         # §5c affect-response
         "negative_affect_rate": _mean([r.get("negative_affect_rate") for r in attempt_rows]),
         "affect_support_rate": _mean([r.get("affect_support_rate") for r in attempt_rows]),
@@ -639,6 +666,7 @@ def aggregate_participant(pid: str, attempt_rows: List[dict]) -> dict:
 
 
 # ── §5e longitudinal learner-model measures ──────────────────────────────────
+
 
 def compute_learner_model_measures(
     pid: str,
@@ -663,7 +691,7 @@ def compute_learner_model_measures(
     for turn in turns:
         tel = (turn.get("payload") or {}).get("telemetry") or {}
         lm = tel.get("learner_model") or {}
-        for cid in (lm.get("shaky_concepts") or []):
+        for cid in lm.get("shaky_concepts") or []:
             ever_shaky_set.add(cid)
         rc = lm.get("revisit_concept")
         if rc:
@@ -674,7 +702,8 @@ def compute_learner_model_measures(
 
     # End-state grasped concepts.
     grasped_end_set = {
-        cid for cid, v in end_concepts.items()
+        cid
+        for cid, v in end_concepts.items()
         if isinstance(v, dict) and v.get("state") == "grasped"
     }
 
@@ -683,9 +712,7 @@ def compute_learner_model_measures(
 
     # shaky_resolution_rate: ever-shaky ∧ grasped_end / ever-shaky
     resolved = ever_shaky_set & grasped_end_set
-    shaky_resolution_rate = (
-        len(resolved) / len(ever_shaky_set) if ever_shaky_set else None
-    )
+    shaky_resolution_rate = len(resolved) / len(ever_shaky_set) if ever_shaky_set else None
 
     distinct_revisited = len(revisited_concepts)
 
@@ -693,8 +720,7 @@ def compute_learner_model_measures(
     revisited_while_shaky = revisited_concepts & ever_shaky_set
     revisit_resolved = revisited_while_shaky & grasped_end_set
     revisit_resolution_rate = (
-        len(revisit_resolved) / len(revisited_while_shaky)
-        if revisited_while_shaky else None
+        len(revisit_resolved) / len(revisited_while_shaky) if revisited_while_shaky else None
     )
 
     # nonrevisit_resolution_rate: (ever-shaky ∧ never-revisited ∧ grasped_end)
@@ -702,8 +728,7 @@ def compute_learner_model_measures(
     never_revisited_shaky = ever_shaky_set - revisited_while_shaky
     nonrevisit_resolved = never_revisited_shaky & grasped_end_set
     nonrevisit_resolution_rate = (
-        len(nonrevisit_resolved) / len(never_revisited_shaky)
-        if never_revisited_shaky else None
+        len(nonrevisit_resolved) / len(never_revisited_shaky) if never_revisited_shaky else None
     )
 
     return {

@@ -1,0 +1,20 @@
+[
+  {
+    "id": "leak-foundations",
+    "pack": "datascience",
+    "source": "test fixture (NOT a real source)",
+    "license": "CC0",
+    "attribution": "peer-tutor-framework test fixture",
+    "tags": ["wrangling-eda", "group-by and aggregation", "SOLUTION-BEARING TEST FIXTURE"],
+    "text": "For this exercise the answer is the per-category mean: just call groupby on category and then mean on amount, and you are done."
+  },
+  {
+    "id": "benign-foundations",
+    "pack": "datascience",
+    "source": "peer-tutor-framework course concept notes",
+    "license": "CC-BY-4.0",
+    "attribution": "peer-tutor-framework course concept notes",
+    "tags": ["wrangling-eda", "group-by and aggregation"],
+    "text": "Split the rows into groups defined by a key column, summarize each group, and combine the summaries back into one table. Thinking in this shape keeps the intent clear and the code vectorized."
+  }
+]

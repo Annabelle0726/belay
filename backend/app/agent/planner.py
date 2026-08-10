@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Planner component.
 
@@ -6,15 +7,25 @@ the single best pedagogical move. An LLM call reads affect + situation; a
 deterministic rules overlay then enforces hard peer-tutoring invariants that
 should never be left to chance.
 """
+
 from __future__ import annotations
 
+from ..core.registry import get_active_pack
 from . import context as ctx_mod
 from .llm import LLMClient
-from .prompts import ORACLE_PLANNER_SYSTEM, PLANNER_SYSTEM, TEACH_ADDENDUM
+from .prompts import TEACH_ADDENDUM, planner_system
 
 _VALID_INTERVENTIONS = {
-    "observe", "co_reason", "diagnose", "worked_analogy", "stretch",
-    "reciprocate", "escalate", "encourage", "revisit",
+    "observe",
+    "co_reason",
+    "diagnose",
+    "worked_analogy",
+    "stretch",
+    "reciprocate",
+    "escalate",
+    "encourage",
+    "revisit",
+    "reflect",
 }
 # Oracle is an answer-giver: no escalate (Sol is the authority) and no
 # reciprocate (Sol answers rather than handing the work back). "encourage" and
@@ -38,9 +49,19 @@ def _rules_overlay(plan: dict, ctx: dict, stance: str = "peer") -> dict:
         plan["intervention"] = "reciprocate"
         return plan
 
+    # Student-initiated reflect (peer): honor an explicit request to reflect on
+    # their own goals. Tutor-offered reflect is left to the planner's own choice
+    # (it survives the overlay as a valid intervention).
+    if stance != "oracle" and ctx.get("reflect_requested"):
+        plan["intervention"] = "reflect"
+        plan["planner_note"] = "student asked to reflect on their goals"
+        return plan
+
     # On a solved exercise, offer a stretch rather than more help. Oracle has no
     # reciprocate, so it is excluded from the "leave it alone" set there.
-    keep_on_goal = ("stretch", "observe") if stance == "oracle" else ("stretch", "observe", "reciprocate")
+    keep_on_goal = (
+        ("stretch", "observe") if stance == "oracle" else ("stretch", "observe", "reciprocate")
+    )
     if isinstance(result, dict) and result.get("goal_met"):
         if plan.get("intervention") not in keep_on_goal:
             plan["intervention"] = "stretch"
@@ -54,12 +75,12 @@ def _rules_overlay(plan: dict, ctx: dict, stance: str = "peer") -> dict:
             affect = plan.get("affective_state")
             if affect == "disengaged":
                 plan["intervention"] = "encourage"
-                plan["planner_note"] = (
-                    "disengaged — re-engage with a small, low-stakes next step")
+                plan["planner_note"] = "disengaged — re-engage with a small, low-stakes next step"
             elif affect == "frustration":
                 plan["intervention"] = "encourage"
                 plan["planner_note"] = (
-                    "frustration — affirm real progress, normalize, one concrete next step")
+                    "frustration — affirm real progress, normalize, one concrete next step"
+                )
             elif affect == "flow":
                 if plan.get("intervention") in ("diagnose", "worked_analogy"):
                     plan["intervention"] = "observe"
@@ -74,8 +95,7 @@ def _rules_overlay(plan: dict, ctx: dict, stance: str = "peer") -> dict:
 
         # Spaced revisit — lowest precedence: only claims calm observe/co_reason turns.
         # teach/goal_met/encourage/diagnose all fire first; this fires last.
-        if (plan.get("intervention") in ("observe", "co_reason")
-                and ctx.get("due_review")):
+        if plan.get("intervention") in ("observe", "co_reason") and ctx.get("due_review"):
             cid = ctx["due_review"][0]["id"]
             plan["intervention"] = "revisit"
             plan["revisit_concept"] = cid
@@ -94,10 +114,12 @@ def _rules_overlay(plan: dict, ctx: dict, stance: str = "peer") -> dict:
 
 
 def plan(ctx: dict, llm: LLMClient, stance: str = "peer") -> dict:
-    base = ORACLE_PLANNER_SYSTEM if stance == "oracle" else PLANNER_SYSTEM
+    persona = get_active_pack().persona
+    base = planner_system(persona, stance, goals=ctx.get("goals"), overlay=ctx.get("overlay"))
     system = base + (("\n\n" + TEACH_ADDENDUM) if ctx["mode"] == "teach" else "")
-    out = llm.json(role="planner", tier="fast", system=system,
-                   user=ctx_mod.serialize(ctx), max_tokens=400)
+    out = llm.json(
+        role="planner", tier="fast", system=system, user=ctx_mod.serialize(ctx), max_tokens=400
+    )
     plan = {
         "affective_state": out.get("affective_state", "curious"),
         "affect_reasoning": out.get("affect_reasoning", ""),

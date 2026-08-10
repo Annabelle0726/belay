@@ -1,0 +1,12 @@
+# Domain-pack dependencies.
+#
+# The data-science pack (packs/datascience) needs numpy + pandas for its grader
+# and reference solutions; the NN exercise uses a numpy micro-MLP (no torch).
+# Install alongside the core deps when running the DS pack or its tests:
+#     pip install -r requirements.txt -r requirements-dev.txt -r requirements-packs.txt
+numpy>=1.26
+pandas>=2.0
+
+# torch is an OPTIONAL extra (not required by any shipped exercise). Install it
+# only if a future torch-based exercise is added:
+#     pip install torch

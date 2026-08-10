@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Deterministic per-concept learner-model update and due-review logic.
 
@@ -17,16 +18,16 @@ Concept-entry shape (one key per concept_id in LearnerState.concepts):
 Grasped sticks once evidence ≥ 2 — a single solve isn't enough to override a
 persistent misconception signal, but two independent solves are.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 
-from ..curriculum.concepts import MISCONCEPTION_CONCEPT, concept_for_exercise, relevant_concepts
+from ..core.registry import get_active_pack
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _default_entry(now: str) -> dict:
@@ -44,10 +45,11 @@ def update_concepts(
     *,
     exercise_id: str,
     result: dict,
-    misconception_id: Optional[str],
+    misconception_id: str | None,
     repeated_error: bool,
-    now: Optional[str] = None,
-    revisit_concept: Optional[str] = None,
+    now: str | None = None,
+    revisit_concept: str | None = None,
+    taxonomy=None,
 ) -> dict:
     """Return an updated concepts dict (does not mutate prev).
 
@@ -62,12 +64,12 @@ def update_concepts(
     """
     if now is None:
         now = _now_iso()
+    if taxonomy is None:
+        taxonomy = get_active_pack().taxonomy
 
     concepts = {k: dict(v) for k, v in prev.items()}
-    own_cid = concept_for_exercise(exercise_id)
-    goal_met = isinstance(result, dict) and bool(
-        result.get("goal_met") or result.get("goalMet")
-    )
+    own_cid = taxonomy.concept_for_exercise(exercise_id)
+    goal_met = isinstance(result, dict) and bool(result.get("goal_met") or result.get("goalMet"))
 
     # 1. Touch the exercise's own concept.
     if own_cid:
@@ -82,12 +84,10 @@ def update_concepts(
 
     # 3. Misconception → shaky (unless firmly grasped).
     if misconception_id:
-        mcid = MISCONCEPTION_CONCEPT.get(misconception_id)
+        mcid = taxonomy.concept_for_misconception(misconception_id)
         if mcid:
             entry = dict(concepts.get(mcid, _default_entry(now)))
-            firmly_grasped = (
-                entry.get("state") == "grasped" and entry.get("evidence", 0) >= 2
-            )
+            firmly_grasped = entry.get("state") == "grasped" and entry.get("evidence", 0) >= 2
             if not firmly_grasped:
                 if mcid not in concepts:
                     entry["evidence"] = 1
@@ -98,9 +98,7 @@ def update_concepts(
     # 4. Repeated error (no solve) → own concept shaky.
     if repeated_error and not goal_met and own_cid:
         entry = dict(concepts[own_cid])
-        firmly_grasped = (
-            entry.get("state") == "grasped" and entry.get("evidence", 0) >= 2
-        )
+        firmly_grasped = entry.get("state") == "grasped" and entry.get("evidence", 0) >= 2
         if not firmly_grasped:
             entry["state"] = "shaky"
             concepts[own_cid] = entry
@@ -115,15 +113,17 @@ def update_concepts(
     return concepts
 
 
-def due_review(concepts: dict, exercise_id: str) -> List[str]:
+def due_review(concepts: dict, exercise_id: str, taxonomy=None) -> list[str]:
     """Concept ids that are due for a spaced revisit on this exercise.
 
     A concept is due iff:
       - state == "shaky"
-      - it is in relevant_concepts(exercise_id)  (it matters here)
+      - it is in taxonomy.relevant_concepts(exercise_id)  (it matters here)
       - last_review_ex != exercise_id            (not already revisited on this exercise)
     """
-    rel = relevant_concepts(exercise_id)
+    if taxonomy is None:
+        taxonomy = get_active_pack().taxonomy
+    rel = taxonomy.relevant_concepts(exercise_id)
     result = []
     for cid in rel:
         entry = concepts.get(cid)

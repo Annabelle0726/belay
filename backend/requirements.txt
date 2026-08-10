@@ -11,9 +11,5 @@ openai>=1.40
 # Alternate provider (only needed if LLM_PROVIDER=anthropic):
 # anthropic>=0.39
 
-# Quantum execution:
-#   The default LocalSimulator backend needs NOTHING beyond the stdlib.
-#   To use the real Classiq backend (QUANTUM_BACKEND=classiq), also install the
-#   Classiq SDK and authenticate once:
-#       pip install -r requirements-classiq.txt
-#       python -c "import classiq; classiq.authenticate()"
+# Domain-pack dependencies (the data-science pack) live in requirements-packs.txt:
+#       pip install -r requirements-packs.txt

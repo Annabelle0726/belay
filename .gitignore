@@ -22,6 +22,9 @@ env/
 *.jsonl
 data/
 exports/
+# ...but pack exercise FIXTURES under specs/ are synthetic, not participant data:
+!backend/app/packs/**/specs/data/
+!backend/app/packs/**/specs/data/**
 
 # --- Node / frontend build --------------------------------------------------
 node_modules/
@@ -38,4 +41,6 @@ build/
 *.swp
 
 # --- Claude ------------------------------------------------------------------
-.claude/
+.claude/*
+!.claude/commands/
+_git_locks_to_delete/

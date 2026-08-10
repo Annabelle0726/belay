@@ -1,92 +1,146 @@
-# Quantum Inventioneers — Peer-Tutor MVP
+# peer-tutor-framework
 
-A working backend + front-end for **Sol**, a peer-learner AI for an
-undergraduate Quantum Software Engineering course. Sol is deliberately *not* an
-expert/oracle tutor: it is a classmate a few weeks ahead that co-reasons, shows
-**calibrated uncertainty**, **preserves productive struggle**, abstains/escalates
-when unsure, and **flips roles** so the student teaches it.
+A generalizable, evaluation-first peer-tutor framework. Its defining property: the
+tutor cannot leak an exercise solution because a deterministic, executable Governance
+gate runs the draft through the active domain's grader and strips any full solution,
+rather than merely asking the model not to.
 
-This repo turns the validated single-file artifact into a system you can pilot.
+> The repository name `peer-tutor-framework` is a placeholder. The settled name
+> is **Belay** (see `../educloud/SYSTEM.md`); it is applied in a single atomic
+> commit at the publish step.
 
-## What this closes (vs. the artifact)
+## What it is
 
-| | Artifact (demo) | This MVP (system) |
+The tutor runs an evaluation-first loop per turn: a Planner picks one pedagogical
+move, a Peer-Reasoner writes the message, a Self-Evaluation critiques it against a
+stance rubric, a bounded refine fixes a failing draft, a deterministic Governance gate
+runs last, and Memory merges what the student now grasps. The reference domain is
+general data science (the "Robin" pack). This framework is original; its first
+implementation was built within a quantum tutor, and the domain-agnostic core was
+extracted from that codebase. The quantum-specific application stays in its own
+repository and is not part of this framework.
+
+Three properties distinguish it:
+
+- Deterministic governance. The no-leak rule is an executable gate, not a prompt
+  instruction. Leak-detection has a ground-truth oracle (the pack's grader plus the
+  known solution), so the gate decides post-hoc and is supreme over everything,
+  including a student goal that demands the answer.
+- Privacy by architecture. Identity is a pseudonymous host id only (for example
+  `gh:12345`); PII is rejected at the sidecar boundary; there is no write path to
+  grades and no rankings. Goals and reflections are pseudonymous and never surfaced to
+  an instructor.
+- Compute-agnostic, self-hosted first. The default provider is `openai_compatible`
+  pointed at a local Ollama or vLLM endpoint, so the tutor can run entirely on
+  institutional compute with no external API in the data path.
+
+## Quickstart
+
+The fastest path is the container, which is SQLite-default and points at a local
+OpenAI-compatible model endpoint with no external API.
+
+```bash
+docker compose up --build                    # SQLite + openai_compatible
+docker compose --profile postgres up --build # Postgres opt-in (scale)
+```
+
+The container CMD runs the preflight doctor informationally and then serves on port
+8000. To run the doctor directly:
+
+```bash
+cd backend && python -m app.preflight                 # checks config, store, provider
+cd backend && python -m app.preflight --skip-provider # skip the endpoint probe
+```
+
+Preflight prints `[PASS] <check>` / `[FAIL] <check>` for `config`, `store`, and
+(unless skipped) `provider`, then `preflight: OK` or `preflight: FAILED` with a
+non-zero exit on failure.
+
+To run the suite and the local server from source, see `VALIDATION.md` (the canonical
+runbook); env knobs are defined in `backend/app/config.py`. The operationally relevant
+ones:
+
+| Env var | Default | Purpose |
 |---|---|---|
-| Quantum execution | in-browser stand-in simulator | `QuantumBackend` seam: local simulator **or** real **Classiq** synthesis + execution |
-| The tutor | one in-browser prompt emitting every field at once | server-side, **five separated components** with a real evaluation-first loop |
-| Memory / data | browser-only session log | persistent learner model + **append-only research trace** (the §6 dataset) |
-| Model layer | model key in the browser | **Jetstream2 Inference Service** — US-origin open-weight models (gpt-oss-120b, Llama 4 Scout), no commercial key, no per-token cost |
+| `PROVIDER` | `openai_compatible` | Inference provider; also recorded in the trace |
+| `OPENAI_BASE_URL` | `http://localhost:11434/v1` | OpenAI-compatible endpoint (Ollama/vLLM) |
+| `OPENAI_API_KEY` | `EMPTY` | Key for the endpoint (local endpoints ignore it) |
+| `MODEL_FAST` | `llama3.2` | Concrete model for the fast tier |
+| `MODEL_STRONG` | `llama3.2` | Concrete model for the strong tier |
+| `OPENAI_REASONING` | `0` | Send `reasoning_effort` (strong tier) only if on |
+| `TUTOR_PACK` | `datascience` | Active domain pack |
+| `STORE_BACKEND` | `sql` | `sql` (durable) or `memory` (ephemeral) |
+| `DATABASE_URL` | `sqlite:///./qimvp.db` | Store DSN; a Postgres DSN opts into Postgres |
+| `MAX_REFINE` | `1` | Reasoner revisions after a failing self-eval |
+| `TAU_ESCALATE` / `MAX_ESCALATE` | `0.55` / `1` | Re-run at higher effort when under-confident |
+| `TAU_ABSTAIN` | `0.35` | Peer-only honest abstention floor |
 
-The backend keeps the artifact's two contracts (the `run()` result shape and
-Sol's JSON turn shape), so the existing UI renders backend output unchanged.
+## Adding a domain pack
 
-## Quickstart (offline, no Classiq, no key needed for the core tests)
+A pack implements the `DomainPack` protocol (`backend/app/core/domain/pack.py`):
+`curriculum`, `get_exercise`, `run`, `program_signature`, `verify_worked_example`,
+`misconceptions`, `leak_evidence`, and optional `knowledge`. Start from
+`backend/app/packs/_skeleton/` (a dependency-free echo pack used for core-only tests)
+and model a real one on `backend/app/packs/datascience/` (the reference pack: a
+taxonomy, a curriculum, declarative grading specs, a misconception library, and
+combined leak evidence). Register the pack's factory in
+`backend/app/core/domain/registry.py` and select it with `TUTOR_PACK`. Core never
+imports a pack at module load; the dependency arrow points from packs to core.
+
+A pack's optional `knowledge()` is backed by the domain-reusable corpus pipeline
+(`backend/app/knowledge/`): a license-gated ingestion step produces a normalized,
+pack-scoped corpus (only public-domain / CC0 / CC-BY / MIT / Apache-2.0 / BSD content is
+admitted, with per-passage license and attribution recorded), and a separate lexical (BM25)
+indexing step serves it behind the unchanged `KnowledgeBase` contract. Retrieval is lexical
+now; a local-embedding vector index can be added later behind the same contract with no
+re-ingest. Only a tiny seed corpus ships in-tree; ingesting real sources is a later operator
+step. Retrieved passages pass through the same deterministic leak gate as a generated draft,
+so retrieving an answer is not a loophole. See `ARCHITECTURE.md` and `ROADMAP.md`.
+
+## Pointing at a provider
+
+`PROVIDER` selects the provider; the fast/strong tier policy (Planner fast, Reasoner
+strong, Self-Evaluator fast) lives in core and is provider-agnostic. Only the
+tier-to-model mapping is per-provider config.
+
+- `openai_compatible` (default, self-hosted first): set `OPENAI_BASE_URL`,
+  `MODEL_FAST`, `MODEL_STRONG`, and `OPENAI_API_KEY`. Sends no reasoning parameter
+  unless `OPENAI_REASONING=1`, so it works with ordinary local models.
+- `anthropic` (hosted convenience): set `ANTHROPIC_API_KEY`; tiers default to
+  `claude-haiku-4-5-20251001` (fast) and `claude-sonnet-4-6` (strong); extended
+  thinking is on by default.
+- `bedrock`: a documented stub, not live. Its Amazon Nova tier mapping is testable but
+  a call raises.
+
+## Quad sidecar
+
+A versioned HTTP/JSON sidecar exposes the existing tutor loop to the EduCloud Quad
+control plane at base path `/quad/v1` (`backend/app/integrations/quad/`, mounted on the
+main app). It imports core only, advertises its posture at `/quad/v1/capabilities`
+(pseudonymous identity, grades read-only with no write path, Apache-2.0), runs one
+tutor turn at `/quad/v1/turn`, and rejects PII at the boundary with a 422.
+
+## Behavioral benchmark
+
+A portable, pack- and provider-parameterized benchmark lives in
+`backend/evals/behavioral/`. Run it from `backend/`:
 
 ```bash
-cd backend
-python -m pip install -r requirements.txt          # for the HTTP server
-PYTHONPATH=. python tests/test_simulator.py         # quantum parity (no deps)
-PYTHONPATH=. python tests/test_governance.py         # safety gate   (no deps)
-PYTHONPATH=. python tests/test_orchestrator_smoke.py # full loop, stub LLM (no deps)
+python -m evals.behavioral --pack datascience [--provider P] [--repeats N] \
+    [--judge-provider P] [--temperature 0] [--families a,b,c] [--no-judge] [--out report.json]
 ```
 
-Run the server. The model layer defaults to the **Jetstream2 Inference Service**
-(OpenAI-compatible). On a Jetstream2 / IU instance it needs no token; for
-off-instance dev, point `LLM_BASE_*` at the Open WebUI proxy and set a token:
+`no_solution` and `never_leak` are deterministic gate verdicts (the harness runs
+`pack.leak_evidence` on the emitted text), not LLM rubrics. Qualitative families use a
+separate strong judge configured via `JUDGE_PROVIDER` / `JUDGE_MODEL`; if the judge
+model equals a tutor model under test the report marks those families
+`credible: false` / `self_judged: true`. The deterministic axes are credible today;
+the strong-judge run at higher repeats is pending.
 
-```bash
-cd backend && uvicorn app.main:app --reload
-# on a JS2 instance: nothing else needed (gpt-oss-120b + Llama 4 Scout, no key)
-# off-instance dev: export LLM_BASE_FAST=https://llm.jetstream-cloud.org/api \
-#                          LLM_BASE_STRONG=https://llm.jetstream-cloud.org/api \
-#                          LLM_API_KEY=<token from the chat UI>
-# then open ../frontend/dev-client.html and point it at http://localhost:8000
-```
+## License
 
-Switch the quantum engine to the real platform with `QUANTUM_BACKEND=classiq`
-(after `pip install -r requirements-classiq.txt` and `classiq.authenticate()`).
-See `frontend/README.md` to wire the rich artifact to the backend.
-
-## The architecture, and how it maps to the proposals
-
-One system, two readings: the **agentic-architecture** draft describes the
-engine; the **NSF** proposal describes the peer-tutor application and its
-research instrument. Each component below is real code (`backend/app/agent/`).
-
-| Agentic component | Module | Serves NSF (§6) |
-|---|---|---|
-| Planner | `agent/planner.py` | chooses the pedagogical move — the **manipulated variable** |
-| Execution / Reasoner | `agent/reasoner.py` + `quantum/` | the tutoring "treatment"; Classiq + ACCESS execution surface |
-| Self-Evaluation | `agent/self_eval.py` | calibrated uncertainty + **preserve-struggle** check (RQ2); drives refine/abstain |
-| Governance | `agent/governance.py` | enforces "no full solution" via the grader itself; logs redirects/escalations |
-| Persistent Memory | `agent/memory.py` + `store/` | longitudinal learner model — the signal for **H3** + the analysis dataset |
-| Resource-aware tiers (now Jetstream2 inference) | `config.py` — gpt-oss-120b (strong) / Llama 4 Scout (fast) | no per-token cost, no SUs; sovereign US-hosted models for a cohort at scale |
-| Affect / cognitive-state signals | first-class inputs in `agent/context.py` | the meta-affective support strategy |
-
-See `ARCHITECTURE.md` for the loop diagram and per-component contracts,
-`DEPLOY_ACCESS.md` for Jetstream2/ACCESS deployment (the proposal's CI
-commitment), and `DATA_AND_IRB.md` for the event schema and anonymization.
-
-## Testing & evals
-
-- `tests/test_simulator.py` — the artifact's validated 6-case physics suite, now grading on the backend.
-- `tests/test_functional_model.py` — the functional-model compiler + error paths.
-- `tests/test_governance.py` — the solution-leak gate (the safety-critical piece).
-- `tests/test_orchestrator_smoke.py` — the full loop with a stub LLM (no network).
-- `tests/evals/sol_behavior_evals.py` — **behavioral** evals on real model output: never leaks, just-solved→stretch, teach→reciprocate, answer-seeking→redirect, plus an LLM-graded groundedness/calibration bar. Skips without `ANTHROPIC_API_KEY`.
-
-```bash
-cd backend && pytest            # core suite (evals auto-skip without a key)
-```
-
-## Layout
-
-```
-backend/app/
-  quantum/      functional-model compiler, local simulator, Classiq backend, grader
-  agent/        planner · reasoner · self_eval · governance · memory · orchestrator · prompts
-  store/        SQLAlchemy models, repository (SqlStore + InMemoryStore), §6 trace
-  curriculum/   three stackable modules + exercises
-  main.py       FastAPI routes
-frontend/       the rich artifact + a zero-dep dev client + api-client.js
-```
+The framework core and the Quad integration are intended for open-source release and
+are written to be Apache-2.0-compatible, importing only from the framework core. The
+`/quad/v1/capabilities` document advertises `"license": "Apache-2.0"`. Note honestly:
+there is no `LICENSE` file in the repository yet. Adding it is part of the
+name-and-publish step; until then the license is stated intent, not a file in the tree.

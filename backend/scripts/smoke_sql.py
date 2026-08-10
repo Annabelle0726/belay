@@ -20,6 +20,7 @@ Usage (from repo root):
     # or SQLite (no export needed):
     python backend/scripts/smoke_sql.py
 """
+
 from __future__ import annotations
 
 import json
@@ -28,8 +29,8 @@ import sys
 import uuid
 
 # Allow running from repo root OR from backend/scripts/
-_HERE  = os.path.dirname(os.path.abspath(__file__))
-_BROOT = os.path.join(_HERE, "..")           # backend/
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_BROOT = os.path.join(_HERE, "..")  # backend/
 sys.path.insert(0, _BROOT)
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./qimvp.db")
@@ -56,6 +57,7 @@ def hard_fail(msg: str) -> None:
 print("\n=== a. Reachability ===")
 try:
     from sqlalchemy import create_engine, text
+
     _connect_args = {"check_same_thread": False} if not IS_PG else {}
     _eng = create_engine(DATABASE_URL, connect_args=_connect_args, future=True)
     with _eng.connect() as conn:
@@ -69,7 +71,8 @@ except Exception as e:
     hint = (
         "Is `docker compose up -d db` running? Is psycopg installed "
         "(pip install 'psycopg[binary]>=3.1')?"
-        if IS_PG else "Check the SQLite path."
+        if IS_PG
+        else "Check the SQLite path."
     )
     hard_fail(f"DB connect failed: {e}\n  Hint: {hint}")
 
@@ -81,15 +84,20 @@ if IS_PG:
 
 print("\n=== b. Schema ===")
 try:
-    from app.store.db import init_db
-    from app.store.db import engine   # the engine the app actually uses
+    from app.store.db import (
+        engine,  # the engine the app actually uses
+        init_db,
+    )
+
     init_db()
     from sqlalchemy import inspect as sa_inspect
+
     inspector = sa_inspect(engine)
     tables = set(inspector.get_table_names())
     expected = {"participants", "learner_state", "events"}
-    step("init_db() creates all three tables",
-         expected.issubset(tables), f"found: {sorted(tables)}")
+    step(
+        "init_db() creates all three tables", expected.issubset(tables), f"found: {sorted(tables)}"
+    )
     # idempotent
     init_db()
     step("init_db() is idempotent (second call safe)", True)
@@ -105,15 +113,17 @@ PID = f"smoke_{RUN}"
 _smoke_pids.append(PID)
 
 NESTED_PAYLOAD = {
-    "event": "turn", "mode": "study", "stance": "peer",
-    "final_message": "What do you think links the qubits?",
+    "event": "turn",
+    "mode": "study",
+    "stance": "peer",
+    "final_message": "What do you think links the variables?",
     "governance": {"flag": "none", "block": False, "reasons": []},
     "telemetry": {
         "escalated": False,
         "abstained": False,
         "reasoning_effort": "medium",
         "confidence_trajectory": {"planner": 0.7, "reasoner": 0.8, "self_eval": 0.75},
-        "misconception_id": "M2.1-superpose-both-is-entangle",
+        "misconception_id": "M2.1-scale-before-split",
         "stance": "peer",
     },
 }
@@ -130,14 +140,27 @@ try:
     assert store is router.durable, "consenter should resolve to durable"
     step("store_for(consenter) is durable", True)
 
-    store.save_learner_state(PID, {"grasped": ["superposition"], "shaky": ["entanglement"], "attempts": 3})
+    store.save_learner_state(
+        PID, {"grasped": ["regularization"], "shaky": ["overfitting"], "attempts": 3}
+    )
     step("save_learner_state succeeds", True)
 
-    store.append_event(make_event(PID, "bell", "study", "run",
-                                  {"source": "allocate 2\nsuperpose q0\nmeasure all",
-                                   "result": {"ok": True, "goalMet": False, "tvd": 0.5}},
-                                  stance="peer"))
-    store.append_event(make_event(PID, "bell", "study", "turn", NESTED_PAYLOAD, stance="peer"))
+    store.append_event(
+        make_event(
+            PID,
+            "ds-foundations",
+            "study",
+            "run",
+            {
+                "source": "import pandas as pd\ndf = pd.read_csv('data/sales.csv')",
+                "result": {"ok": True, "goalMet": False, "tvd": 0.5},
+            },
+            stance="peer",
+        )
+    )
+    store.append_event(
+        make_event(PID, "ds-foundations", "study", "turn", NESTED_PAYLOAD, stance="peer")
+    )
     step("append run + turn events", True)
 except Exception as e:
     step("round-trip setup", False, str(e))
@@ -147,16 +170,19 @@ except Exception as e:
 print("\n=== d. Read-back ===")
 try:
     from app.store import SqlStore, make_event
+
     s2 = SqlStore()
 
     state = s2.get_learner_state(PID)
-    step("get_learner_state round-trips",
-         state["grasped"] == ["superposition"] and
-         state["shaky"] == ["entanglement"] and
-         state["attempts"] == 3,
-         repr(state))
+    step(
+        "get_learner_state round-trips",
+        state["grasped"] == ["regularization"]
+        and state["shaky"] == ["overfitting"]
+        and state["attempts"] == 3,
+        repr(state),
+    )
 
-    count = s2.attempts(PID, "bell")
+    count = s2.attempts(PID, "ds-foundations")
     step("attempts() counts only run events", count == 1, f"got {count}")
 
     jsonl = s2.export_jsonl(PID)
@@ -168,13 +194,17 @@ try:
 
     if turn_row:
         tel = turn_row["payload"].get("telemetry", {})
-        step("nested payload intact (misconception_id)",
-             tel.get("misconception_id") == "M2.1-superpose-both-is-entangle",
-             repr(tel.get("misconception_id")))
+        step(
+            "nested payload intact (misconception_id)",
+            tel.get("misconception_id") == "M2.1-scale-before-split",
+            repr(tel.get("misconception_id")),
+        )
         traj = tel.get("confidence_trajectory", {})
-        step("nested payload intact (confidence_trajectory)",
-             traj == {"planner": 0.7, "reasoner": 0.8, "self_eval": 0.75},
-             repr(traj))
+        step(
+            "nested payload intact (confidence_trajectory)",
+            traj == {"planner": 0.7, "reasoner": 0.8, "self_eval": 0.75},
+            repr(traj),
+        )
 except Exception as e:
     step("read-back", False, str(e))
 
@@ -183,11 +213,15 @@ except Exception as e:
 print("\n=== e. Durability ===")
 try:
     from app.store import SqlStore
+
     s3 = SqlStore()
 
     state3 = s3.get_learner_state(PID)
-    step("fresh SqlStore: learner state persists",
-         state3["grasped"] == ["superposition"], repr(state3))
+    step(
+        "fresh SqlStore: learner state persists",
+        state3["grasped"] == ["regularization"],
+        repr(state3),
+    )
 
     rows3 = [json.loads(l) for l in s3.export_jsonl(PID).strip().split("\n") if l.strip()]
     step("fresh SqlStore: 2 events persist", len(rows3) == 2, f"got {len(rows3)}")
@@ -199,6 +233,7 @@ except Exception as e:
 print("\n=== f. Cleanup ===")
 try:
     from sqlalchemy import delete
+
     from app.store.db import SessionLocal
     from app.store.models import Event, LearnerState, Participant
 

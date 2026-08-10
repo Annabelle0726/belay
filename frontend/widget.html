@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Peer-Tutor reference widget (/quad/v1)</title>
+  <!--
+    DEPENDENCY-LIGHT REFERENCE WIDGET (replaceable; demo-proof grade, not pilot UI).
+
+    The host (e.g. Cairn) owns auth, roster, and persistence. This widget NEVER
+    authenticates: it takes an ALREADY-AUTHENTICATED pseudonymous learner id
+    (e.g. gh:12345) from the host and talks to the /quad/v1 sidecar. No PII is sent;
+    no grades and no rankings are ever rendered. Drop it in, or replace it wholesale
+    with the host's own shell against the same contract.
+
+    Three panes:
+      1. Chat            - the peer-tutor turn loop (POST /quad/v1/turn).
+      2. Goals & reflect - opt-in, honored-not-authority (POST /quad/v1/goals,
+                           /quad/v1/reflection); a goal is honored WITHIN limits,
+                           never as a command.
+      3. Trace & signals - SIGNALS, not verdicts: a withheld solution shows as
+                           "held back, with a nudge"; self-eval + the wellbeing
+                           softener are observable indicators. Mastery framing,
+                           never a grade, never a ranking.
+
+    One customization knob (scaffolding level) proves the per-learner overlay seam
+    end-to-end: it is opt-in and routed through the server-side floor check; it
+    shapes HOW the tutor helps, never WHAT it withholds.
+  -->
+  <style>
+    :root { --ink:#1a2233; --muted:#667085; --line:#e3e8ef; --bg:#f7f9fc;
+            --accent:#3056d3; --hold:#9a6700; --soft:#7a3ea8; --ok:#2f7d4f; }
+    * { box-sizing: border-box; }
+    body { font: 14px/1.55 system-ui, sans-serif; color:var(--ink); margin:0;
+           background:var(--bg); }
+    .wrap { max-width: 960px; margin: 1.2rem auto; padding: 0 1rem; }
+    h1 { font-size: 1.15rem; margin:.2rem 0; }
+    h2 { font-size: .92rem; margin:.1rem 0 .6rem; letter-spacing:.01em; }
+    .note { color:var(--muted); font-size:.82rem; }
+    .bar { display:flex; flex-wrap:wrap; gap:.6rem; align-items:end;
+           background:#fff; border:1px solid var(--line); border-radius:10px; padding:.7rem .9rem; }
+    .bar label { font-size:.72rem; color:var(--muted); display:block; margin-bottom:.15rem; }
+    .bar input, .bar select { font:inherit; padding:.35rem .45rem; border:1px solid var(--line);
+           border-radius:7px; }
+    .panes { display:grid; grid-template-columns: 1.5fr 1fr; gap:.9rem; margin-top:.9rem; }
+    .pane { background:#fff; border:1px solid var(--line); border-radius:10px; padding:.9rem; }
+    .col { display:flex; flex-direction:column; gap:.9rem; }
+    .msgs { display:flex; flex-direction:column; gap:.5rem; min-height:170px; max-height:320px;
+            overflow:auto; padding:.2rem; }
+    .msg { padding:.5rem .7rem; border-radius:10px; max-width:90%; }
+    .msg.student { align-self:flex-end; background:#eef2ff; }
+    .msg.tutor { align-self:flex-start; background:#f1f5f9; }
+    .msg .who { font-size:.7rem; color:var(--muted); margin-bottom:.15rem; }
+    textarea, .row input { width:100%; font:inherit; padding:.45rem; border:1px solid var(--line);
+            border-radius:7px; }
+    button { font:inherit; padding:.45rem .8rem; border:1px solid var(--accent); background:var(--accent);
+             color:#fff; border-radius:7px; cursor:pointer; margin-top:.5rem; }
+    button.ghost { background:#fff; color:var(--accent); }
+    .chip { display:inline-block; font-size:.74rem; padding:.12rem .5rem; border-radius:999px;
+            border:1px solid var(--line); margin:.1rem .25rem .1rem 0; color:var(--muted); }
+    .chip.hold { color:var(--hold); border-color:#f0d9a8; background:#fff8e8; }
+    .chip.soft { color:var(--soft); border-color:#e6cff0; background:#faf2ff; }
+    .chip.ok   { color:var(--ok); border-color:#cfe9d8; background:#f1fbf4; }
+    .sig { margin:.35rem 0; }
+    .sig b { font-weight:600; }
+    .declined { color:var(--hold); font-size:.8rem; margin-top:.3rem; }
+    code { background:#eef1f6; padding:.05rem .3rem; border-radius:5px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Peer-Tutor reference widget</h1>
+  <p class="note">
+    The host supplies an already-authenticated <strong>pseudonymous</strong> id; this
+    widget never authenticates and sends no PII. It renders <strong>signals, not
+    verdicts</strong>, and shows <strong>no grades and no rankings</strong>. Replaceable:
+    a host can drop this in or swap its own shell against the same <code>/quad/v1</code>
+    contract.
+  </p>
+
+  <div class="bar">
+    <div><label>sidecar base URL</label><input id="base" value="http://localhost:8000" /></div>
+    <div><label>pseudo_id (from host)</label><input id="pid" value="gh:12345" /></div>
+    <div><label>exercise_id</label><input id="ex" value="ds-foundations" /></div>
+    <div><label>stance</label>
+      <select id="stance">
+        <option value="peer">peer</option>
+        <option value="control">control (no model)</option>
+        <option value="oracle">oracle</option>
+      </select>
+    </div>
+    <div>
+      <label>scaffolding (one customization knob, opt-in)</label>
+      <select id="knob">
+        <option value="">(default)</option>
+        <option value="more">more scaffolding (smaller steps)</option>
+        <option value="less">less scaffolding (more independence)</option>
+      </select>
+    </div>
+  </div>
+  <p class="note" id="knobnote">
+    The knob shapes <em>how</em> the tutor helps, never <em>what</em> it withholds. It is
+    routed through the server-side floor check; the leak gate and wellbeing floor are not
+    customizable. <span id="declined" class="declined"></span>
+  </p>
+
+  <div class="panes">
+    <div class="col">
+      <div class="pane">
+        <h2>Chat</h2>
+        <div class="msgs" id="msgs"></div>
+        <textarea id="say" rows="2" placeholder="Ask the tutor, or paste what you tried..."></textarea>
+        <div><button id="send">Send turn</button></div>
+      </div>
+      <div class="pane">
+        <h2>Goals &amp; reflection <span class="note">(opt-in, honored within limits, never a command)</span></h2>
+        <textarea id="goal" rows="2" placeholder="A goal in your own words, e.g. 'make me explain my reasoning first'"></textarea>
+        <button id="setgoal" class="ghost">Set goal</button>
+        <span id="goalstate" class="note"></span>
+        <textarea id="refl" rows="2" placeholder="A reflection on how it is going..." style="margin-top:.6rem"></textarea>
+        <button id="setrefl" class="ghost">Record reflection</button>
+        <span id="reflstate" class="note"></span>
+      </div>
+    </div>
+
+    <div class="pane">
+      <h2>Trace &amp; signals <span class="note">(mastery framing, not a score)</span></h2>
+      <div id="signals"><p class="note">Signals from the latest turn appear here.</p></div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const baseURL = () => $("base").value.replace(/\/$/, "");
+const recent = [];   // dialogue history for the turn loop
+
+function addMsg(who, text) {
+  const d = document.createElement("div");
+  d.className = "msg " + (who === "student" ? "student" : "tutor");
+  d.innerHTML = '<div class="who">' + who + "</div>" + escapeHtml(text);
+  $("msgs").appendChild(d);
+  $("msgs").scrollTop = $("msgs").scrollHeight;
+}
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>]/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;" }[c]));
+}
+function overlayFromKnob() {
+  const v = $("knob").value;
+  return v ? { pedagogy: { scaffolding: v } } : null;
+}
+async function post(path, body) {
+  const r = await fetch(baseURL() + path, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await r.json().catch(() => ({}));
+  return { status: r.status, data };
+}
+
+// SIGNALS, not verdicts. A withheld solution reads as "held back, with a nudge".
+function renderSignals(t) {
+  const c = (t.components || {});
+  const gov = t.governance || "none";
+  const govLabel = {
+    none: ['<span class="chip ok">on track</span>', "no intervention needed"],
+    withholding_solution: ['<span class="chip hold">held back, with a nudge</span>',
+      "kept the full answer back so the learning stays yours"],
+    redirect_answer_seeking: ['<span class="chip hold">redirected to your reasoning</span>',
+      "pointed back at your thinking instead of handing it over"],
+    flag_escalate: ['<span class="chip">flagged for a human</span>', "out of the tutor's depth"],
+    encourage_tone: ['<span class="chip ok">encouraging</span>', "meta-affective support"],
+  }[gov] || ['<span class="chip">' + escapeHtml(gov) + "</span>", ""];
+
+  const parts = [];
+  parts.push('<div class="sig">' + govLabel[0] + '<div class="note">' + govLabel[1] + "</div></div>");
+  parts.push('<div class="sig"><b>Move:</b> <span class="chip">' + escapeHtml(t.intervention || "-") +
+             '</span> <span class="note">' + escapeHtml(t.affective_state || "") + "</span></div>");
+  const se = c.self_eval || {};
+  if (se.leak_risk) parts.push('<div class="sig"><b>Self-check leak risk:</b> ' + escapeHtml(se.leak_risk) + "</div>");
+  // Calibrated confidence as a soft signal (a bar, never a grade or rank).
+  if (typeof t.confidence === "number") {
+    const pct = Math.round(t.confidence * 100);
+    parts.push('<div class="sig"><b>Tutor confidence (calibrated):</b> ' + pct + "%</div>");
+  }
+  if (c.wellbeing_softened) {
+    parts.push('<div class="sig"><span class="chip soft">tone softened</span>' +
+               '<div class="note">an observable wellbeing backstop fired</div></div>');
+  }
+  if (se.goal_alignment) {
+    parts.push('<div class="sig"><b>Goal alignment:</b> <span class="chip">' +
+               escapeHtml(se.goal_alignment) + "</span></div>");
+  }
+  parts.push('<p class="note">Signals describe how the tutor is helping. They are not a grade, a score, or a ranking.</p>');
+  $("signals").innerHTML = parts.join("");
+}
+
+$("send").addEventListener("click", async () => {
+  const text = $("say").value.trim();
+  if (text) { addMsg("student", text); recent.push({ who: "student", text }); $("say").value = ""; }
+  const body = {
+    pseudo_id: $("pid").value, exercise_id: $("ex").value, stance: $("stance").value,
+    event: "chat", mode: "study", source: "", recent: recent.slice(-8),
+  };
+  const ov = overlayFromKnob();
+  if (ov) body.overlay = ov;     // the customization knob rides on the turn
+  const { status, data } = await post("/quad/v1/turn", body);
+  if (status !== 200) { addMsg("tutor", "(" + status + ") " + (data.detail || JSON.stringify(data))); return; }
+  addMsg("tutor", data.message || "(no message)");
+  if (data.check_question) addMsg("tutor", data.check_question);
+  recent.push({ who: "tutor", text: data.message || "" });
+  renderSignals(data);
+  // Surface any declined overlay field (floor check) without echoing the raw value.
+  const decl = ((data.components || {}).overlay_declined) || [];
+  $("declined").textContent = decl.length ? ("A preference was declined by the floor check: " + decl.join(", ")) : "";
+});
+
+$("setgoal").addEventListener("click", async () => {
+  const { status, data } = await post("/quad/v1/goals", { pseudo_id: $("pid").value, text: $("goal").value });
+  if (status !== 200) { $("goalstate").textContent = "(" + status + ") rejected"; return; }
+  const g = data.goals;
+  $("goalstate").textContent = !g ? "cleared"
+    : g.honored ? "honored within your stance (never a command)"
+    : "recorded, but not adopted - the tutor holds you to constructive goals";
+});
+
+$("setrefl").addEventListener("click", async () => {
+  const { status } = await post("/quad/v1/reflection", { pseudo_id: $("pid").value, text: $("refl").value });
+  $("reflstate").textContent = status === 200 ? "recorded (private to you, never to an instructor)" : "(" + status + ")";
+});
+
+// Setting the knob also persists the overlay via its own intake (opt-in).
+$("knob").addEventListener("change", async () => {
+  const { data } = await post("/quad/v1/overlay", { pseudo_id: $("pid").value, overlay: overlayFromKnob() });
+  const decl = ((data.overlay || {}).declined) || [];
+  $("declined").textContent = decl.length ? ("A preference was declined by the floor check: " + decl.join(", ")) : "";
+});
+</script>
+</body>
+</html>

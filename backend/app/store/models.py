@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Persistence schema (SQLAlchemy).
 
@@ -7,7 +8,7 @@ Three tables:
                   This is Sol's persistent learner model.
   events        - append-only trace. Every run and every tutor turn lands here
                   with full component telemetry. This IS the §6 data stream
-                  (see DATA_AND_IRB.md); it is never updated, only inserted.
+                  (see PRIVACY.md); it is never updated, only inserted.
 
 LearnerState schema v2 (2026-06-03): added `concepts` JSON (canonical per-concept
 mastery). Shape: {concept_id: {"state":"shaky"|"grasped", "evidence":int,
@@ -31,17 +32,37 @@ the misconception it judged the student to be exhibiting this turn; null when no
 match. This is an exploratory measure, NOT confirmatory. Pre-F6 rows have this
 field absent; downstream code must use .get("misconception_id") with a None
 default. Control turns carry null by construction (no reasoner runs).
+
+LearnerState schema v3 (goals/reflections): added two ADDITIVE columns — `goals`
+JSON (the student's own self-set goals artifact {text, ts, honored}, or null) and
+`reflections` JSON (a timestamped list of the student's reflections, each linked
+to the goal in force). Opt-in: with no goals/reflections set, both default to
+null/[] and behavior is unchanged. No PII; the student's own words only.
+MIGRATION (deployed DBs): ALTER TABLE learner_state ADD COLUMN goals JSON;
+ALTER TABLE learner_state ADD COLUMN reflections JSON DEFAULT '[]'; (dev: recreate).
+
+LearnerState schema v4 (per-learner customization overlay): added one ADDITIVE
+column `overlay` JSON (bounded persona/pedagogy/accommodation knobs, or null).
+Opt-in: null overlay leaves behavior unchanged. No PII; enumerated values only.
+MIGRATION (deployed DBs): ALTER TABLE learner_state ADD COLUMN overlay JSON; (dev: recreate).
+
+Event types are ADDITIVE: alongside `run` and `turn`, the goals/reflection layer
+emits `goal_set`, `goal_alignment_check`, `reflect`, and `reflection_recorded`, and
+the customization overlay emits `overlay_set` (new event_type values only; the
+8-field row shape and the events.jsonl export contract are unchanged). These only
+appear when a student opts in to goals or a customization overlay.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Base(DeclarativeBase):
@@ -67,6 +88,12 @@ class LearnerState(Base):
     shaky: Mapped[list] = mapped_column(JSON, default=list)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     concepts: Mapped[dict] = mapped_column(JSON, default=dict)
+    # v3 (opt-in goals/reflections): the student's own self-set goals + reflections.
+    goals: Mapped[dict | None] = mapped_column(JSON, nullable=True, default=None)
+    reflections: Mapped[list] = mapped_column(JSON, default=list)
+    # v4 (opt-in per-learner customization overlay): bounded, enumerated knobs
+    # (persona/pedagogy/accommodation) that shape HOW the tutor helps. Null = today.
+    overlay: Mapped[dict | None] = mapped_column(JSON, nullable=True, default=None)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow)
 
 
@@ -74,11 +101,13 @@ class Event(Base):
     __tablename__ = "events"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    participant_id: Mapped[str] = mapped_column(String(64), ForeignKey("participants.id"), index=True)
+    participant_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("participants.id"), index=True
+    )
     ts: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)
     exercise_id: Mapped[str] = mapped_column(String(64), index=True)
-    mode: Mapped[str] = mapped_column(String(16))          # study | teach
-    event_type: Mapped[str] = mapped_column(String(16))    # run | turn
+    mode: Mapped[str] = mapped_column(String(16))  # study | teach
+    event_type: Mapped[str] = mapped_column(String(16))  # run | turn
     stance: Mapped[str | None] = mapped_column(String(16), nullable=True)  # peer | oracle | control
-    payload: Mapped[dict] = mapped_column(JSON)            # full telemetry
+    payload: Mapped[dict] = mapped_column(JSON)  # full telemetry
     note: Mapped[str] = mapped_column(Text, default="")

@@ -1,28 +1,42 @@
+# One-command bring-up of the peer-tutor framework as a deployable agent object.
+#
+#   docker compose up --build          # SQLite default + openai_compatible provider
+#
+# Compute-agnostic by default: SQLite (zero-config durable, no DB service required)
+# and the self-hosted OpenAI-compatible provider. Point OPENAI_BASE_URL at any
+# local or institutional model endpoint — no lock-in, no external API required.
+# With a self-hosted endpoint, student code and prompts stay on institutional
+# compute (FERPA posture; see ARCHITECTURE.md (Quad sidecar) and VALIDATION).
+#
+# Postgres is OPT-IN (it is for scale, not a prerequisite):
+#   docker compose --profile postgres up --build
+#   # then set DATABASE_URL=postgresql+psycopg://qi:qi@db:5432/qimvp
 services:
-  backend:
+  tutor:
     build: ./backend
     ports:
       - "8000:8000"
     environment:
-      QUANTUM_BACKEND: ${QUANTUM_BACKEND:-local}
+      PROVIDER: ${PROVIDER:-openai_compatible}
+      TUTOR_PACK: ${TUTOR_PACK:-datascience}
       STORE_BACKEND: ${STORE_BACKEND:-sql}
       DATABASE_URL: ${DATABASE_URL:-sqlite:///./qimvp.db}
-      # Model layer: Jetstream2 Inference Service (no token when this container
-      # runs on a JS2/IU instance; no SUs consumed). Off-instance, set
-      # LLM_BASE_* to the Open WebUI proxy and LLM_API_KEY to your token.
-      LLM_PROVIDER: ${LLM_PROVIDER:-jetstream}
-      MODEL_FAST: ${MODEL_FAST:-llama-4-scout}
-      MODEL_STRONG: ${MODEL_STRONG:-gpt-oss-120b}
-      REASONING_STRONG: ${REASONING_STRONG:-high}
-      LLM_BASE_FAST: ${LLM_BASE_FAST:-https://llm.jetstream-cloud.org/llama-4-scout/v1}
-      LLM_BASE_STRONG: ${LLM_BASE_STRONG:-https://llm.jetstream-cloud.org/gpt-oss-120b/v1}
-      LLM_API_KEY: ${LLM_API_KEY:-EMPTY}
+      # Point this at your model endpoint (host Ollama/vLLM, or an institutional
+      # OpenAI-compatible service). host.docker.internal reaches a host process.
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://host.docker.internal:11434/v1}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-ollama}
+      MODEL_FAST: ${MODEL_FAST:-llama3.2}
+      MODEL_STRONG: ${MODEL_STRONG:-llama3.2}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:3000}
-    depends_on:
-      - db
+    extra_hosts:
+      # Lets the container reach a model endpoint on the host (Linux parity with
+      # Docker Desktop's built-in host.docker.internal).
+      - "host.docker.internal:host-gateway"
 
+  # Optional Postgres for scale (opt-in via the "postgres" profile).
   db:
     image: postgres:16
+    profiles: ["postgres"]
     environment:
       POSTGRES_USER: qi
       POSTGRES_PASSWORD: qi
@@ -30,7 +44,6 @@ services:
     volumes:
       - qi_pgdata:/var/lib/postgresql/data
     ports:
-      # Host 5433 → container 5432: avoids a native Postgres already on loopback 5432.
       - "5433:5432"
 
 volumes:

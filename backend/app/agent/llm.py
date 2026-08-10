@@ -1,29 +1,66 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
-LLM access + resource-aware model tiering.
+The inference Provider seam.
 
-The AWS draft's "resource-aware orchestration" is realized here as concrete
-model tiers served by the **Jetstream2 Inference Service** (OpenAI-compatible,
-US-origin open-weight models, hosted at IU): the Planner and Self-Evaluator run
-on a fast tier (Llama 4 Scout), the Peer-Reasoner on a stronger reasoning tier
-(gpt-oss-120b, high effort). A backend running on a Jetstream2 instance reaches
-these endpoints with no token and at no SU cost.
+Core calls a `Provider` (the `json(...)` method), never a concrete SDK. The
+fast/strong TIER POLICY (which component runs on which tier) lives in core and is
+provider-agnostic — the Planner and Self-Evaluator use the fast tier, the
+Peer-Reasoner the strong tier. Only the tier->concrete-model mapping is
+per-provider config (`settings.model_tiers`).
 
-`LLMClient` is a Protocol with a single `json(...)` method, so tests inject a
-deterministic stub and exercise the whole evaluation-first loop with no network.
-`get_llm()` returns the configured provider.
+Providers:
+  - OpenAICompatProvider (live, FIRST-CLASS, self-hosted): any OpenAI-compatible
+    endpoint (Ollama / vLLM / a Jetstream2-hosted model / MESA AI-Verde) via a
+    configurable base_url + model(s) + optional key. Needs NO Anthropic
+    dependency, enabling a zero-external-API deployment.
+  - AnthropicProvider (live, hosted convenience): wraps the Anthropic client.
+  - BedrockProvider (documented STUB; not live): Amazon Nova tier mapping.
+
+`Provider` is a Protocol with a single `json(...)` method so tests inject a
+deterministic stub and exercise the whole loop with no network. `get_provider()`
+(aka `get_llm()`) returns the configured provider.
+
+INVARIANT: the provider seam carries NO governance decision. The inference choice
+never changes the deterministic leak gate.
 """
+
 from __future__ import annotations
 
 import json
 import re
-from typing import Dict, Protocol
+import time
+from typing import Protocol, runtime_checkable
 
 from ..config import settings
+from . import telemetry as _tel
 
 
-class LLMClient(Protocol):
-    def json(self, *, role: str, tier: str, system: str, user: str,
-             max_tokens: int = 800, reasoning_effort: str | None = None) -> dict: ...
+def _cost(prompt_tokens, completion_tokens) -> float:
+    return round(
+        (prompt_tokens or 0) / 1000.0 * settings.cost_per_1k_prompt
+        + (completion_tokens or 0) / 1000.0 * settings.cost_per_1k_completion,
+        6,
+    )
+
+
+@runtime_checkable
+class Provider(Protocol):
+    name: str
+
+    def json(
+        self,
+        *,
+        role: str,
+        tier: str,
+        system: str,
+        user: str,
+        max_tokens: int = 800,
+        reasoning_effort: str | None = None,
+    ) -> dict: ...
+
+
+# Back-compat alias (older imports referenced LLMClient).
+LLMClient = Provider
 
 
 def parse_json(text: str) -> dict | None:
@@ -33,127 +70,244 @@ def parse_json(text: str) -> dict | None:
     clean = re.sub(r"^```(?:json)?", "", clean).strip()
     clean = re.sub(r"```$", "", clean).strip()
     try:
-        return json.loads(clean)
+        loaded: dict = json.loads(clean)
+        return loaded
     except Exception:
         m = re.search(r"\{[\s\S]*\}", clean)
         if m:
             try:
-                return json.loads(m.group(0))
+                loaded2: dict = json.loads(m.group(0))
+                return loaded2
             except Exception:
                 return None
     return None
 
 
-class OpenAICompatLLM:
-    """Client for any OpenAI-compatible endpoint; defaults to the Jetstream2
-    Inference Service. Each tier may have its own base URL (the JS2 direct
-    endpoints are per-model), so we keep one OpenAI client per base URL."""
+def _model_for(tier: str) -> str:
+    tiers = settings.model_tiers
+    return tiers.get(tier, tiers["fast"])
+
+
+class OpenAICompatProvider:
+    """Live, first-class self-hosted path: one OpenAI-compatible endpoint
+    (`settings.openai_base_url`) serving all tiers (Ollama/vLLM/JS2/MESA)."""
+
+    name = "openai_compatible"
 
     def __init__(self) -> None:
         from openai import OpenAI  # lazy import
-        self._OpenAI = OpenAI
-        self._clients: Dict[str, object] = {}
-        self._tiers = settings.model_tiers
-        self._bases = settings.tier_base_urls
-        self._reasoning = settings.tier_reasoning
 
-    def _client_for(self, base_url: str):
-        if base_url not in self._clients:
-            self._clients[base_url] = self._OpenAI(base_url=base_url, api_key=settings.llm_api_key)
-        return self._clients[base_url]
+        self._client = OpenAI(base_url=settings.openai_base_url, api_key=settings.openai_api_key)
+
+    def model_for(self, tier: str) -> str:
+        return _model_for(tier)
 
     @staticmethod
     def _extract_text(resp) -> str:
         msg = resp.choices[0].message
-        return (getattr(msg, "content", None)
-                or getattr(msg, "reasoning_content", "")
-                or "")
+        return getattr(msg, "content", None) or getattr(msg, "reasoning_content", "") or ""
 
-    def json(self, *, role: str, tier: str, system: str, user: str,
-             max_tokens: int = 800, reasoning_effort: str | None = None) -> dict:
-        base  = self._bases.get(tier, self._bases["fast"])
-        model = self._tiers.get(tier, self._tiers["fast"])
-        client = self._client_for(base)
+    @staticmethod
+    def _usage(resp):
+        u = getattr(resp, "usage", None)
+        if u is None:
+            return None, None
+        return getattr(u, "prompt_tokens", None), getattr(u, "completion_tokens", None)
 
-        # Base request kwargs.
+    def json(
+        self,
+        *,
+        role: str,
+        tier: str,
+        system: str,
+        user: str,
+        max_tokens: int = 800,
+        reasoning_effort: str | None = None,
+    ) -> dict:
+        t0 = time.perf_counter()
+        model = self.model_for(tier)
         kwargs: dict = dict(
             model=model,
-            messages=[{"role": "system", "content": system},
-                      {"role": "user", "content": user}],
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
             temperature=settings.llm_temperature,
             max_tokens=max_tokens,
         )
-        # A per-call reasoning_effort (the escalation lever) overrides the tier
-        # default. Model-swap to a larger open-weight tier would slot in right
-        # here (pick `model`/`base` by effort) — a clean future seam, not built.
-        effort = reasoning_effort or self._reasoning.get(tier)
-        if effort:
-            kwargs["extra_body"] = {"reasoning_effort": effort}
+        # "Thinking" is a model CAPABILITY, not sent unconditionally. Default OFF
+        # for openai_compatible so ordinary non-reasoning local models
+        # (llama3.2/mistral/qwen2.5) work — they reject an unknown reasoning param.
+        # Opt in with OPENAI_REASONING=1 for an endpoint serving a reasoning model;
+        # the effort then comes from the per-call escalation lever or the strong-
+        # tier default. No governance logic is involved either way.
+        if settings.openai_reasoning:
+            effort = reasoning_effort or (settings.reasoning_strong if tier == "strong" else "")
+            if effort:
+                kwargs["extra_body"] = {"reasoning_effort": effort}
 
-        # Prefer JSON mode so open-weight models return clean JSON without fences.
-        # Some endpoints reject the parameter; fall back silently if they do.
+        # Prefer JSON mode; some endpoints reject it — fall back silently.
         kwargs_json = dict(kwargs, response_format={"type": "json_object"})
         try:
-            resp = client.chat.completions.create(**kwargs_json)
+            resp = self._client.chat.completions.create(**kwargs_json)
         except Exception:
-            resp = client.chat.completions.create(**kwargs)
+            resp = self._client.chat.completions.create(**kwargs)
 
         text = self._extract_text(resp)
         parsed = parse_json(text)
 
         if parsed is None:
-            # One reformat-retry: echo the raw output back and ask for JSON only.
-            # Temperature 0 for determinism; no response_format (already failed once).
+            # One reformat-retry: echo the raw output and ask for JSON only.
             retry_msgs = [
-                {"role": "system",    "content": system},
-                {"role": "user",      "content": user},
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
                 {"role": "assistant", "content": text or ""},
-                {"role": "user",      "content":
-                    "Return ONLY the JSON object. No prose, no markdown fences."},
+                {
+                    "role": "user",
+                    "content": "Return ONLY the JSON object. No prose, no markdown fences.",
+                },
             ]
             try:
-                resp2 = client.chat.completions.create(
-                    model=model, messages=retry_msgs,
-                    temperature=0.0, max_tokens=max_tokens,
+                resp = self._client.chat.completions.create(
+                    model=model,
+                    messages=retry_msgs,  # type: ignore[arg-type]  # openai's over-specific message param; list[dict[str,str]] is fine at runtime
+                    temperature=0.0,
+                    max_tokens=max_tokens,
                 )
-                parsed = parse_json(self._extract_text(resp2))
+                parsed = parse_json(self._extract_text(resp))
             except Exception:
                 pass
 
         if parsed is None:
             raise ValueError(f"{role}: model did not return parseable JSON")
+
+        ptok, ctok = self._usage(resp)
+        _tel.record(
+            role,
+            latency_ms=round((time.perf_counter() - t0) * 1000, 1),
+            prompt_tokens=ptok,
+            completion_tokens=ctok,
+            cost=_cost(ptok, ctok),
+        )
         return parsed
 
 
-class AnthropicLLM:
-    """Alternate provider (off-JS2 development / ceiling comparisons). Reads
-    ANTHROPIC_API_KEY; expects model_tiers set to Claude model strings."""
+class AnthropicProvider:
+    """Live hosted-convenience path. Reads ANTHROPIC_API_KEY; tier maps to Claude
+    model ids (settings.anthropic_model_fast/strong)."""
+
+    name = "anthropic"
 
     def __init__(self) -> None:
         from anthropic import Anthropic  # lazy import
-        self._client = Anthropic()
-        self._tiers: Dict[str, str] = settings.model_tiers
 
-    def json(self, *, role: str, tier: str, system: str, user: str,
-             max_tokens: int = 800, reasoning_effort: str | None = None) -> dict:
-        # reasoning_effort is a JS2/open-weight knob; accepted for protocol
-        # conformance and ignored here (Anthropic uses a different mechanism).
-        model = self._tiers.get(tier, self._tiers["fast"])
-        resp = self._client.messages.create(
-            model=model,
+        self._client = (
+            Anthropic(api_key=settings.anthropic_api_key)
+            if settings.anthropic_api_key
+            else Anthropic()
+        )
+
+    def model_for(self, tier: str) -> str:
+        return _model_for(tier)
+
+    def json(
+        self,
+        *,
+        role: str,
+        tier: str,
+        system: str,
+        user: str,
+        max_tokens: int = 800,
+        reasoning_effort: str | None = None,
+    ) -> dict:
+        # reasoning_effort is the open-weight knob; Anthropic uses extended
+        # thinking instead. Thinking is this provider's CAPABILITY (default on);
+        # openai_compatible defaults it off. No governance logic is involved.
+        t0 = time.perf_counter()
+        kwargs: dict = dict(
+            model=self.model_for(tier),
             max_tokens=max_tokens,
             system=system,
             messages=[{"role": "user", "content": user}],
         )
+        if settings.anthropic_thinking:
+            budget = max(settings.anthropic_thinking_budget, 1024)  # Anthropic minimum
+            # max_tokens must exceed the thinking budget; extended thinking also
+            # requires the default temperature (so we omit temperature here).
+            kwargs["max_tokens"] = max(max_tokens, budget + 512)
+            kwargs["thinking"] = {"type": "enabled", "budget_tokens": budget}
+        resp = self._client.messages.create(**kwargs)
         text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
         parsed = parse_json(text)
         if parsed is None:
             raise ValueError(f"{role}: model did not return parseable JSON")
+        u = getattr(resp, "usage", None)
+        ptok = getattr(u, "input_tokens", None) if u else None
+        ctok = getattr(u, "output_tokens", None) if u else None
+        _tel.record(
+            role,
+            latency_ms=round((time.perf_counter() - t0) * 1000, 1),
+            prompt_tokens=ptok,
+            completion_tokens=ctok,
+            cost=_cost(ptok, ctok),
+        )
         return parsed
 
 
-def get_llm() -> LLMClient:
-    """Return the configured LLM client (default: Jetstream2 inference)."""
-    if settings.llm_provider == "anthropic":
-        return AnthropicLLM()
-    return OpenAICompatLLM()
+class BedrockProvider:
+    """DOCUMENTED STUB (not live). Amazon Bedrock with the Nova tier mapping:
+
+        fast   -> settings.bedrock_model_fast    (default amazon.nova-lite-v1:0)
+        strong -> settings.bedrock_model_strong  (default amazon.nova-pro-v1:0)
+
+    Constructs without boto3 so provider selection/tier-mapping is testable; any
+    actual call raises so it can never be used unimplemented. To make it live:
+    add a thin boto3 `bedrock-runtime` `converse` call here mapping tier->model
+    via `model_for` and parsing usage from the response — no core changes needed.
+    """
+
+    name = "bedrock"
+
+    def model_for(self, tier: str) -> str:
+        return _model_for(tier)
+
+    def json(
+        self,
+        *,
+        role: str,
+        tier: str,
+        system: str,
+        user: str,
+        max_tokens: int = 800,
+        reasoning_effort: str | None = None,
+    ) -> dict:
+        raise NotImplementedError(
+            "bedrock provider is a documented stub; set PROVIDER=openai_compatible "
+            "or PROVIDER=anthropic (Nova mapping: "
+            f"fast={settings.bedrock_model_fast}, strong={settings.bedrock_model_strong})"
+        )
+
+
+# Provider id -> class. New providers register here; core selects by PROVIDER.
+_PROVIDERS: dict[str, type] = {
+    "openai_compatible": OpenAICompatProvider,
+    "anthropic": AnthropicProvider,
+    "bedrock": BedrockProvider,
+}
+
+
+def provider_class(provider_id: str) -> type:
+    """The Provider class for an id (no construction; testable without network)."""
+    try:
+        return _PROVIDERS[provider_id]
+    except KeyError:
+        raise ValueError(f"unknown PROVIDER={provider_id!r}; known: {sorted(_PROVIDERS)}") from None
+
+
+def get_provider() -> Provider:
+    """Construct the configured provider (PROVIDER, default openai_compatible)."""
+    inst: Provider = provider_class(settings.provider)()
+    return inst
+
+
+# Back-compat aliases.
+OpenAICompatLLM = OpenAICompatProvider
+AnthropicLLM = AnthropicProvider
+get_llm = get_provider

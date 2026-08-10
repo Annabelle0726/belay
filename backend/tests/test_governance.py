@@ -1,18 +1,29 @@
-"""Governance tests — the leak check is the safety-critical piece, so it gets
-the most direct coverage. Stance-conditional blocking is also verified here."""
+# SPDX-License-Identifier: AGPL-3.0-only
+"""Governance tests (DS fixtures) — the leak gate is the safety-critical piece,
+so it gets the most direct coverage. Covers BOTH leak evidence sources:
+the executable oracle (code that grades as a solution) AND prose disclosure
+(EXTRACTION_PLAN §(f)), plus stance-conditional blocking and answer-seeking."""
+
 from app.agent import governance
-from app.curriculum import get_exercise
+from app.core.registry import get_active_pack
+from app.packs.datascience.solutions import SOLUTIONS
 
-BELL = get_exercise("bell")
+EX = get_active_pack().get_exercise("ds-foundations")
 
-_FULL_SOLUTION = ("here you go:\n```\nallocate 2\nsuperpose q0\nentangle q0 q1\nmeasure all\n```")
+# A fenced, full working solution → executable oracle flags it.
+_FULL_SOLUTION = "here you go:\n```python\n" + SOLUTIONS["ds-foundations"]["source"] + "```"
+# Prose that discloses the answer without any runnable code block.
+_PROSE_LEAK = (
+    "Honestly the answer is just to group by category and take the mean — "
+    "you'll get 15, 40, and 100."
+)
 
 
 def _ctx(message_recent=None):
     return {
-        "_exercise_full": BELL,
+        "_exercise_full": EX,
         "recent_dialogue": message_recent or [],
-        "exercise": {"concept": BELL["concept"]},
+        "exercise": {"concept": EX["concept"]},
     }
 
 
@@ -23,15 +34,19 @@ def test_blocks_full_solution_in_code_block():
     assert gov["flag"] == "withholding_solution"
 
 
-def test_blocks_bare_op_run_solution():
-    draft = {"message": "just do\nallocate 2\nsuperpose q0\nentangle q0 q1", "confidence": 0.9}
-    gov = governance.check(_ctx(), {"intervention": "diagnose"}, draft, {})
+def test_blocks_prose_disclosure():
+    """Prose that discloses the answer (no code) is still blocked — the §(f) gap."""
+    draft = {"message": _PROSE_LEAK, "confidence": 0.9}
+    gov = governance.check(_ctx(), {"intervention": "co_reason"}, draft, {})
     assert gov["block"] is True
+    assert gov["flag"] == "withholding_solution"
 
 
 def test_allows_genuine_hint():
-    draft = {"message": "You've got the superposition on q0. What single op would make q1 follow q0?",
-             "confidence": 0.7}
+    draft = {
+        "message": "You've read the CSV — what single number should each category collapse to?",
+        "confidence": 0.7,
+    }
     gov = governance.check(_ctx(), {"intervention": "co_reason"}, draft, {})
     assert gov["block"] is False
     assert gov["flag"] == "none"
@@ -39,21 +54,31 @@ def test_allows_genuine_hint():
 
 def test_answer_seeking_sets_redirect():
     recent = [{"who": "student", "text": "just tell me the answer please"}]
-    draft = {"message": "Let's think about what links the two qubits.", "confidence": 0.7}
+    draft = {
+        "message": "Let's think about what one number summarizes a category.",
+        "confidence": 0.7,
+    }
     gov = governance.check(_ctx(recent), {"intervention": "co_reason"}, draft, {})
     assert gov["flag"] == "redirect_answer_seeking"
 
 
 def test_safe_rewrite_strips_solution_keeps_prose():
-    draft = {"message": "ok here:\n```\nallocate 2\nsuperpose q0\nentangle q0 q1\n```\ngood luck",
-             "confidence": 0.95, "check_question": None}
-    out = governance.safe_rewrite(draft, {"flag": "withholding_solution"}, BELL)
-    assert "entangle q0 q1" not in out["message"]
+    draft = {
+        "message": "ok here:\n```python\n"
+        + SOLUTIONS["ds-foundations"]["source"]
+        + "```\ngood luck",
+        "confidence": 0.95,
+        "check_question": None,
+    }
+    out = governance.safe_rewrite(draft, {"flag": "withholding_solution"}, EX)
+    assert "groupby" not in out["message"]
+    assert "good luck" in out["message"]
     assert out["confidence"] <= 0.6
     assert out["check_question"]
 
 
 # --- stance-conditional blocking ---
+
 
 def test_peer_stance_strips_full_solution():
     """peer: a draft containing the working solution must be blocked."""

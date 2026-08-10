@@ -7,6 +7,21 @@
 
 pytest>=8.0
 
+# Verifier-contract conformance (tests/test_verifier_contract_leak.py). DEV-ONLY:
+# the leak profile itself has no schema dependency at runtime — it emits documents
+# and the tests check them against the draft 2020-12 schemas in the sibling
+# `verifier-contract` checkout. Offline; jsonschema bundles the metaschema. If the
+# sibling checkout is absent those tests skip and the rest of the gate still runs.
+jsonschema>=4.20
+
+# CI quality gate (Slice H/I) — DEV-ONLY, no runtime dependency. Pinned for a
+# reproducible gate (ruff lint + format, mypy type-check); run in CI on py3.12.
+ruff==0.8.6
+mypy==1.14.1
+# Slice I: real type stubs for pandas (the one stubless-by-default lib mypy flagged
+# once the global ignore_missing_imports was removed). Preferred over an ignore.
+pandas-stubs==3.0.3.260530
+
 # Only needed to run the behavioral evals (RUN_LLM_EVALS=1) against the Anthropic
 # provider, or for an Anthropic ceiling comparison. The default Jetstream2 path
 # uses the `openai` client already declared in requirements.txt, so this is

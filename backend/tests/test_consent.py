@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Consent-gated logging tests (DMP §3 / IRB).
 
@@ -12,44 +13,71 @@ Four scenarios tested:
   fail-safe      — unregistered pid also goes to ephemeral; nothing durable written
   identical      — run_turn output is identical regardless of consent
 """
+
 from __future__ import annotations
 
 from app.agent import run_turn
-from app.curriculum import get_exercise
+from app.core.registry import get_active_pack
 from app.store import InMemoryStore, make_event
 from app.store.consent import ConsentRouter
+
+_EX = get_active_pack().get_exercise("ds-foundations")
 
 
 # ── minimal deterministic stub LLM (no network) ───────────────────────────────
 
+
 class _StubLLM:
     def json(self, *, role, tier, system, user, max_tokens=800, reasoning_effort=None):
         if role == "planner":
-            return {"affective_state": "curious", "affect_reasoning": "stub",
-                    "intervention": "co_reason", "target_concept": "entanglement",
-                    "planner_note": "guide them", "confidence": 0.7}
+            return {
+                "affective_state": "curious",
+                "affect_reasoning": "stub",
+                "intervention": "co_reason",
+                "target_concept": "overfitting",
+                "planner_note": "guide them",
+                "confidence": 0.7,
+            }
         if role == "reasoner":
-            return {"message": "Think about what links the qubits.",
-                    "check_question": None, "confidence": 0.8,
-                    "grasped": ["superposition"], "shaky": ["entanglement"]}
+            return {
+                "message": "Think about what links the variables.",
+                "check_question": None,
+                "confidence": 0.8,
+                "grasped": ["regularization"],
+                "shaky": ["overfitting"],
+            }
         if role == "self_eval":
-            return {"needs_revision": False, "confidence": 0.75, "leak_risk": "none",
-                    "self_critique": "ok", "reasons": []}
+            return {
+                "needs_revision": False,
+                "confidence": 0.75,
+                "leak_risk": "none",
+                "self_critique": "ok",
+                "reasons": [],
+            }
         raise AssertionError(f"unexpected role: {role}")
 
 
 def _payload(pid: str, stance: str = "peer") -> dict:
     return {
         "participant_id": pid,
-        "exercise": get_exercise("bell"),
-        "event": "run", "mode": "study",
+        "exercise": _EX,
+        "event": "run",
+        "mode": "study",
         "stance": stance,
-        "source": "allocate 2\nsuperpose q0\nmeasure all",
-        "result": {"ok": True, "goalMet": False, "tvd": 0.5,
-                   "dist": [{"bits": "00", "p": 0.5}, {"bits": "10", "p": 0.5}]},
+        "source": "import pandas as pd\ndf = pd.read_csv('data/sales.csv')",
+        "result": {
+            "ok": True,
+            "goalMet": False,
+            "metric": 0.5,
+            "pack": {"id": "datascience", "summary": "0/1 checks passed"},
+        },
         "recent": [],
-        "signals": {"attempts": 1, "distanceTrend": [0.5],
-                    "repeatedError": False, "sinceLastProgress": 1},
+        "signals": {
+            "attempts": 1,
+            "distanceTrend": [0.5],
+            "repeatedError": False,
+            "sinceLastProgress": 1,
+        },
     }
 
 
@@ -59,6 +87,7 @@ def _make_router():
 
 
 # ── tests ─────────────────────────────────────────────────────────────────────
+
 
 class TestConsentRouting:
     """ConsentRouter routes correctly for the three registration states."""
@@ -100,8 +129,11 @@ class TestConsentingParticipant:
         pid = "p_yes"
         router.register_participant(pid, "c1", consent=True)
         store = router.store_for(pid)
-        store.append_event(make_event(pid, "bell", "study", "run",
-                                      {"source": "x", "result": {}}, stance="peer"))
+        store.append_event(
+            make_event(
+                pid, "ds-foundations", "study", "run", {"source": "x", "result": {}}, stance="peer"
+            )
+        )
         # Export reads from durable → non-empty
         jsonl = router.durable.export_jsonl(pid)
         assert jsonl.strip() != ""
@@ -115,7 +147,7 @@ class TestConsentingParticipant:
         run_turn(_payload(pid), _StubLLM(), store)
         # Learner state persisted to durable
         state = router.durable.get_learner_state(pid)
-        assert "superposition" in state["grasped"] or "entanglement" in state["shaky"]
+        assert "regularization" in state["grasped"] or "overfitting" in state["shaky"]
 
     def test_export_non_empty_for_consented(self):
         router = _make_router()
@@ -135,8 +167,11 @@ class TestNonConsentingParticipant:
         pid = "p_no"
         router.register_participant(pid, "c4", consent=False)
         store = router.store_for(pid)
-        store.append_event(make_event(pid, "bell", "study", "run",
-                                      {"source": "x", "result": {}}, stance="peer"))
+        store.append_event(
+            make_event(
+                pid, "ds-foundations", "study", "run", {"source": "x", "result": {}}, stance="peer"
+            )
+        )
         # Durable export must be empty for this pid
         assert router.durable.export_jsonl(pid).strip() == ""
 
@@ -178,8 +213,11 @@ class TestFailSafe:
         pid = "p_unregistered"
         # Interact WITHOUT registering
         store = router.store_for(pid)
-        store.append_event(make_event(pid, "bell", "study", "run",
-                                      {"source": "x", "result": {}}, stance="peer"))
+        store.append_event(
+            make_event(
+                pid, "ds-foundations", "study", "run", {"source": "x", "result": {}}, stance="peer"
+            )
+        )
         assert router.durable.export_jsonl(pid).strip() == ""
 
     def test_sol_turn_not_durable_before_registration(self):
@@ -200,18 +238,18 @@ class TestTutoringOutputIdentical:
     def test_run_turn_output_same_for_consented_vs_not(self):
         router = _make_router()
         pid_yes = "p_out_yes"
-        pid_no  = "p_out_no"
+        pid_no = "p_out_no"
         router.register_participant(pid_yes, "cy", consent=True)
-        router.register_participant(pid_no,  "cn", consent=False)
+        router.register_participant(pid_no, "cn", consent=False)
 
         llm = _StubLLM()  # deterministic: same inputs → same outputs
         out_yes = run_turn(_payload(pid_yes), llm, router.store_for(pid_yes))
-        out_no  = run_turn(_payload(pid_no),  llm, router.store_for(pid_no))
+        out_no = run_turn(_payload(pid_no), llm, router.store_for(pid_no))
 
-        assert out_yes["message"]        == out_no["message"]
-        assert out_yes["intervention"]   == out_no["intervention"]
-        assert out_yes["confidence"]     == out_no["confidence"]
-        assert out_yes["governance"]     == out_no["governance"]
+        assert out_yes["message"] == out_no["message"]
+        assert out_yes["intervention"] == out_no["intervention"]
+        assert out_yes["confidence"] == out_no["confidence"]
+        assert out_yes["governance"] == out_no["governance"]
         assert out_yes["affective_state"] == out_no["affective_state"]
 
     def test_run_turn_output_same_for_unregistered(self):
@@ -223,7 +261,7 @@ class TestTutoringOutputIdentical:
         # No register_participant for "p_wo"
 
         llm = _StubLLM()
-        out_with    = run_turn(_payload("p_w"),  llm, router_with.store_for("p_w"))
+        out_with = run_turn(_payload("p_w"), llm, router_with.store_for("p_w"))
         out_without = run_turn(_payload("p_wo"), llm, router_without.store_for("p_wo"))
 
         assert out_with["message"] == out_without["message"]

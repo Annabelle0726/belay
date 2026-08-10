@@ -1,9 +1,10 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Process-measure unit tests (pure offline, no LLM/network).
 
 Each test class owns a focused synthetic trace for exactly the case being
-exercised. The Bell exercise (target {"00":0.5,"11":0.5}, tol=0.07) is used
-throughout because the full solution is deterministic and short.
+exercised. The ds-foundations exercise is used throughout because its full
+solution is deterministic and short.
 
 Synthetic event layout:
   make_run(ts, source, tvd, goal_met)  → run event dict
@@ -11,10 +12,10 @@ Synthetic event layout:
 
 All ts values are strict ISO strings so ordering comparisons are unambiguous.
 """
+
 from __future__ import annotations
 
 from app.analysis.measures import (
-    HANDOFF_WINDOW,
     aggregate_participant,
     attempted_handoff,
     brier_score,
@@ -28,24 +29,17 @@ from app.analysis.measures import (
     realized_handoff,
     redirect,
 )
-from app.curriculum import get_exercise
-from app.quantum.backend import LocalSimulator
+from app.core.registry import get_active_pack
 
 # ── test fixtures ─────────────────────────────────────────────────────────────
+from app.packs.datascience.solutions import SOLUTIONS
 
-BELL = get_exercise("bell")      # target {"00":0.5,"11":0.5}, tol=0.07
-SIM = LocalSimulator()
+EX = get_active_pack().get_exercise("ds-foundations")  # DS pack active in 1c
+SIM = None  # no execution simulator; the DS grader is deterministic
 
-# Full Bell-pair solution — grader returns goalMet=True
-_BELL_SRC = "allocate 2\nsuperpose q0\nentangle q0 q1\nmeasure all"
-# Message that contains the Bell solution as op lines (4 consecutive lines → picked up)
-_ORACLE_MSG = (
-    "Here's the full solution:\n"
-    "allocate 2\n"
-    "superpose q0\n"
-    "entangle q0 q1\n"
-    "measure all"
-)
+# Full working DS solution in a fenced block — the executable oracle grades it.
+_DS_SOLUTION_SRC = SOLUTIONS["ds-foundations"]["source"]
+_ORACLE_MSG = "Here's the full solution:\n```python\n" + _DS_SOLUTION_SRC + "```"
 # Stripped peer message — no code
 _STRIPPED_MSG = "I don't want to paste the whole thing — what's the next step?"
 
@@ -57,7 +51,7 @@ def _ts(n: int) -> str:
 
 def make_run(
     n: int,
-    source: str = _BELL_SRC,
+    source: str = _DS_SOLUTION_SRC,
     tvd: float = 0.5,
     goal_met: bool = False,
     dist=None,
@@ -73,7 +67,7 @@ def make_run(
     )
     return {
         "participant_id": "p_test",
-        "exercise_id": "bell",
+        "exercise_id": "ds-foundations",
         "event_type": "run",
         "ts": _ts(n),
         "stance": None,
@@ -100,7 +94,7 @@ def make_turn(
 ) -> dict:
     return {
         "participant_id": pid,
-        "exercise_id": "bell",
+        "exercise_id": "ds-foundations",
         "event_type": "turn",
         "ts": _ts(n),
         "stance": stance,
@@ -109,7 +103,7 @@ def make_turn(
             "plan": {
                 "intervention": intervention,
                 "confidence": plan_confidence,
-                "target_concept": "entanglement",
+                "target_concept": "overfitting",
             },
             "self_eval": {
                 "confidence": se_confidence,
@@ -139,17 +133,23 @@ def make_turn(
 
 # ── §2 realized vs stripped hand-off ─────────────────────────────────────────
 
+
 class TestHandoffs:
     def test_oracle_realized_handoff_true(self):
-        """Oracle final_message with the Bell solution → realized_handoff=True."""
+        """Oracle final_message with the full DS solution → realized_handoff=True."""
         t = make_turn(0, stance="oracle", final_message=_ORACLE_MSG)
-        assert realized_handoff(t, BELL["target"], BELL["tol"], SIM) is True
+        assert realized_handoff(t, exercise=EX, sim=SIM) is True
 
     def test_peer_stripped_realized_handoff_false(self):
         """Stripped peer message with no code → realized_handoff=False."""
-        t = make_turn(0, stance="peer", final_message=_STRIPPED_MSG,
-                      gov_flag="withholding_solution", gov_block=True)
-        assert realized_handoff(t, BELL["target"], BELL["tol"], SIM) is False
+        t = make_turn(
+            0,
+            stance="peer",
+            final_message=_STRIPPED_MSG,
+            gov_flag="withholding_solution",
+            gov_block=True,
+        )
+        assert realized_handoff(t, exercise=EX, sim=SIM) is False
 
     def test_peer_attempted_handoff(self):
         """Peer turn flagged withholding_solution → attempted_handoff=True."""
@@ -164,17 +164,23 @@ class TestHandoffs:
     def test_attempt_measures_handoff_counts(self):
         """compute_attempt_measures counts handoffs correctly for both arms."""
         oracle_turn = make_turn(1, stance="oracle", final_message=_ORACLE_MSG)
-        peer_turn = make_turn(2, stance="peer", final_message=_STRIPPED_MSG,
-                              gov_flag="withholding_solution", gov_block=True)
+        peer_turn = make_turn(
+            2,
+            stance="peer",
+            final_message=_STRIPPED_MSG,
+            gov_flag="withholding_solution",
+            gov_block=True,
+        )
         run1 = make_run(0, tvd=0.5)
         events = [run1, oracle_turn, peer_turn]
-        m = compute_attempt_measures("p_test", "bell", events, BELL, SIM)
-        assert m["realized_handoff_count"] == 1    # oracle
-        assert m["attempted_handoff_count"] == 1   # peer
-        assert m["realized_handoff_rate"] == 0.5   # 1 of 2 turns
+        m = compute_attempt_measures("p_test", "ds-foundations", events, EX, SIM)
+        assert m["realized_handoff_count"] == 1  # oracle
+        assert m["attempted_handoff_count"] == 1  # peer
+        assert m["realized_handoff_rate"] == 0.5  # 1 of 2 turns
 
 
 # ── §3 redirects ─────────────────────────────────────────────────────────────
+
 
 class TestRedirects:
     def test_peer_redirect_flag(self):
@@ -183,8 +189,12 @@ class TestRedirects:
 
     def test_oracle_no_redirect(self):
         """Oracle answers answer-seeking → flag=none → redirect=False."""
-        t = make_turn(0, stance="oracle", gov_flag="none",
-                      final_message="Here is the answer: " + _BELL_SRC)
+        t = make_turn(
+            0,
+            stance="oracle",
+            gov_flag="none",
+            final_message="Here is the answer: " + _DS_SOLUTION_SRC,
+        )
         assert redirect(t) is False
 
     def test_redirect_rate(self):
@@ -192,12 +202,13 @@ class TestRedirects:
         t2 = make_turn(2, gov_flag="none")
         run1 = make_run(0, tvd=0.5)
         events = [run1, t1, t2]
-        m = compute_attempt_measures("p_test", "bell", events, BELL, SIM)
+        m = compute_attempt_measures("p_test", "ds-foundations", events, EX, SIM)
         assert m["redirect_count"] == 1
         assert m["redirect_rate"] == 0.5
 
 
 # ── §4a leak calibration ─────────────────────────────────────────────────────
+
 
 class TestLeakCalibration:
     def test_predicted_partial_or_full(self):
@@ -218,7 +229,7 @@ class TestLeakCalibration:
         t = make_turn(1, leak_risk="partial", gov_flag="withholding_solution", gov_block=True)
         run = make_run(0, tvd=0.5)
         events = [run, t]
-        m = compute_attempt_measures("p_test", "bell", events, BELL, SIM)
+        m = compute_attempt_measures("p_test", "ds-foundations", events, EX, SIM)
         assert m["leak_tp"] == 1
         assert m["leak_fn"] == 0
         assert m["leak_miss_rate"] == 0.0
@@ -228,13 +239,14 @@ class TestLeakCalibration:
         t = make_turn(1, leak_risk="none", gov_flag="withholding_solution", gov_block=True)
         run = make_run(0, tvd=0.5)
         events = [run, t]
-        m = compute_attempt_measures("p_test", "bell", events, BELL, SIM)
+        m = compute_attempt_measures("p_test", "ds-foundations", events, EX, SIM)
         assert m["leak_fn"] == 1
         assert m["leak_tp"] == 0
         assert m["leak_miss_rate"] == 1.0
 
 
 # ── §4b guidance calibration ─────────────────────────────────────────────────
+
 
 class TestGuidanceCalibration:
     """window=2; confident turn followed by a progress run → outcome=True."""
@@ -248,25 +260,24 @@ class TestGuidanceCalibration:
         turn1 = make_turn(1, intervention="co_reason", se_confidence=0.75)
         if with_progress:
             run2 = make_run(2, tvd=0.3)
-            run3 = make_run(3, tvd=0.0, goal_met=True,
-                            dist=[{"bits": "00", "p": 0.5}, {"bits": "11", "p": 0.5}])
+            run3 = make_run(
+                3, tvd=0.0, goal_met=True, dist=[{"bits": "00", "p": 0.5}, {"bits": "11", "p": 0.5}]
+            )
         else:
-            run2 = make_run(2, tvd=0.8,
-                            dist=[{"bits": "00", "p": 0.5}, {"bits": "10", "p": 0.5}])
-            run3 = make_run(3, tvd=0.8,
-                            dist=[{"bits": "00", "p": 0.5}, {"bits": "10", "p": 0.5}])
+            run2 = make_run(2, tvd=0.8, dist=[{"bits": "00", "p": 0.5}, {"bits": "10", "p": 0.5}])
+            run3 = make_run(3, tvd=0.8, dist=[{"bits": "00", "p": 0.5}, {"bits": "10", "p": 0.5}])
         return [run0, turn1, run2, run3]
 
     def test_confident_with_progress(self):
         events = self._make_trace(with_progress=True)
-        pairs = compute_calibration_pairs("p_test", "bell", events, BELL, SIM)
+        pairs = compute_calibration_pairs("p_test", "ds-foundations", events, EX, SIM)
         assert len(pairs) == 1
         assert pairs[0]["outcome"] == 1
         assert pairs[0]["confidence"] == 0.75
 
     def test_confident_no_progress(self):
         events = self._make_trace(with_progress=False)
-        pairs = compute_calibration_pairs("p_test", "bell", events, BELL, SIM)
+        pairs = compute_calibration_pairs("p_test", "ds-foundations", events, EX, SIM)
         assert len(pairs) == 1
         assert pairs[0]["outcome"] == 0
 
@@ -274,10 +285,11 @@ class TestGuidanceCalibration:
         """observe turns must not produce an outcome (no §4b pair)."""
         run0 = make_run(0, tvd=0.5)
         turn_obs = make_turn(1, intervention="observe", se_confidence=0.9)
-        run1 = make_run(2, tvd=0.0, goal_met=True,
-                        dist=[{"bits": "00", "p": 0.5}, {"bits": "11", "p": 0.5}])
+        run1 = make_run(
+            2, tvd=0.0, goal_met=True, dist=[{"bits": "00", "p": 0.5}, {"bits": "11", "p": 0.5}]
+        )
         events = [run0, turn_obs, run1]
-        pairs = compute_calibration_pairs("p_test", "bell", events, BELL, SIM)
+        pairs = compute_calibration_pairs("p_test", "ds-foundations", events, EX, SIM)
         assert all(p["outcome"] is None for p in pairs)
 
     def test_no_subsequent_run_no_outcome(self):
@@ -285,25 +297,32 @@ class TestGuidanceCalibration:
         run0 = make_run(0, tvd=0.5)
         turn1 = make_turn(1, intervention="co_reason", se_confidence=0.8)
         events = [run0, turn1]
-        pairs = compute_calibration_pairs("p_test", "bell", events, BELL, SIM)
+        pairs = compute_calibration_pairs("p_test", "ds-foundations", events, EX, SIM)
         assert pairs[0]["outcome"] is None
 
 
 # ── §4c abstention calibration ────────────────────────────────────────────────
+
 
 class TestAbstentionCalibration:
     def test_abstained_no_progress_precision_1(self):
         """Single abstained turn; no subsequent progress → abstention_precision=1."""
         run0 = make_run(0, tvd=0.8)
         turn_ab = make_turn(
-            1, gov_flag="flag_escalate", se_confidence=0.2,
-            escalated=True, abstained=True,
+            1,
+            gov_flag="flag_escalate",
+            se_confidence=0.2,
+            escalated=True,
+            abstained=True,
             final_message="Honestly I'm not sure...",
         )
-        run1 = make_run(2, tvd=0.8,  # no improvement
-                        dist=[{"bits": "00", "p": 0.5}, {"bits": "10", "p": 0.5}])
+        run1 = make_run(
+            2,
+            tvd=0.8,  # no improvement
+            dist=[{"bits": "00", "p": 0.5}, {"bits": "10", "p": 0.5}],
+        )
         events = [run0, turn_ab, run1]
-        m = compute_attempt_measures("p_test", "bell", events, BELL, SIM)
+        m = compute_attempt_measures("p_test", "ds-foundations", events, EX, SIM)
         assert m["n_abstained"] == 1
         assert m["abstention_precision"] == 1.0
         assert m["false_abstention_rate"] == 0.0
@@ -315,17 +334,25 @@ class TestAbstentionCalibration:
         turn_ab2 window covers run3 — progress → false abstention.
         """
         run0 = make_run(0, tvd=0.8)
-        turn_ab1 = make_turn(1, gov_flag="flag_escalate", se_confidence=0.2,
-                             escalated=True, abstained=True)
-        run1 = make_run(2, tvd=0.8,    # window slot 1 for turn_ab1: no progress
-                        dist=[{"bits": "00", "p": 0.5}, {"bits": "10", "p": 0.5}])
-        run2 = make_run(3, tvd=0.8,    # window slot 2 for turn_ab1: no progress
-                        dist=[{"bits": "00", "p": 0.5}, {"bits": "10", "p": 0.5}])
-        turn_ab2 = make_turn(4, gov_flag="flag_escalate", se_confidence=0.2,
-                             escalated=True, abstained=True)
-        run3 = make_run(5, tvd=0.3)   # window slot 1 for turn_ab2: progress → false abstention
+        turn_ab1 = make_turn(
+            1, gov_flag="flag_escalate", se_confidence=0.2, escalated=True, abstained=True
+        )
+        run1 = make_run(
+            2,
+            tvd=0.8,  # window slot 1 for turn_ab1: no progress
+            dist=[{"bits": "00", "p": 0.5}, {"bits": "10", "p": 0.5}],
+        )
+        run2 = make_run(
+            3,
+            tvd=0.8,  # window slot 2 for turn_ab1: no progress
+            dist=[{"bits": "00", "p": 0.5}, {"bits": "10", "p": 0.5}],
+        )
+        turn_ab2 = make_turn(
+            4, gov_flag="flag_escalate", se_confidence=0.2, escalated=True, abstained=True
+        )
+        run3 = make_run(5, tvd=0.3)  # window slot 1 for turn_ab2: progress → false abstention
         events = [run0, turn_ab1, run1, run2, turn_ab2, run3]
-        m = compute_attempt_measures("p_test", "bell", events, BELL, SIM)
+        m = compute_attempt_measures("p_test", "ds-foundations", events, EX, SIM)
         assert m["n_abstained"] == 2
         assert m["abstention_precision"] == 0.5
         assert m["false_abstention_rate"] == 0.5
@@ -333,9 +360,13 @@ class TestAbstentionCalibration:
 
 # ── §5 struggle markers ───────────────────────────────────────────────────────
 
-_SRC_SUPERPOSE = "allocate 2\nsuperpose q0\nmeasure all"
-_SRC_ENTANGLE = "allocate 2\nsuperpose q0\nentangle q0 q1\nmeasure all"
-_BELL_DIST = [{"bits": "00", "p": 0.5}, {"bits": "11", "p": 0.5}]
+# Two structurally different DS programs (parse-only program_signature differs).
+_SRC_NOAGG = "import pandas as pd\ndf = pd.read_csv('data/sales.csv')\nresult = {}"
+_SRC_AGG = (
+    "import pandas as pd\ndf = pd.read_csv('data/sales.csv')\n"
+    "result = df.groupby('category')['amount'].mean().to_dict()"
+)
+_GOAL_DIST = [{"bits": "00", "p": 0.5}, {"bits": "11", "p": 0.5}]
 _STUCK_DIST = [{"bits": "00", "p": 0.5}, {"bits": "10", "p": 0.5}]
 
 
@@ -343,14 +374,14 @@ class TestStruggle:
     def test_productive_span(self):
         """TVD decreasing over ≥2 attempts, eventual solve → span_class=productive."""
         runs = [
-            make_run(0, source=_SRC_SUPERPOSE, tvd=0.5),
-            make_run(2, source=_SRC_ENTANGLE, tvd=0.0, goal_met=True, dist=_BELL_DIST),
+            make_run(0, source=_SRC_NOAGG, tvd=0.5),
+            make_run(2, source=_SRC_AGG, tvd=0.0, goal_met=True, dist=_GOAL_DIST),
         ]
         turn = make_turn(1)
         events = [runs[0], turn, runs[1]]
-        m = compute_attempt_measures("p_test", "bell", events, BELL, SIM)
+        m = compute_attempt_measures("p_test", "ds-foundations", events, EX, SIM)
         assert m["solved"] is True
-        assert m["attempts_to_solve"] == 1   # 1 run before the solving run
+        assert m["attempts_to_solve"] == 1  # 1 run before the solving run
         assert m["tvd_slope"] is not None
         assert m["tvd_slope"] < 0
         assert m["span_class"] == "productive"
@@ -358,13 +389,13 @@ class TestStruggle:
     def test_unproductive_stuck_span(self):
         """≥3 attempts, no progress, repeated error signature → unproductive_stuck."""
         runs = [
-            make_run(0, source=_SRC_SUPERPOSE, tvd=0.5, dist=_STUCK_DIST),
-            make_run(2, source=_SRC_SUPERPOSE, tvd=0.5, dist=_STUCK_DIST),
-            make_run(4, source=_SRC_SUPERPOSE, tvd=0.5, dist=_STUCK_DIST),
+            make_run(0, source=_SRC_NOAGG, tvd=0.5, dist=_STUCK_DIST),
+            make_run(2, source=_SRC_NOAGG, tvd=0.5, dist=_STUCK_DIST),
+            make_run(4, source=_SRC_NOAGG, tvd=0.5, dist=_STUCK_DIST),
         ]
         turns = [make_turn(1), make_turn(3)]
         events = sorted([*runs, *turns], key=lambda e: e["ts"])
-        m = compute_attempt_measures("p_test", "bell", events, BELL, SIM)
+        m = compute_attempt_measures("p_test", "ds-foundations", events, EX, SIM)
         assert m["solved"] is False
         assert m["repeated_error_count"] >= 1
         assert m["span_class"] == "unproductive_stuck"
@@ -374,48 +405,47 @@ class TestStruggle:
         runs = [
             make_run(0, tvd=0.5),
             make_run(1, tvd=0.3),
-            make_run(2, tvd=0.0, goal_met=True, dist=_BELL_DIST),
+            make_run(2, tvd=0.0, goal_met=True, dist=_GOAL_DIST),
         ]
-        m = compute_attempt_measures("p_test", "bell", runs, BELL, SIM)
+        m = compute_attempt_measures("p_test", "ds-foundations", runs, EX, SIM)
         assert m["solved"] is True
-        assert m["attempts_to_solve"] == 2   # runs[0] and runs[1] precede the solve
+        assert m["attempts_to_solve"] == 2  # runs[0] and runs[1] precede the solve
 
 
 # ── §5 op-level revision ─────────────────────────────────────────────────────
 
+
 class TestNontrivialRevision:
     def test_op_added_is_nontrivial(self):
-        """Adding entangle to a superpose-only submission → nontrivial."""
-        assert nontrivial_revision(_SRC_SUPERPOSE, _SRC_ENTANGLE) is True
+        """Adding aggregate to a scale-only submission → nontrivial."""
+        assert nontrivial_revision(_SRC_NOAGG, _SRC_AGG) is True
 
     def test_whitespace_only_change_is_trivial(self):
         """Adding a comment or blank line with the same ops → trivial."""
-        src_with_comment = "allocate 2\n# this is a comment\nsuperpose q0\nmeasure all"
-        assert nontrivial_revision(_SRC_SUPERPOSE, src_with_comment) is False
+        src_with_comment = "import pandas as pd\n# this is a comment\ndf = pd.read_csv('data/sales.csv')\nresult = {}"
+        assert nontrivial_revision(_SRC_NOAGG, src_with_comment) is False
 
     def test_identical_submission_trivial(self):
-        assert nontrivial_revision(_SRC_SUPERPOSE, _SRC_SUPERPOSE) is False
+        assert nontrivial_revision(_SRC_NOAGG, _SRC_NOAGG) is False
 
     def test_revision_count_in_measures(self):
-        """Run sequence A → A+comment (trivial) → A+entangle (nontrivial) → count=1."""
-        src_comment = "allocate 2\n# note\nsuperpose q0\nmeasure all"
+        """Run sequence A → A+comment (trivial) → A+aggregate (nontrivial) → count=1."""
+        src_comment = "import pandas as pd\n# note\ndf = pd.read_csv('data/sales.csv')\nresult = {}"
         runs = [
-            make_run(0, source=_SRC_SUPERPOSE, tvd=0.5),
+            make_run(0, source=_SRC_NOAGG, tvd=0.5),
             make_run(1, source=src_comment, tvd=0.5),
-            make_run(2, source=_SRC_ENTANGLE, tvd=0.0, goal_met=True, dist=_BELL_DIST),
+            make_run(2, source=_SRC_AGG, tvd=0.0, goal_met=True, dist=_GOAL_DIST),
         ]
-        m = compute_attempt_measures("p_test", "bell", runs, BELL, SIM)
-        assert m["nontrivial_revision_count"] == 1   # only A+entangle step
+        m = compute_attempt_measures("p_test", "ds-foundations", runs, EX, SIM)
+        assert m["nontrivial_revision_count"] == 1  # only A+aggregate step
 
 
 # ── §5b escalation rate ───────────────────────────────────────────────────────
 
+
 class TestEscalationRate:
     def _make_turns(self, escalated_flags):
-        return [
-            make_turn(i, escalated=flag)
-            for i, flag in enumerate(escalated_flags)
-        ]
+        return [make_turn(i, escalated=flag) for i, flag in enumerate(escalated_flags)]
 
     def test_escalation_rate_per_arm(self):
         """escalation_rate = escalated / total; correctly split by stance."""
@@ -430,13 +460,13 @@ class TestEscalationRate:
 
         # peer attempt
         peer_events = [*peer_turns, run0]
-        m_peer = compute_attempt_measures("p_peer", "bell", peer_events, BELL, SIM)
+        m_peer = compute_attempt_measures("p_peer", "ds-foundations", peer_events, EX, SIM)
         assert m_peer["escalation_rate"] == 0.5
         assert m_peer["n_escalated"] == 1
 
         # oracle attempt
         oracle_events = [*oracle_turns, run0]
-        m_oracle = compute_attempt_measures("p_oracle", "bell", oracle_events, BELL, SIM)
+        m_oracle = compute_attempt_measures("p_oracle", "ds-foundations", oracle_events, EX, SIM)
         assert m_oracle["escalation_rate"] == 1.0
 
         # aggregate
@@ -453,12 +483,13 @@ class TestEscalationRate:
         turns = self._make_turns([False, False, False])
         run0 = make_run(3, tvd=0.5)
         events = [*turns, run0]
-        m = compute_attempt_measures("p_test", "bell", events, BELL, SIM)
+        m = compute_attempt_measures("p_test", "ds-foundations", events, EX, SIM)
         assert m["escalation_rate"] == 0.0
         assert m["n_escalated"] == 0
 
 
 # ── ECE + Brier sanity checks ────────────────────────────────────────────────
+
 
 class TestCalibrationStats:
     def test_perfectly_calibrated(self):
@@ -481,48 +512,18 @@ import pytest
 
 # ── fix 1: governance gate ↔ realized_handoff identity (shared leak_check) ───
 
+
 class TestGovernanceGateIdentity:
-    """Confirm governance.check and measures.realized_handoff call the same
-    function so they can never disagree on a single message."""
-
-    def test_single_line_fenced_snippet_not_extracted(self):
-        """A single-line fenced block (no newline after ```) must NOT be
-        treated as a solution snippet by either caller.
-
-        The drifted measures.py _FENCE used \\n? (optional newline), which
-        would match ```allocate 2``` as a code block.  The canonical FENCE
-        (governance / leak_check) requires \\n so it is NOT extracted.
-        This test pins that both callers agree: no false positive."""
-        from app.agent import governance
-        from app.quantum.leak_check import candidate_snippets, is_goal_meeting
-
-        inline_msg = "try this: ```allocate 2```"
-        snippets = candidate_snippets(inline_msg)
-        assert snippets == [], (
-            "inline single-line fence must not be extracted as a snippet"
-        )
-        assert is_goal_meeting(inline_msg, BELL["target"], BELL["tol"], SIM) is False
-
-    def test_proper_fenced_block_extracted(self):
-        """A properly-formatted fenced block (newline after ```) IS extracted."""
-        from app.quantum.leak_check import candidate_snippets
-
-        fenced_msg = "```\n" + _BELL_SRC + "\n```"
-        snippets = candidate_snippets(fenced_msg)
-        # Both the fence regex AND the op-line scanner fire — correct/expected.
-        assert len(snippets) >= 1
-        assert any("entangle" in s for s in snippets)
+    """Confirm governance.check and measures.realized_handoff consult the same
+    executable oracle (pack.leak_evidence) so they can never disagree."""
 
     def test_governance_and_realized_handoff_agree_on_solution(self):
-        """For a message containing the Bell solution, governance.check blocks it
-        (peer) AND realized_handoff returns True — both True from the same check."""
+        """For a message containing the DS solution, governance.check blocks it
+        (peer) AND realized_handoff returns True — both from the same oracle."""
         from app.agent import governance
 
-        msg = _ORACLE_MSG   # 4 consecutive op lines → extracted as solution
-        ctx = {
-            "_exercise_full": BELL,
-            "recent_dialogue": [],
-        }
+        msg = _ORACLE_MSG  # fenced full DS solution → executable oracle flags it
+        ctx = {"_exercise_full": EX, "recent_dialogue": []}
         plan = {"intervention": "diagnose"}
         draft = {"message": msg, "confidence": 0.9}
         gov = governance.check(ctx, plan, draft, {}, stance="peer")
@@ -530,24 +531,25 @@ class TestGovernanceGateIdentity:
         assert gov["flag"] == "withholding_solution"
 
         turn = make_turn(0, stance="oracle", final_message=msg)
-        assert realized_handoff(turn, BELL["target"], BELL["tol"], SIM) is True
+        assert realized_handoff(turn, exercise=EX, sim=SIM) is True
 
     def test_governance_and_realized_handoff_agree_on_non_solution(self):
-        """For a message without code, both report no leak."""
+        """For a message without code, both report no executable leak."""
         from app.agent import governance
 
-        msg = "Think about what links the two qubits."
-        ctx = {"_exercise_full": BELL, "recent_dialogue": []}
+        msg = "What single number should each category collapse to?"
+        ctx = {"_exercise_full": EX, "recent_dialogue": []}
         plan = {"intervention": "co_reason"}
         draft = {"message": msg, "confidence": 0.7}
         gov = governance.check(ctx, plan, draft, {}, stance="peer")
         assert gov["block"] is False
 
         turn = make_turn(0, stance="peer", final_message=msg)
-        assert realized_handoff(turn, BELL["target"], BELL["tol"], SIM) is False
+        assert realized_handoff(turn, exercise=EX, sim=SIM) is False
 
 
 # ── fix 2: compile errors scored as TVD=1.0 (not inf) ────────────────────────
+
 
 class TestCompileErrorTVD:
     """A run sequence whose first submission fails to compile must yield a
@@ -556,7 +558,7 @@ class TestCompileErrorTVD:
     def _compile_error_run(self, n: int) -> dict:
         return {
             "participant_id": "p_test",
-            "exercise_id": "bell",
+            "exercise_id": "ds-foundations",
             "event_type": "run",
             "ts": _ts(n),
             "stance": None,
@@ -570,23 +572,23 @@ class TestCompileErrorTVD:
     def test_tvd_slope_is_finite_after_compile_error(self):
         """compile_error → 1.0, then improving runs → negative finite slope."""
         runs = [
-            self._compile_error_run(0),          # tvd = 1.0 (max)
-            make_run(1, tvd=0.5),                # improving
-            make_run(2, tvd=0.0, goal_met=True, dist=_BELL_DIST),
+            self._compile_error_run(0),  # tvd = 1.0 (max)
+            make_run(1, tvd=0.5),  # improving
+            make_run(2, tvd=0.0, goal_met=True, dist=_GOAL_DIST),
         ]
-        m = compute_attempt_measures("p_test", "bell", runs, BELL, SIM)
+        m = compute_attempt_measures("p_test", "ds-foundations", runs, EX, SIM)
         assert m["tvd_slope"] is not None
-        assert m["tvd_slope"] == m["tvd_slope"]   # not nan
-        assert m["tvd_slope"] < 0                 # decreasing = productive
+        assert m["tvd_slope"] == m["tvd_slope"]  # not nan
+        assert m["tvd_slope"] < 0  # decreasing = productive
 
     def test_span_class_productive_despite_compile_error(self):
         """Compile error followed by a solve → still productive."""
         runs = [
             self._compile_error_run(0),
             make_run(1, tvd=0.5),
-            make_run(2, tvd=0.0, goal_met=True, dist=_BELL_DIST),
+            make_run(2, tvd=0.0, goal_met=True, dist=_GOAL_DIST),
         ]
-        m = compute_attempt_measures("p_test", "bell", runs, BELL, SIM)
+        m = compute_attempt_measures("p_test", "ds-foundations", runs, EX, SIM)
         assert m["span_class"] == "productive"
         assert m["solved"] is True
 
@@ -597,14 +599,15 @@ class TestCompileErrorTVD:
             self._compile_error_run(1),
             self._compile_error_run(2),
         ]
-        m = compute_attempt_measures("p_test", "bell", runs, BELL, SIM)
+        m = compute_attempt_measures("p_test", "ds-foundations", runs, EX, SIM)
         assert m["tvd_slope"] is not None
-        assert m["tvd_slope"] == m["tvd_slope"]   # not nan
+        assert m["tvd_slope"] == m["tvd_slope"]  # not nan
         assert m["tvd_slope"] == pytest.approx(0.0, abs=1e-9)
-        assert m["span_class"] == "unproductive_stuck"   # ≥3, no progress, repeated error
+        assert m["span_class"] == "unproductive_stuck"  # ≥3, no progress, repeated error
 
 
 # ── §5d worked-example verification measures ──────────────────────────────────
+
 
 def _make_we_turn(n, verified=True, retries=0, stance="peer"):
     """make_turn variant with telemetry.worked_example populated."""
@@ -625,7 +628,7 @@ class TestWorkedExampleMeasures:
         """No worked_analogy turns → count=0, rates=None."""
         run0 = make_run(0, tvd=0.5)
         t1 = make_turn(1, intervention="co_reason")
-        m = compute_attempt_measures("p_test", "bell", [run0, t1], BELL, SIM)
+        m = compute_attempt_measures("p_test", "ds-foundations", [run0, t1], EX, SIM)
         assert m["worked_example_count"] == 0
         assert m["worked_example_verified_rate"] is None
         assert m["worked_example_retry_rate"] is None
@@ -635,7 +638,7 @@ class TestWorkedExampleMeasures:
         run0 = make_run(0, tvd=0.5)
         t1 = _make_we_turn(1, verified=True, retries=0)
         t2 = _make_we_turn(2, verified=True, retries=1)
-        m = compute_attempt_measures("p_test", "bell", [run0, t1, t2], BELL, SIM)
+        m = compute_attempt_measures("p_test", "ds-foundations", [run0, t1, t2], EX, SIM)
         assert m["worked_example_count"] == 2
         assert m["worked_example_verified_rate"] == pytest.approx(1.0)
         assert m["worked_example_retry_rate"] == pytest.approx(0.5)  # mean(0,1)
@@ -645,27 +648,39 @@ class TestWorkedExampleMeasures:
         run0 = make_run(0, tvd=0.5)
         t1 = _make_we_turn(1, verified=True, retries=0)
         t2 = _make_we_turn(2, verified=False, retries=1)
-        m = compute_attempt_measures("p_test", "bell", [run0, t1, t2], BELL, SIM)
+        m = compute_attempt_measures("p_test", "ds-foundations", [run0, t1, t2], EX, SIM)
         assert m["worked_example_count"] == 2
         assert m["worked_example_verified_rate"] == pytest.approx(0.5)
 
     def test_non_we_turn_excluded(self):
         """Turns without worked_example telemetry are excluded from §5d."""
         run0 = make_run(0, tvd=0.5)
-        t1 = make_turn(1, intervention="co_reason")   # no we_tel
+        t1 = make_turn(1, intervention="co_reason")  # no we_tel
         t2 = _make_we_turn(2, verified=True, retries=0)
-        m = compute_attempt_measures("p_test", "bell", [run0, t1, t2], BELL, SIM)
+        m = compute_attempt_measures("p_test", "ds-foundations", [run0, t1, t2], EX, SIM)
         assert m["worked_example_count"] == 1
         assert m["worked_example_verified_rate"] == pytest.approx(1.0)
 
     def test_aggregate_propagates_we_rates(self):
         """aggregate_participant averages §5d rates across attempt rows."""
-        row1 = {"participant_id": "px", "stance": "peer", "n_turns": 2,
-                "worked_example_count": 1, "worked_example_verified_rate": 1.0,
-                "worked_example_retry_rate": 0.0, "n_escalated": 0}
-        row2 = {"participant_id": "px", "stance": "peer", "n_turns": 2,
-                "worked_example_count": 1, "worked_example_verified_rate": 0.0,
-                "worked_example_retry_rate": 1.0, "n_escalated": 0}
+        row1 = {
+            "participant_id": "px",
+            "stance": "peer",
+            "n_turns": 2,
+            "worked_example_count": 1,
+            "worked_example_verified_rate": 1.0,
+            "worked_example_retry_rate": 0.0,
+            "n_escalated": 0,
+        }
+        row2 = {
+            "participant_id": "px",
+            "stance": "peer",
+            "n_turns": 2,
+            "worked_example_count": 1,
+            "worked_example_verified_rate": 0.0,
+            "worked_example_retry_rate": 1.0,
+            "n_escalated": 0,
+        }
         agg = aggregate_participant("px", [row1, row2])
         assert agg["worked_example_count"] == 2
         assert agg["worked_example_verified_rate"] == pytest.approx(0.5)
@@ -673,6 +688,7 @@ class TestWorkedExampleMeasures:
 
 
 # ── §5c affect-response measures ──────────────────────────────────────────────
+
 
 def _affect_turn(n, affect, intervention="co_reason", stance="peer"):
     """make_turn variant that also writes affective_state into the plan."""
@@ -687,7 +703,7 @@ class TestAffectMeasures:
         run0 = make_run(0, tvd=0.5)
         t1 = _affect_turn(1, "curious")
         t2 = _affect_turn(2, "flow")
-        m = compute_attempt_measures("p_test", "bell", [run0, t1, t2], BELL, SIM)
+        m = compute_attempt_measures("p_test", "ds-foundations", [run0, t1, t2], EX, SIM)
         assert m["negative_affect_count"] == 0
         assert m["negative_affect_rate"] == pytest.approx(0.0)
         assert m["affect_support_rate"] is None
@@ -699,7 +715,7 @@ class TestAffectMeasures:
         t1 = _affect_turn(1, "frustration")
         t2 = _affect_turn(2, "curious")
         t3 = _affect_turn(3, "disengaged")
-        m = compute_attempt_measures("p_test", "bell", [run0, t1, t2, t3], BELL, SIM)
+        m = compute_attempt_measures("p_test", "ds-foundations", [run0, t1, t2, t3], EX, SIM)
         assert m["negative_affect_count"] == 2
         assert m["negative_affect_rate"] == pytest.approx(2 / 3)
 
@@ -708,7 +724,7 @@ class TestAffectMeasures:
         run0 = make_run(0, tvd=0.5)
         t1 = _affect_turn(1, "frustration", intervention="encourage")
         t2 = _affect_turn(2, "disengaged", intervention="encourage")
-        m = compute_attempt_measures("p_test", "bell", [run0, t1, t2], BELL, SIM)
+        m = compute_attempt_measures("p_test", "ds-foundations", [run0, t1, t2], EX, SIM)
         assert m["affect_support_count"] == 2
         assert m["affect_support_rate"] == pytest.approx(1.0)
 
@@ -717,15 +733,15 @@ class TestAffectMeasures:
         run0 = make_run(0, tvd=0.5)
         t1 = _affect_turn(1, "frustration", intervention="encourage")
         t2 = _affect_turn(2, "frustration", intervention="co_reason")  # not encourage
-        m = compute_attempt_measures("p_test", "bell", [run0, t1, t2], BELL, SIM)
+        m = compute_attempt_measures("p_test", "ds-foundations", [run0, t1, t2], EX, SIM)
         assert m["affect_support_rate"] == pytest.approx(0.5)
 
     def test_affect_recovery_rate(self):
         """frustration → curious: the next plan_turn exits NEEDS_SUPPORT → rate=1.0."""
         run0 = make_run(0, tvd=0.5)
         t1 = _affect_turn(1, "frustration")
-        t2 = _affect_turn(2, "curious")   # recovered
-        m = compute_attempt_measures("p_test", "bell", [run0, t1, t2], BELL, SIM)
+        t2 = _affect_turn(2, "curious")  # recovered
+        m = compute_attempt_measures("p_test", "ds-foundations", [run0, t1, t2], EX, SIM)
         assert m["affect_recovery_rate"] == pytest.approx(1.0)
 
     def test_affect_recovery_rate_none(self):
@@ -733,21 +749,28 @@ class TestAffectMeasures:
         run0 = make_run(0, tvd=0.5)
         t1 = _affect_turn(1, "frustration")
         t2 = _affect_turn(2, "disengaged")  # still NEEDS_SUPPORT
-        m = compute_attempt_measures("p_test", "bell", [run0, t1, t2], BELL, SIM)
+        m = compute_attempt_measures("p_test", "ds-foundations", [run0, t1, t2], EX, SIM)
         assert m["affect_recovery_rate"] == pytest.approx(0.0)
 
     def test_control_turn_excluded(self):
         """Control turns (plan=None) are excluded from §5c denominators."""
         run0 = make_run(0, tvd=0.5)
         ctrl = {
-            "participant_id": "p_test", "exercise_id": "bell",
-            "event_type": "turn", "ts": _ts(1), "stance": "control",
-            "payload": {"plan": None, "stance": "control",
-                        "final_message": "Here if needed.", "telemetry": {}},
+            "participant_id": "p_test",
+            "exercise_id": "ds-foundations",
+            "event_type": "turn",
+            "ts": _ts(1),
+            "stance": "control",
+            "payload": {
+                "plan": None,
+                "stance": "control",
+                "final_message": "Here if needed.",
+                "telemetry": {},
+            },
             "note": "",
         }
         t2 = _affect_turn(2, "frustration", intervention="encourage")
-        m = compute_attempt_measures("p_test", "bell", [run0, ctrl, t2], BELL, SIM)
+        m = compute_attempt_measures("p_test", "ds-foundations", [run0, ctrl, t2], EX, SIM)
         # ctrl has plan=None so only t2 counts as a plan_turn
         assert m["negative_affect_count"] == 1
         assert m["affect_support_count"] == 1
@@ -755,12 +778,24 @@ class TestAffectMeasures:
 
     def test_aggregate_affect_rates(self):
         """aggregate_participant averages §5c rates across rows."""
-        row1 = {"participant_id": "pa", "stance": "peer", "n_turns": 2,
-                "negative_affect_rate": 1.0, "affect_support_rate": 1.0,
-                "affect_recovery_rate": 1.0, "n_escalated": 0}
-        row2 = {"participant_id": "pa", "stance": "peer", "n_turns": 2,
-                "negative_affect_rate": 0.5, "affect_support_rate": 0.0,
-                "affect_recovery_rate": None, "n_escalated": 0}
+        row1 = {
+            "participant_id": "pa",
+            "stance": "peer",
+            "n_turns": 2,
+            "negative_affect_rate": 1.0,
+            "affect_support_rate": 1.0,
+            "affect_recovery_rate": 1.0,
+            "n_escalated": 0,
+        }
+        row2 = {
+            "participant_id": "pa",
+            "stance": "peer",
+            "n_turns": 2,
+            "negative_affect_rate": 0.5,
+            "affect_support_rate": 0.0,
+            "affect_recovery_rate": None,
+            "n_escalated": 0,
+        }
         agg = aggregate_participant("pa", [row1, row2])
         assert agg["negative_affect_rate"] == pytest.approx(0.75)
         assert agg["affect_support_rate"] == pytest.approx(0.5)
@@ -770,8 +805,10 @@ class TestAffectMeasures:
 
 # ── §5e learner-model measures ────────────────────────────────────────────────
 
-def _make_lm_turn(n, shaky_concepts=None, revisit_concept=None,
-                  intervention="co_reason", stance="peer"):
+
+def _make_lm_turn(
+    n, shaky_concepts=None, revisit_concept=None, intervention="co_reason", stance="peer"
+):
     """make_turn variant with telemetry.learner_model populated."""
     t = make_turn(n, stance=stance, intervention=intervention)
     t["payload"]["telemetry"]["learner_model"] = {
@@ -800,10 +837,15 @@ class TestLearnerModelMeasures:
     def test_shaky_resolved_rate(self):
         """One shaky concept that's grasped in end state → resolution rate=1.0."""
         run0 = make_run(0, tvd=0.5)
-        t1 = _make_lm_turn(1, shaky_concepts=["entanglement"])
+        t1 = _make_lm_turn(1, shaky_concepts=["overfitting"])
         end_concepts = {
-            "entanglement": {"state": "grasped", "evidence": 2,
-                             "last_seen": "ts", "last_review": None, "last_review_ex": None}
+            "overfitting": {
+                "state": "grasped",
+                "evidence": 2,
+                "last_seen": "ts",
+                "last_review": None,
+                "last_review_ex": None,
+            }
         }
         m = compute_learner_model_measures("p_test", [run0, t1], end_concepts)
         assert m["concepts_ever_shaky"] == 1
@@ -813,10 +855,15 @@ class TestLearnerModelMeasures:
     def test_shaky_unresolved_rate_zero(self):
         """Shaky concept still shaky at end → resolution rate=0."""
         run0 = make_run(0, tvd=0.5)
-        t1 = _make_lm_turn(1, shaky_concepts=["entanglement"])
+        t1 = _make_lm_turn(1, shaky_concepts=["overfitting"])
         end_concepts = {
-            "entanglement": {"state": "shaky", "evidence": 1,
-                             "last_seen": "ts", "last_review": None, "last_review_ex": None}
+            "overfitting": {
+                "state": "shaky",
+                "evidence": 1,
+                "last_seen": "ts",
+                "last_review": None,
+                "last_review_ex": None,
+            }
         }
         m = compute_learner_model_measures("p_test", [run0, t1], end_concepts)
         assert m["shaky_resolution_rate"] == pytest.approx(0.0)
@@ -824,8 +871,12 @@ class TestLearnerModelMeasures:
     def test_revisit_count_and_concept_tracked(self):
         """A revisit turn increments revisit_count and tracks the concept."""
         run0 = make_run(0, tvd=0.5)
-        t1 = _make_lm_turn(1, shaky_concepts=["superposition"],
-                            revisit_concept="superposition", intervention="revisit")
+        t1 = _make_lm_turn(
+            1,
+            shaky_concepts=["regularization"],
+            revisit_concept="regularization",
+            intervention="revisit",
+        )
         m = compute_learner_model_measures("p_test", [run0, t1], {})
         assert m["revisit_count"] == 1
         assert m["distinct_concepts_revisited"] == 1
@@ -834,13 +885,27 @@ class TestLearnerModelMeasures:
         """Two shaky concepts; one revisited+resolved, one not revisited+resolved.
         revisit_resolution_rate=1.0, nonrevisit_resolution_rate=1.0."""
         run0 = make_run(0, tvd=0.5)
-        t1 = _make_lm_turn(1, shaky_concepts=["superposition", "entanglement"],
-                            revisit_concept="superposition", intervention="revisit")
+        t1 = _make_lm_turn(
+            1,
+            shaky_concepts=["regularization", "overfitting"],
+            revisit_concept="regularization",
+            intervention="revisit",
+        )
         end_concepts = {
-            "superposition": {"state": "grasped", "evidence": 2,
-                               "last_seen": "ts", "last_review": None, "last_review_ex": None},
-            "entanglement": {"state": "grasped", "evidence": 2,
-                              "last_seen": "ts", "last_review": None, "last_review_ex": None},
+            "regularization": {
+                "state": "grasped",
+                "evidence": 2,
+                "last_seen": "ts",
+                "last_review": None,
+                "last_review_ex": None,
+            },
+            "overfitting": {
+                "state": "grasped",
+                "evidence": 2,
+                "last_seen": "ts",
+                "last_review": None,
+                "last_review_ex": None,
+            },
         }
         m = compute_learner_model_measures("p_test", [run0, t1], end_concepts)
         assert m["revisit_resolution_rate"] == pytest.approx(1.0)
@@ -850,13 +915,27 @@ class TestLearnerModelMeasures:
         """Revisited concept grasped; non-revisited still shaky.
         revisit_resolution_rate=1.0, nonrevisit_resolution_rate=0.0."""
         run0 = make_run(0, tvd=0.5)
-        t1 = _make_lm_turn(1, shaky_concepts=["superposition", "entanglement"],
-                            revisit_concept="superposition", intervention="revisit")
+        t1 = _make_lm_turn(
+            1,
+            shaky_concepts=["regularization", "overfitting"],
+            revisit_concept="regularization",
+            intervention="revisit",
+        )
         end_concepts = {
-            "superposition": {"state": "grasped", "evidence": 2,
-                               "last_seen": "ts", "last_review": None, "last_review_ex": None},
-            "entanglement": {"state": "shaky", "evidence": 1,
-                              "last_seen": "ts", "last_review": None, "last_review_ex": None},
+            "regularization": {
+                "state": "grasped",
+                "evidence": 2,
+                "last_seen": "ts",
+                "last_review": None,
+                "last_review_ex": None,
+            },
+            "overfitting": {
+                "state": "shaky",
+                "evidence": 1,
+                "last_seen": "ts",
+                "last_review": None,
+                "last_review_ex": None,
+            },
         }
         m = compute_learner_model_measures("p_test", [run0, t1], end_concepts)
         assert m["revisit_resolution_rate"] == pytest.approx(1.0)

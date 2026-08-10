@@ -1,0 +1,8 @@
+{
+  "id": "ds-regression",
+  "data_files": ["data/X_train.csv", "data/y_train.csv", "data/X_test.csv", "data/y_test.csv"],
+  "checks": [
+    {"type": "metric_threshold", "metric": "r2", "pred_var": "y_pred",
+     "truth_file": "data/y_test.csv", "op": ">=", "threshold": 0.8, "primary": true}
+  ]
+}

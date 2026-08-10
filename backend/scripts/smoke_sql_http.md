@@ -41,7 +41,7 @@ echo "PID = $PID"
 for i in 1 2; do
   curl -s -X POST http://localhost:8000/api/run \
     -H "Content-Type: application/json" \
-    -d "{\"participant_id\":\"$PID\",\"exercise_id\":\"bell\",\"source\":\"allocate 2\\nsuperpose q0\\nmeasure all\"}" \
+    -d "{\"participant_id\":\"$PID\",\"exercise_id\":\"ds-foundations\",\"source\":\"import pandas as pd\\ndf = pd.read_csv('data/sales.csv')\"}" \
   | python3 -c "import sys,json; r=json.load(sys.stdin); print(f'run {$i}: ok={r[\"ok\"]} tvd={r.get(\"tvd\")}')"
 done
 ```
@@ -66,7 +66,7 @@ PID_NO=$(curl -s -X POST http://localhost:8000/api/participant \
 
 curl -s -X POST http://localhost:8000/api/run \
   -H "Content-Type: application/json" \
-  -d "{\"participant_id\":\"$PID_NO\",\"exercise_id\":\"bell\",\"source\":\"allocate 1\\nmeasure all\"}" > /dev/null
+  -d "{\"participant_id\":\"$PID_NO\",\"exercise_id\":\"ds-foundations\",\"source\":\"import pandas as pd\"}" > /dev/null
 
 LINES=$(curl -s "http://localhost:8000/api/session/$PID_NO/events.jsonl" | wc -l)
 echo "Non-consenter export lines: $LINES (expected 0)"

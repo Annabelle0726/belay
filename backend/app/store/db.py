@@ -1,15 +1,21 @@
-"""SQLAlchemy engine + session. SQLite for dev; set DATABASE_URL to a Postgres
-DSN for the piloted deployment (the models are portable as-is)."""
-from __future__ import annotations
+# SPDX-License-Identifier: AGPL-3.0-only
+"""SQLAlchemy engine + session.
 
-import os
+SQLite is the zero-config durable DEFAULT (`settings.database_url`); set
+`DATABASE_URL` to a Postgres DSN to opt in to Postgres behind the same interface.
+The DSN is sourced from config (env-driven) so the store posture is explicit and
+testable; no code path requires Postgres. The models are portable as-is."""
+
+from __future__ import annotations
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from ..config import settings
 from .models import Base
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./qimvp.db")
+# Re-exported for tests/tools; the source of truth is settings.database_url.
+DATABASE_URL = settings.database_url
 
 _connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 engine = create_engine(DATABASE_URL, connect_args=_connect_args, future=True)

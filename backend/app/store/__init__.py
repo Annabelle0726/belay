@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 from .consent import ConsentRouter
 from .repository import InMemoryStore, SqlStore, Store, make_event, merge_memory
 

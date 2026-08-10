@@ -1,14 +1,16 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """Pydantic schemas for the HTTP edge. Internals use plain dicts; validation
 lives here at the boundary."""
+
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
 
 class DialogueTurn(BaseModel):
-    who: str  # "student" | "sol"
+    who: str  # "student" | the active pack's persona id (e.g. "sol"), supplied through the seam
     text: str
 
 
@@ -18,21 +20,22 @@ class RunRequest(BaseModel):
     source: str
 
 
-class DistPoint(BaseModel):
-    bits: str
-    p: float
-
-
 class RunResult(BaseModel):
+    """Pack-agnostic run-result envelope (§6 schema v6).
+
+    Top level is domain-independent so the §6 trace schema is stable across
+    packs; ``metric`` is the pack's primary scalar (e.g. the DS held-out
+    score / loss) and all other domain-specific data (e.g. checks /
+    stdout) lives in the namespaced ``pack`` envelope.
+    """
+
+    model_config = {"extra": "allow"}
+
     ok: bool
-    backend: Optional[str] = None
-    n: Optional[int] = None
-    gates: Optional[List[dict]] = None
-    dist: Optional[List[DistPoint]] = None
-    goalMet: Optional[bool] = None
-    diff: Optional[str] = None
-    tvd: Optional[float] = None
-    error: Optional[str] = None
+    goalMet: bool | None = None
+    metric: float | None = None
+    error: str | None = None
+    pack: dict | None = None  # {"id": <pack id>, ...domain-specific fields}
 
 
 class SolTurnRequest(BaseModel):
@@ -42,14 +45,16 @@ class SolTurnRequest(BaseModel):
     mode: str = Field("study", pattern="^(study|teach)$")
     stance: str = Field("peer", pattern="^(peer|oracle|control)$")
     source: str = ""
-    result: Optional[dict] = None
-    recent: List[DialogueTurn] = []
-    signals: Optional[dict] = None
+    result: dict | None = None
+    recent: list[DialogueTurn] = []
+    signals: dict | None = None
+    request: str | None = None  # e.g. "reflect" — student-initiated reflect
+    overlay: dict | None = None  # opt-in per-learner customization overlay (bounded)
 
 
 class Memory(BaseModel):
-    grasped: List[str] = []
-    shaky: List[str] = []
+    grasped: list[str] = []
+    shaky: list[str] = []
 
 
 class SolTurnResponse(BaseModel):
@@ -62,9 +67,26 @@ class SolTurnResponse(BaseModel):
     governance: str
     memory: Memory
     message: str
-    check_question: Optional[str] = None
-    worked_example: Optional[dict] = None   # telemetry only; UI may ignore
+    check_question: str | None = None
+    worked_example: dict | None = None  # telemetry only; UI may ignore
     components: dict[str, Any] = {}
+
+
+class GoalRequest(BaseModel):
+    participant_id: str
+    text: str = ""  # the student's own words; empty clears the goals
+
+
+class ReflectionRequest(BaseModel):
+    participant_id: str
+    text: str  # the student's reflection, in their own words
+
+
+class OverlayRequest(BaseModel):
+    participant_id: str
+    # bounded knobs (persona/pedagogy/accommodation); null/empty clears. Floor-checked
+    # and normalized server-side; input only, never authority over a floor.
+    overlay: dict | None = None
 
 
 class ParticipantRequest(BaseModel):
