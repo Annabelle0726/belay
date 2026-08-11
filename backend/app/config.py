@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 def _env(key: str, default: str) -> str:
     return os.environ.get(key, default)
 
@@ -153,12 +154,15 @@ class Settings:
         return self.database_url.startswith("postgres")
 
     cors_origins: list = field(
-    default_factory=lambda: [
-        o.strip() for o in _env(
-            "CORS_ORIGINS", "http://localhost:5173,http://localhost:3000,http://localhost:63342,http://127.0.0.1:63342,http://localhost:8000"
-        ).split(",") if o.strip()
-    ]
-)
+        default_factory=lambda: [
+            o.strip()
+            for o in _env(
+                "CORS_ORIGINS",
+                "http://localhost:5173,http://localhost:3000,http://localhost:63342,http://127.0.0.1:63342,http://localhost:8000",
+            ).split(",")
+            if o.strip()
+        ]
+    )
 
     # --- Distress-routing layer (Slice G) — INSTITUTION + IRB OWNED ---------
     # OFF by default: when disabled, no detection runs, no short-circuit happens, and
