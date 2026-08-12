@@ -6,10 +6,6 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
 
 def _env(key: str, default: str) -> str:
     return os.environ.get(key, default)
@@ -191,6 +187,11 @@ class Settings:
     # Optional institution-configured extra detection terms (comma-separated, IRB-owned)
     # on top of the conservative built-in vocabulary. Default empty.
     distress_signal_terms: str = field(default_factory=lambda: _env("DISTRESS_SIGNAL_TERMS", ""))
+
+    # Injection guard settings (NEW)
+    injection_guard_enabled: bool = False  # Off by default
+    injection_guard_model: str = "meta-llama/Prompt-Guard-86M"  # or "ibm/granite-guardian-2b"
+    injection_guard_endpoint: str | None = None  # Portage endpoint if using HTTP
 
     @property
     def distress_configured(self) -> bool:
