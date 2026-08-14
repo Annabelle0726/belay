@@ -1,4 +1,4 @@
-# backend/tests/test_injection_guard.py
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Tests for injection_guard.py - follows test_distress.py shape.
 """
@@ -8,6 +8,8 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock
 
+from test_distress import _payload
+
 from app.agent.injection_guard import InjectionGuard, InjectionVerdict, get_guard
 from app.agent.orchestrator import _injection_turn, run_turn
 from app.config import settings
@@ -15,27 +17,6 @@ from app.core.registry import get_active_pack
 from app.store import InMemoryStore
 
 _EX = get_active_pack().get_exercise("ds-foundations")
-
-
-def _payload(pid, student_text=None, stance="peer"):
-    """Helper to create payload for run_turn tests."""
-    recent = [{"who": "student", "text": student_text}] if student_text else []
-    return {
-        "participant_id": pid,
-        "exercise": _EX,
-        "event": "chat",
-        "mode": "study",
-        "stance": stance,
-        "source": "import pandas as pd",
-        "result": {
-            "ok": True,
-            "goalMet": False,
-            "metric": None,
-            "pack": {"id": "datascience", "summary": "0/1 checks passed"},
-        },
-        "recent": recent,
-        "signals": None,
-    }
 
 
 class _CallStub:
