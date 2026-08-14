@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import Optional
 
 from dotenv import load_dotenv
 
@@ -199,7 +198,7 @@ class Settings:
     injection_guard_model: str = field(
         default_factory=lambda: _env("INJECTION_GUARD_MODEL", "meta-llama/Prompt-Guard-86M")
     )
-    injection_guard_endpoint: Optional[str] = field(
+    injection_guard_endpoint: str | None = field(
         default_factory=lambda: _env("INJECTION_GUARD_ENDPOINT", "")
     )
 
