@@ -23,9 +23,7 @@ from app.agent.llm import LLMClient
 from app.agent.orchestrator import run_turn
 from app.core.registry import get_active_pack
 from app.store import InMemoryStore
-
-# 从 helpers 导入，而不是从 conftest
-from .helpers import _payload
+from conftest import _payload
 
 
 class Attack:

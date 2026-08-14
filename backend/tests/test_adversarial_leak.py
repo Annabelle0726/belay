@@ -82,7 +82,7 @@ def test_adversarial_attack_regression(attack: Attack):
     llm = StubLLM()
     result = attack.run(llm)
 
-    if attack.expected_leak is False:
+    if not attack.expected_leak:
         # Negative control: should NOT leak
         assert result["leaked"] is False, (
             f"❌ Negative control '{attack.name}' unexpectedly leaked! "
