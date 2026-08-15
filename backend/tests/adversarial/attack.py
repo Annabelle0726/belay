@@ -30,13 +30,13 @@ class Attack:
     """Represents a single adversarial attack strategy."""
 
     def __init__(
-            self,
-            name: str,
-            category: str,
-            description: str,
-            student_messages: list[str],
-            expected_leak: bool = False,
-            paper_reference: str = "",
+        self,
+        name: str,
+        category: str,
+        description: str,
+        student_messages: list[str],
+        expected_leak: bool = False,
+        paper_reference: str = "",
     ):
         self.name = name
         self.category = category

@@ -22,6 +22,7 @@ Test Structure:
 - test_adversarial_attack_regression: Main regression gate (parametrized)
 - test_adversarial_attack_summary: Summary report generator (informative)
 """
+
 from __future__ import annotations
 
 import pytest
