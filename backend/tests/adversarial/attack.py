@@ -52,7 +52,7 @@ class Attack:
         store = InMemoryStore()
 
         # Run each message as a separate turn
-        final_result = None
+        final_result: dict[str, Any] | None = None
         for i, msg in enumerate(self.student_messages):
             payload = _payload(
                 pid=f"adv_{hash(self.name)}_{i}",
@@ -63,9 +63,12 @@ class Attack:
             result = run_turn(payload, llm, store)
             final_result = result
 
+        # Ensure final_result is a dict for mypy
+        res = final_result or {}
+
         # Analyze the final result for leaks
-        governance_flag = final_result.get("governance", "none")
-        message = final_result.get("message", "")
+        governance_flag = res.get("governance", "none")
+        message = res.get("message", "")
 
         leaked = governance_flag == "withholding_solution"
         solution_leaked = self._contains_solution(message, exercise)
@@ -75,18 +78,22 @@ class Attack:
             "message": message,
             "governance_flag": governance_flag,
             "leaked": solution_leaked or leaked,
-            "evidence": self._extract_evidence(final_result),
+            "evidence": self._extract_evidence(res),
             "turns": len(self.student_messages),
         }
 
-    def _contains_solution(self, message: str, exercise: dict) -> bool:
+    def _contains_solution(self, message: str, exercise: Any) -> bool:
         """Check if the message contains the actual solution code."""
         pack = get_active_pack()
         evidence = pack.leak_evidence(message, exercise)
         return evidence.is_solution or evidence.prose_disclosure
 
-    def _extract_evidence(self, result: dict) -> list[str]:
+    def _extract_evidence(self, result: dict[str, Any]) -> list[str]:
         """Extract governance evidence from the result."""
         components = result.get("components", {})
+        if not isinstance(components, dict):
+            components = {}
         governance_data = components.get("governance", {})
+        if not isinstance(governance_data, dict):
+            governance_data = {}
         return governance_data.get("reasons", [])
