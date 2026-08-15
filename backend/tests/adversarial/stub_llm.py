@@ -2,6 +2,7 @@
 """
 Stub LLM for deterministic testing of the governance gate.
 """
+
 from __future__ import annotations
 
 from app.agent.llm import LLMClient
