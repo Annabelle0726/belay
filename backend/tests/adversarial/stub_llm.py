@@ -17,6 +17,8 @@ class StubLLM(LLMClient):
     that exercise the full tutor pipeline.
     """
 
+    name: str = "stub-llm"
+
     def __init__(self):
         self.calls = []  # Track which roles were called
 
