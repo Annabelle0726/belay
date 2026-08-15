@@ -46,7 +46,7 @@ from ..config import settings
 from ..core.registry import get_active_pack
 from ..store import Store, make_event
 from . import distress as distress_mod
-from . import governance, memory, planner, reasoner, self_eval
+from . import governance, groundedness, memory, planner, reasoner, self_eval
 from . import overlay as overlay_mod
 from . import telemetry as tel
 from .context import _latest_student_message, build_context
@@ -467,6 +467,31 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
     if gov["block"]:
         draft = governance.safe_rewrite(draft, gov, exercise)
 
+    # --- NEW: Groundedness check (CC-B3) ---
+    # Runs AFTER governance (so it only sees leak-gated content) and BEFORE memory.
+    # This is a SIGNAL, not a block — it never changes the response if ungrounded.
+    groundedness_data = None
+    if stance != "control":  # Control turns have no reasoner draft
+        # Get passages from context (already screened by governance.screen_passages)
+        passages = ctx.get("knowledge", [])
+        if passages:
+            # Check groundedness of the final message (after all revisions)
+            updated_message, trace_data = groundedness.check_groundedness(
+                draft["message"],
+                passages,
+                trace=True,
+            )
+            # Only update the message if citations were added
+            if updated_message != draft["message"]:
+                draft["message"] = updated_message
+            groundedness_data = trace_data
+        else:
+            groundedness_data = {
+                "passages_available": 0,
+                "check_ran": False,
+                "reason": "no passages available",
+            }
+
     # Wellbeing floor — DEFENSE-IN-DEPTH, NOT a deterministic gate (peer only).
     # Tone has no ground-truth oracle, so unlike the supreme leak gate this is a
     # cautious post-hoc heuristic with false negatives by nature. It runs AFTER the
@@ -540,6 +565,7 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
                 "blocked": gov["block"],
                 "reasons": gov["reasons"],
             },
+            "groundedness": groundedness_data,
             # Wellbeing defense-in-depth (additive §6): a post-hoc berating-softener,
             # NOT a deterministic gate. True iff an obviously berating draft was softened.
             "wellbeing_softened": wellbeing_softened,
