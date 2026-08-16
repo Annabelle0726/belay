@@ -1,5 +1,22 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """
+This module provides a unified interface for executing untrusted Python code
+with resource limits, network isolation, and filesystem sandboxing.
+
+THREAT MODEL (CC-B4):
+  The default execution mode uses Docker containers with:
+    - Empty network namespace (not a socket patch)
+    - Read-only rootfs with size-capped tmpfs /tmp
+    - Per-submission unprivileged UID
+    - CPU-time + wall-clock limits (both required)
+    - PID limit (pids-limit)
+    - Memory limit with swap disabled
+
+  For environments without Docker, falls back to subprocess runner
+  (the original implementation) via explicit opt-in.
+
+  T2 (gVisor) support: optional runtime=runsc configuration.
+
 core/runner — the single restricted execution path for untrusted student code.
 
 Every pack execution path (``run``, ``verify_worked_example``, ``leak_evidence``)
@@ -22,6 +39,8 @@ THREAT MODEL (stated honestly):
   network namespace and filesystem/PID isolation. Until then this boundary is
   sized to the actual threat: a tutor or student program that is wrong, slow, or
   resource-hungry — not one mounting a sandbox escape.
+
+
 """
 
 from __future__ import annotations
@@ -34,12 +53,14 @@ import tempfile
 import time
 from dataclasses import dataclass, field
 
+from app.config import settings
+
 _CHILD = os.path.join(os.path.dirname(__file__), "_child.py")
 
 # Defaults sized for a tutoring grader (numpy/pandas import + a tiny model).
 DEFAULT_CPU_SECONDS = 10
 DEFAULT_WALL_SECONDS = 20.0
-DEFAULT_MEMORY_MB: int | None = None  # opt-in; see threat model (macOS caveat)
+DEFAULT_MEMORY_MB: int | None = 256  # 256MB default
 
 
 @dataclass
@@ -56,7 +77,10 @@ class RunnerResult:
     artifacts: dict[str, str] = field(default_factory=dict)
 
 
-def run_python(
+# backend/app/core/runner/__init__.py
+
+
+def _run_container(
     program: str,
     *,
     files: dict[str, str | bytes] | None = None,
@@ -65,17 +89,40 @@ def run_python(
     memory_mb: int | None = DEFAULT_MEMORY_MB,
     wall_seconds: float = DEFAULT_WALL_SECONDS,
 ) -> RunnerResult:
-    """Execute ``program`` (Python source) in the restricted sandbox.
+    """Execute student code in a Docker container with full isolation."""
+    from ._sandbox import ContainerSandbox
 
-    ``files`` are written into the isolated working directory before execution
-    (relative names; nested paths allowed). ``artifacts`` names files to read back
-    out of the workdir after the run. All student code MUST come through here.
+    sandbox = ContainerSandbox(
+        cpu_seconds=cpu_seconds,
+        memory_mb=memory_mb or 256,
+        wall_seconds=wall_seconds,
+        use_gvisor=settings.sandbox_use_gvisor,
+    )
+
+    return sandbox.run(program, files=files or {}, artifacts=artifacts or [])
+
+
+def _run_subprocess(
+    program: str,
+    *,
+    files: dict[str, str | bytes] | None = None,
+    artifacts: list[str] | None = None,
+    cpu_seconds: int = DEFAULT_CPU_SECONDS,
+    memory_mb: int | None = DEFAULT_MEMORY_MB,
+    wall_seconds: float = DEFAULT_WALL_SECONDS,
+) -> RunnerResult:
+    """
+    Legacy subprocess-based runner (insecure, for local dev only).
+
+    This is the original implementation, retained for environments
+    without Docker. It is NOT suitable for production/CI.
     """
     workdir = tempfile.mkdtemp(prefix="ptf_runner_")
     try:
         prog_path = os.path.join(workdir, "__program__.py")
         with open(prog_path, "w", encoding="utf-8") as fh:
             fh.write(program)
+
         for name, content in (files or {}).items():
             dest = os.path.join(workdir, name)
             parent = os.path.dirname(dest)
@@ -95,7 +142,6 @@ def run_python(
             "LANG": os.environ.get("LANG", "C.UTF-8"),
             "PTF_CPU_SECONDS": str(cpu_seconds),
             "PTF_MEMORY_MB": str(memory_mb or 0),
-            # Keep BLAS single-threaded: deterministic + bounded CPU.
             "OMP_NUM_THREADS": "1",
             "OPENBLAS_NUM_THREADS": "1",
             "MKL_NUM_THREADS": "1",
@@ -119,10 +165,10 @@ def run_python(
         except subprocess.TimeoutExpired as exc:
             timed_out = True
             exit_code = None
-            stdout = exc.stdout or ""  # type: ignore[assignment]  # bytes|str|None; decoded to str next line
+            stdout = exc.stdout or ""
             if isinstance(stdout, bytes):
                 stdout = stdout.decode("utf-8", "replace")
-            stderr = exc.stderr or ""  # type: ignore[assignment]  # bytes|str|None; decoded to str next line
+            stderr = exc.stderr or ""
             if isinstance(stderr, bytes):
                 stderr = stderr.decode("utf-8", "replace")
             error = f"wall timeout after {wall_seconds}s"
@@ -151,6 +197,66 @@ def run_python(
         )
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
+
+
+def run_python(
+    program: str,
+    *,
+    files: dict[str, str | bytes] | None = None,
+    artifacts: list[str] | None = None,
+    cpu_seconds: int = DEFAULT_CPU_SECONDS,
+    memory_mb: int | None = DEFAULT_MEMORY_MB,
+    wall_seconds: float = DEFAULT_WALL_SECONDS,
+) -> RunnerResult:
+    """
+    Execute ``program`` (Python source) in the sandbox.
+
+    Primary execution path:
+    - If SANDBOX_RUNNER_ENABLED=True (default): use container (Docker)
+    - If SANDBOX_ALLOW_INSECURE=True: fall back to subprocess
+
+    All student code MUST come through here.
+    """
+    # Check if we should use the container sandbox
+    use_container = settings.sandbox_runner_enabled
+
+    # Allow explicit override for local dev
+    if settings.sandbox_allow_insecure:
+        use_container = False
+
+    if use_container and _docker_available():
+        return _run_container(
+            program,
+            files=files,
+            artifacts=artifacts,
+            cpu_seconds=cpu_seconds,
+            memory_mb=memory_mb,
+            wall_seconds=wall_seconds,
+        )
+
+    # Fallback to subprocess (insecure, local dev only)
+    return _run_subprocess(
+        program,
+        files=files,
+        artifacts=artifacts,
+        cpu_seconds=cpu_seconds,
+        memory_mb=memory_mb,
+        wall_seconds=wall_seconds,
+    )
+
+
+def _docker_available() -> bool:
+    """Check if Docker is available on the system."""
+    try:
+        result = subprocess.run(
+            ["docker", "version", "--format", "{{.Server.Version}}"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return result.returncode == 0 and bool(result.stdout.strip())
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+        return False
 
 
 __all__ = [

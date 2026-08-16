@@ -202,6 +202,30 @@ class Settings:
         default_factory=lambda: _env("INJECTION_GUARD_ENDPOINT", "")
     )
 
+    # --- Sandbox runner (CC-B4) ---
+    # Enable container-based sandbox (default: True)
+    sandbox_runner_enabled: bool = field(
+        default_factory=lambda: _envbool("SANDBOX_RUNNER_ENABLED", True)
+    )
+
+    # Use gVisor (runsc) for stronger isolation (default: False)
+    sandbox_use_gvisor: bool = field(default_factory=lambda: _envbool("SANDBOX_USE_GVISOR", False))
+    # Allow insecure subprocess runner (opt-in, for local dev only)
+    sandbox_allow_insecure: bool = field(
+        default_factory=lambda: _envbool("SANDBOX_ALLOW_INSECURE", False)
+    )
+
+    # Memory limit in MB for sandbox (default: 256)
+    sandbox_memory_mb: int = field(default_factory=lambda: int(_env("SANDBOX_MEMORY_MB", "256")))
+
+    # CPU limit in seconds (default: 10)
+    sandbox_cpu_seconds: int = field(default_factory=lambda: int(_env("SANDBOX_CPU_SECONDS", "10")))
+
+    # Wall clock timeout in seconds (default: 20)
+    sandbox_wall_seconds: float = field(
+        default_factory=lambda: float(_env("SANDBOX_WALL_SECONDS", "20.0"))
+    )
+
     @property
     def distress_configured(self) -> bool:
         """True once BOTH FILL-IN defaults are replaced with real institution values.
