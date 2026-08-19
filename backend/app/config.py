@@ -6,10 +6,6 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
 
 def _env(key: str, default: str) -> str:
     return os.environ.get(key, default)
@@ -153,12 +149,14 @@ class Settings:
     def store_is_postgres(self) -> bool:
         return self.database_url.startswith("postgres")
 
+    # Default local dev origins + 'null' to support file:// protocol when opening dev-client.html directly.
+    # Automatically trims leading/trailing whitespace from comma-separated CORS_ORIGINS entries to prevent Starlette 400s.
     cors_origins: list = field(
         default_factory=lambda: [
             o.strip()
             for o in _env(
                 "CORS_ORIGINS",
-                "http://localhost:5173,http://localhost:3000,http://localhost:63342,http://127.0.0.1:63342,http://localhost:8000",
+                "http://localhost:5173,http://localhost:3000,http://localhost:6334git push -u origin fix-cors-stripgit push -u origin fix-cors-strip2,http://127.0.0.1:63342,http://localhost:8000",
             ).split(",")
             if o.strip()
         ]
