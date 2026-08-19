@@ -103,11 +103,11 @@ def test_pipeline_is_pack_scoped():
             "source": "s",
             "license": "MIT",
             "attribution": "a",
-            "passages": [{"id": "q1", "text": "a qubit is a two-level quantum system"}],
+            "passages": [{"id": "b1", "text": "a cell is the basic unit of life"}],
         }
     ]
-    recs = ingest("quantum", src)
-    assert recs and all(r["pack"] == "quantum" for r in recs)  # same tool, different pack
+    recs = ingest("biology", src)
+    assert recs and all(r["pack"] == "biology" for r in recs)  # same tool, different pack
 
 
 # ── 4. retrieval relevance + determinism over the corpus-backed KB ────────────
