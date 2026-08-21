@@ -44,3 +44,6 @@ build/
 .claude/*
 !.claude/commands/
 _git_locks_to_delete/
+
+
+girlfriend.json
