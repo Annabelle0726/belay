@@ -64,7 +64,8 @@ try:
         conn.execute(text("SELECT 1"))
         if IS_PG:
             ver = conn.execute(text("SELECT version()")).scalar()
-            step("Postgres reachable", True, ver[:60])
+            ver_str = str(ver) if ver is not None else ""
+            step("Postgres reachable", True, ver_str[:60])
         else:
             step("SQLite reachable", True, DATABASE_URL[:60])
 except Exception as e:

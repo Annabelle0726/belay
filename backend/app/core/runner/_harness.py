@@ -24,7 +24,7 @@ _GRADE_PREFIX = "__GRADE__"
 # ── Harness entry point ──────────────────────────────────────────────────────
 
 
-def run_harness(spec_path: str, student_path: str) -> dict:
+def run_harness(spec_path: str, student_path: str) -> dict[str, Any]:
     """
     Run the grading harness against student code.
 
@@ -35,7 +35,7 @@ def run_harness(spec_path: str, student_path: str) -> dict:
     Returns:
         Grading result dict with keys: ok, goalMet, metric, error, checks, stdout
     """
-    results = {
+    results: dict[str, Any] = {
         "ok": False,
         "goalMet": False,
         "metric": None,
@@ -55,11 +55,11 @@ def run_harness(spec_path: str, student_path: str) -> dict:
 
         spec_name = "student_module"
         spec_loader = importlib.util.spec_from_file_location(spec_name, student_path)
-        if spec_loader is None:
+        if spec_loader is None or spec_loader.loader is None:
             raise ImportError(f"Could not load student code from {student_path}")
 
         student_module = importlib.util.module_from_spec(spec_loader)
-        spec_loader.exec_module(student_module)
+        spec_loader.loader.exec_module(student_module)
 
         # 3. Run checks from the spec
         checks = spec.get("checks", [])
@@ -162,7 +162,7 @@ def _check_var_numeric(check: dict, student_module: Any) -> dict:
     tol = check.get("tol", 1e-6)
 
     try:
-        actual = getattr(student_module, var, None)
+        actual = getattr(student_module, var, None) if var is not None else None
         if actual is None:
             return {
                 "ok": False,
@@ -218,7 +218,7 @@ def _check_function_contract(check: dict, student_module: Any) -> dict:
     cases = check.get("cases", [])
     tol = check.get("tol", 1e-6)
 
-    func = getattr(student_module, func_name, None)
+    func = getattr(student_module, func_name, None) if func_name is not None else None
     if func is None:
         return {
             "ok": False,
@@ -280,7 +280,7 @@ def _check_var_threshold(check: dict, student_module: Any) -> dict:
     threshold = check.get("threshold")
 
     try:
-        actual = getattr(student_module, var, None)
+        actual = getattr(student_module, var, None) if var is not None else None
         if actual is None:
             return {
                 "ok": False,
