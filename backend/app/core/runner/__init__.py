@@ -39,21 +39,19 @@ THREAT MODEL (stated honestly):
   network namespace and filesystem/PID isolation. Until then this boundary is
   sized to the actual threat: a tutor or student program that is wrong, slow, or
   resource-hungry — not one mounting a sandbox escape.
-
-
 """
 
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 import sys
-import tempfile
 import time
 from dataclasses import dataclass, field
 
 from app.config import settings
+
+from ._utils import cleanup_workdir, collect_artifacts, prepare_workdir
 
 _CHILD = os.path.join(os.path.dirname(__file__), "_child.py")
 
@@ -75,9 +73,6 @@ class RunnerResult:
     wall_ms: float
     error: str | None  # runner-level error (timeout / spawn failure)
     artifacts: dict[str, str] = field(default_factory=dict)
-
-
-# backend/app/core/runner/__init__.py
 
 
 def _run_container(
@@ -117,24 +112,9 @@ def _run_subprocess(
     This is the original implementation, retained for environments
     without Docker. It is NOT suitable for production/CI.
     """
-    workdir = tempfile.mkdtemp(prefix="ptf_runner_")
+    workdir, prog_path = prepare_workdir(program, files, prefix="ptf_runner_")
+
     try:
-        prog_path = os.path.join(workdir, "__program__.py")
-        with open(prog_path, "w", encoding="utf-8") as fh:
-            fh.write(program)
-
-        for name, content in (files or {}).items():
-            dest = os.path.join(workdir, name)
-            parent = os.path.dirname(dest)
-            if parent:
-                os.makedirs(parent, exist_ok=True)
-            if isinstance(content, bytes):
-                with open(dest, "wb") as fh:
-                    fh.write(content)
-            else:
-                with open(dest, "w", encoding="utf-8") as fh:
-                    fh.write(content)
-
         env = {
             "PATH": os.environ.get("PATH", ""),
             "HOME": workdir,
@@ -150,6 +130,7 @@ def _run_subprocess(
         t0 = time.perf_counter()
         timed_out = False
         error: str | None = None
+
         try:
             proc = subprocess.run(
                 [sys.executable, "-I", _CHILD, prog_path],
@@ -172,17 +153,10 @@ def _run_subprocess(
             if isinstance(stderr, bytes):
                 stderr = stderr.decode("utf-8", "replace")
             error = f"wall timeout after {wall_seconds}s"
+
         wall_ms = round((time.perf_counter() - t0) * 1000, 1)
 
-        collected: dict[str, str] = {}
-        for name in artifacts or []:
-            path = os.path.join(workdir, name)
-            if os.path.exists(path):
-                try:
-                    with open(path, encoding="utf-8", errors="replace") as fh:
-                        collected[name] = fh.read()
-                except OSError:
-                    pass
+        collected = collect_artifacts(workdir, artifacts or [])
 
         ok = (not timed_out) and exit_code == 0
         return RunnerResult(
@@ -196,7 +170,7 @@ def _run_subprocess(
             artifacts=collected,
         )
     finally:
-        shutil.rmtree(workdir, ignore_errors=True)
+        cleanup_workdir(workdir)
 
 
 def run_python(
