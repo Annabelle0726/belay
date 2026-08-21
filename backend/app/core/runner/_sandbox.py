@@ -33,16 +33,17 @@ class ContainerSandbox:
     ) -> RunnerResult:
         """Execute the program in a container and return RunnerResult."""
 
-        workdir, prog_path = prepare_workdir(program, files, prefix="ptf_container_")
+        workdir, _prog_path = prepare_workdir(program, files, prefix="ptf_container_")
 
         try:
-            # Build Docker command
             cmd = self._build_docker_command(workdir)
 
             t0 = time.perf_counter()
             timed_out = False
-            error = None
-            exit_code = None
+            error: str | None = None
+            stdout: str = ""
+            stderr: str = ""
+            exit_code: int | None = None
 
             try:
                 result = subprocess.run(
@@ -51,13 +52,16 @@ class ContainerSandbox:
                     text=True,
                     timeout=self.wall_seconds,
                 )
-                stdout = result.stdout
-                stderr = result.stderr
+                stdout = result.stdout or ""
+                stderr = result.stderr or ""
                 exit_code = result.returncode
             except subprocess.TimeoutExpired as exc:
                 timed_out = True
-                stdout = exc.stdout or ""
-                stderr = exc.stderr or ""
+                out = exc.stdout
+                stdout = out.decode("utf-8") if isinstance(out, bytes) else (out or "")
+
+                err = exc.stderr
+                stderr = err.decode("utf-8") if isinstance(err, bytes) else (err or "")
                 error = f"container timeout after {self.wall_seconds}s"
                 subprocess.run(["docker", "rm", "-f", "ptf-sandbox"], capture_output=True)
 
@@ -70,8 +74,8 @@ class ContainerSandbox:
             return RunnerResult(
                 ok=ok,
                 exit_code=exit_code,
-                stdout=stdout or "",
-                stderr=stderr or "",
+                stdout=stdout,
+                stderr=stderr,
                 timed_out=timed_out,
                 wall_ms=wall_ms,
                 error=error,

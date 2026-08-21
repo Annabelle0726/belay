@@ -106,12 +106,7 @@ def _run_subprocess(
     memory_mb: int | None = DEFAULT_MEMORY_MB,
     wall_seconds: float = DEFAULT_WALL_SECONDS,
 ) -> RunnerResult:
-    """
-    Legacy subprocess-based runner (insecure, for local dev only).
-
-    This is the original implementation, retained for environments
-    without Docker. It is NOT suitable for production/CI.
-    """
+    """Legacy subprocess-based runner (insecure, for local dev only)."""
     workdir, prog_path = prepare_workdir(program, files, prefix="ptf_runner_")
 
     try:
@@ -130,6 +125,8 @@ def _run_subprocess(
         t0 = time.perf_counter()
         timed_out = False
         error: str | None = None
+        stdout: str = ""
+        stderr: str = ""
 
         try:
             proc = subprocess.run(
@@ -142,16 +139,16 @@ def _run_subprocess(
                 start_new_session=True,
             )
             exit_code: int | None = proc.returncode
-            stdout, stderr = proc.stdout, proc.stderr
+            stdout = proc.stdout or ""
+            stderr = proc.stderr or ""
         except subprocess.TimeoutExpired as exc:
             timed_out = True
             exit_code = None
-            stdout = exc.stdout or ""
-            if isinstance(stdout, bytes):
-                stdout = stdout.decode("utf-8", "replace")
-            stderr = exc.stderr or ""
-            if isinstance(stderr, bytes):
-                stderr = stderr.decode("utf-8", "replace")
+            out = exc.stdout
+            stdout = out.decode("utf-8") if isinstance(out, bytes) else (out or "")
+
+            err = exc.stderr
+            stderr = err.decode("utf-8") if isinstance(err, bytes) else (err or "")
             error = f"wall timeout after {wall_seconds}s"
 
         wall_ms = round((time.perf_counter() - t0) * 1000, 1)
@@ -162,8 +159,8 @@ def _run_subprocess(
         return RunnerResult(
             ok=ok,
             exit_code=exit_code,
-            stdout=stdout or "",
-            stderr=stderr or "",
+            stdout=stdout,
+            stderr=stderr,
             timed_out=timed_out,
             wall_ms=wall_ms,
             error=error,
