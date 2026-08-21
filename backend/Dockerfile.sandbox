@@ -5,6 +5,8 @@ RUN pip install --no-cache-dir \
     pandas==2.2.3 \
     scipy==1.14.1
 
+RUN mkdir -p /workspace && chmod 777 /workspace
+
 RUN useradd --create-home --shell /usr/sbin/nologin sandbox
 USER sandbox
 WORKDIR /workspace
