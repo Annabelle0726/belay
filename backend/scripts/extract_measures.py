@@ -93,7 +93,6 @@ def main(argv=None) -> None:
     attempt_rows: list[dict] = []
     calib_pairs: list[dict] = []
 
-
     for (pid, eid), grp in sorted(groups.items()):
         try:
             ex_meta = pack.get_exercise(eid)
