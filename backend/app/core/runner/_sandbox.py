@@ -1,19 +1,16 @@
-# backend/app/core/runner/_sandbox.py
-
 # SPDX-License-Identifier: AGPL-3.0-only
+
 """
 Container-based sandbox for untrusted student code (CC-B4).
 """
 
 from __future__ import annotations
 
-import os
 import subprocess
-import tempfile
 import time
-import uuid
 
 from . import RunnerResult
+from ._utils import cleanup_workdir, collect_artifacts, prepare_workdir
 
 
 class ContainerSandbox:
@@ -32,43 +29,19 @@ class ContainerSandbox:
         self.use_gvisor = use_gvisor
 
     def run(
-        self,
-        program: str,
-        files: dict[str, str | bytes],
-        artifacts: list[str],
+        self, program: str, files: dict[str, str | bytes], artifacts: list[str]
     ) -> RunnerResult:
         """Execute the program in a container and return RunnerResult."""
-        workdir = tempfile.mkdtemp(prefix="ptf_container_")
-        container_name = f"ptf-sandbox-{uuid.uuid4().hex[:8]}"
+
+        workdir, prog_path = prepare_workdir(program, files, prefix="ptf_container_")
 
         try:
-            # Write program file
-            prog_path = os.path.join(workdir, "__program__.py")
-            with open(prog_path, "w", encoding="utf-8") as fh:
-                fh.write(program)
-
-            # Write additional files
-            for name, content in files.items():
-                dest = os.path.join(workdir, name)
-                parent = os.path.dirname(dest)
-                if parent:
-                    os.makedirs(parent, exist_ok=True)
-                if isinstance(content, bytes):
-                    with open(dest, "wb") as fh:
-                        fh.write(content)
-                else:
-                    with open(dest, "w", encoding="utf-8") as fh:
-                        fh.write(content)
-
             # Build Docker command
-            cmd = self._build_docker_command(workdir, container_name)
+            cmd = self._build_docker_command(workdir)
 
-            # Run container
             t0 = time.perf_counter()
             timed_out = False
             error = None
-            stdout = ""
-            stderr = ""
             exit_code = None
 
             try:
@@ -76,7 +49,7 @@ class ContainerSandbox:
                     cmd,
                     capture_output=True,
                     text=True,
-                    timeout=self.wall_seconds + 10,  # Give extra time for pip install
+                    timeout=self.wall_seconds,
                 )
                 stdout = result.stdout
                 stderr = result.stderr
@@ -86,22 +59,11 @@ class ContainerSandbox:
                 stdout = exc.stdout or ""
                 stderr = exc.stderr or ""
                 error = f"container timeout after {self.wall_seconds}s"
-                # Kill the container if it's still running
-                subprocess.run(["docker", "kill", container_name], capture_output=True)
-                subprocess.run(["docker", "rm", container_name], capture_output=True)
+                subprocess.run(["docker", "rm", "-f", "ptf-sandbox"], capture_output=True)
 
             wall_ms = round((time.perf_counter() - t0) * 1000, 1)
 
-            # Collect artifacts from host workdir (mounted volume)
-            collected = {}
-            for name in artifacts:
-                path = os.path.join(workdir, name)
-                if os.path.exists(path):
-                    try:
-                        with open(path, encoding="utf-8", errors="replace") as fh:
-                            collected[name] = fh.read()
-                    except OSError:
-                        pass
+            collected = collect_artifacts(workdir, artifacts)
 
             ok = (not timed_out) and exit_code == 0
 
@@ -117,13 +79,7 @@ class ContainerSandbox:
             )
 
         finally:
-            # Clean up container and workdir
-            subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
-            import shutil
-
-            shutil.rmtree(workdir, ignore_errors=True)
-
-    # backend/app/core/runner/_sandbox.py
+            cleanup_workdir(workdir)
 
     def _build_docker_command(self, workdir: str) -> list[str]:
         """Build the Docker run command with sandbox flags."""
@@ -149,8 +105,6 @@ class ContainerSandbox:
             "none",
             "--tmpfs",
             "/tmp:rw,size=64m",
-            "--tmpfs",
-            "/workspace:rw,size=64m",  # 可写的工作目录
             "--user",
             "sandbox",
             "-v",
