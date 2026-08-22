@@ -11,7 +11,7 @@ import subprocess
 import time
 
 from . import RunnerResult
-from ._utils import cleanup_workdir, collect_artifacts, prepare_workdir
+from ._utils import cleanup_workdir, collect_artifacts, prepare_workdir, safe_decode
 
 
 class ContainerSandbox:
@@ -51,6 +51,7 @@ class ContainerSandbox:
                     cmd,
                     capture_output=True,
                     text=True,
+                    errors="replace",
                     timeout=self.wall_seconds,
                 )
                 stdout = result.stdout or ""
@@ -58,13 +59,10 @@ class ContainerSandbox:
                 exit_code = result.returncode
             except subprocess.TimeoutExpired as exc:
                 timed_out = True
-                out = exc.stdout
-                stdout = out.decode("utf-8") if isinstance(out, bytes) else (out or "")
-                err = exc.stderr
-                stderr = err.decode("utf-8") if isinstance(err, bytes) else (err or "")
+                stdout = safe_decode(exc.stdout)
+                stderr = safe_decode(exc.stderr)
                 error = f"container timeout after {self.wall_seconds}s"
                 subprocess.run(["docker", "rm", "-f", "ptf-sandbox"], capture_output=True)
-
             wall_ms = round((time.perf_counter() - t0) * 1000, 1)
 
             collected = collect_artifacts(workdir, artifacts)

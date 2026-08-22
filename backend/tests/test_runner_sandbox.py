@@ -168,18 +168,30 @@ except Exception as e:
 
 @pytest.mark.skipif(not settings.sandbox_runner_enabled, reason="Container runner not enabled")
 def test_subprocess_spawn_blocked():
-    """subprocess should work but be contained within the container."""
+    """
+    Test that subprocess works but is contained within the container.
+
+    Uses artifacts (file output) instead of stdout, which is more reliable
+    in container environments.
+    """
     prog = """
 import subprocess
+
 try:
-    result = subprocess.run(["echo", "hello"], capture_output=True)
-    print(f"SUBPROCESS_OK: {result.stdout}")
+    result = subprocess.run(["echo", "hello"], capture_output=True, text=True)
+    with open("result.txt", "w") as f:
+        f.write(f"SUBPROCESS_OK: {result.stdout}")
 except Exception as e:
-    print(f"BLOCKED: {e}")
+    with open("result.txt", "w") as f:
+        f.write(f"BLOCKED: {e}")
 """
-    r = run_python(prog)
-    assert r.ok
-    assert "SUBPROCESS_OK" in r.stdout or "BLOCKED" in r.stdout
+    r = run_python(prog, artifacts=["result.txt"])
+    assert r.ok, f"Process failed: {r.stderr}"
+
+    # 从 artifacts 读取输出
+    output = r.artifacts.get("result.txt", "")
+    assert output, f"Expected output in artifacts, got empty (stdout: {r.stdout!r})"
+    assert "SUBPROCESS_OK" in output or "BLOCKED" in output, f"Unexpected output: {output}"
 
 
 @pytest.mark.skipif(not settings.sandbox_runner_enabled, reason="Container runner not enabled")

@@ -4,6 +4,13 @@ import os
 import tempfile
 
 
+def safe_decode(data: bytes | str | None) -> str:
+    """Safely decode subprocess output to string, replacing invalid characters."""
+    if isinstance(data, bytes):
+        return data.decode("utf-8", errors="replace")
+    return data or ""
+
+
 def prepare_workdir(
     program: str,
     files: dict[str, str | bytes] | None = None,
