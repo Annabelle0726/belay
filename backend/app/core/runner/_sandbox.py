@@ -130,4 +130,4 @@ class ContainerSandbox:
             ]
         )
 
-        return cmd
+        return cmd  # noqa: F821
