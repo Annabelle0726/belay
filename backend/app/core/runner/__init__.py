@@ -51,7 +51,7 @@ from dataclasses import dataclass, field
 
 from app.config import settings
 
-from ._utils import cleanup_workdir, collect_artifacts, prepare_workdir
+from ._utils import cleanup_workdir, collect_artifacts, prepare_workdir, safe_decode
 
 _CHILD = os.path.join(os.path.dirname(__file__), "_child.py")
 
@@ -135,6 +135,7 @@ def _run_subprocess(
                 env=env,
                 capture_output=True,
                 text=True,
+                errors="replace",  # 防止非 UTF-8 字符导致读取线程崩溃
                 timeout=wall_seconds,
                 start_new_session=True,
             )
@@ -144,13 +145,9 @@ def _run_subprocess(
         except subprocess.TimeoutExpired as exc:
             timed_out = True
             exit_code = None
-            out = exc.stdout
-            stdout = out.decode("utf-8") if isinstance(out, bytes) else (out or "")
-
-            err = exc.stderr
-            stderr = err.decode("utf-8") if isinstance(err, bytes) else (err or "")
+            stdout = safe_decode(exc.stdout)
+            stderr = safe_decode(exc.stderr)
             error = f"wall timeout after {wall_seconds}s"
-
         wall_ms = round((time.perf_counter() - t0) * 1000, 1)
 
         collected = collect_artifacts(workdir, artifacts or [])
