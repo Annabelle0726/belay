@@ -6,6 +6,7 @@ Container-based sandbox for untrusted student code (CC-B4).
 
 from __future__ import annotations
 
+import os
 import subprocess
 import time
 
@@ -59,7 +60,6 @@ class ContainerSandbox:
                 timed_out = True
                 out = exc.stdout
                 stdout = out.decode("utf-8") if isinstance(out, bytes) else (out or "")
-
                 err = exc.stderr
                 stderr = err.decode("utf-8") if isinstance(err, bytes) else (err or "")
                 error = f"container timeout after {self.wall_seconds}s"
@@ -89,6 +89,9 @@ class ContainerSandbox:
         """Build the Docker run command with sandbox flags."""
         image = "belay-sandbox:0.1.0"
 
+        uid = os.getuid() if hasattr(os, "getuid") else 1000
+        gid = os.getgid() if hasattr(os, "getgid") else 1000
+
         cmd = [
             "docker",
             "run",
@@ -110,7 +113,7 @@ class ContainerSandbox:
             "--tmpfs",
             "/tmp:rw,size=64m",
             "--user",
-            "sandbox",
+            f"{uid}:{gid}",
             "-v",
             f"{workdir}:/workspace:rw",
             "-w",
