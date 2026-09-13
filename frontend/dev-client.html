@@ -1,328 +1,380 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Sol — backend dev client</title>
-<style>
-  /* ---- design tokens ---- */
-  :root {
-    --radius-card: 12px;
-    --radius-control: 8px;
-    --radius-pill: 999px;
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sol — backend dev client</title>
+  <!-- 引入 marked.js 用于渲染 Sol 的 Markdown 响应 -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
-    --pad-card: clamp(16px, 1.5vw + 8px, 24px);
-    --pad-page: clamp(16px, 2vw + 8px, 32px);
-    --gap: clamp(12px, 1vw + 6px, 20px);
-    --pad-control: .6rem .8rem;
-    --pad-pill: .2rem .6rem;
+  <style>
+    /* ---- design tokens ---- */
+    :root {
+      --radius-card: 12px;
+      --radius-control: 8px;
+      --radius-pill: 999px;
 
-    --font-body: clamp(.85rem, .35vw + .75rem, .95rem);
-    --font-code: clamp(.8rem, .3vw + .7rem, .9rem);
+      --pad-card: clamp(16px, 1.5vw + 8px, 24px);
+      --pad-page: clamp(16px, 2vw + 8px, 32px);
+      --gap: clamp(12px, 1vw + 6px, 20px);
+      --pad-control: .6rem .8rem;
+      --pad-pill: .2rem .6rem;
 
-    --right-col: clamp(21rem, 28vw, 32rem);
-    --editor-h: clamp(16rem, 35vh, 32rem);
-    --bar-h: .5rem;
-  }
+      --font-body: clamp(.85rem, .35vw + .75rem, .95rem);
+      --font-code: clamp(.8rem, .3vw + .7rem, .9rem);
 
-  /* ---- dark palette (default) ---- */
-  :root, :root[data-theme="dark"] {
-    color-scheme: dark;
-    --bg: #0b0d11;
-    --surface: #141820;
-    --surface-2: #1c222e;
-    --field-bg: #0b0d11;
-    --code-bg: #06080a;
+      /* 放宽右侧响应区域，提升阅读体验 */
+      --right-col: clamp(26rem, 38vw, 42rem);
+      --editor-h: clamp(16rem, 35vh, 32rem);
+      --bar-h: .5rem;
+    }
 
-    --text: #e2e6f0;
-    --muted: #838da3;
-    --code-text: #c0f3d9;
+    /* ---- dark palette (default) ---- */
+    :root, :root[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0b0d11;
+      --surface: #141820;
+      --surface-2: #1c222e;
+      --field-bg: #0b0d11;
+      --code-bg: #06080a;
 
-    --border: #262e3d;
-    --border-strong: #333d52;
-    --accent: #456cff;
-    --accent-hover: #5a7dff;
-    --accent-soft: #456cff1a;
-    --warn: #e7a93e;
-    --warn-soft: #e7a93e15;
-    --warn-text: #f0bd66;
+      --text: #e2e6f0;
+      --muted: #838da3;
+      --code-text: #c0f3d9;
 
-    --accent-teal: #49ccba;
-    --bar-track: #1c222e;
-    --on-accent: #ffffff;
-    --shadow: 0 4px 20px rgba(0, 0, 0, .25);
-  }
+      --border: #262e3d;
+      --border-strong: #333d52;
+      --accent: #456cff;
+      --accent-hover: #5a7dff;
+      --accent-soft: #456cff1a;
+      --warn: #e7a93e;
+      --warn-soft: #e7a93e15;
+      --warn-text: #f0bd66;
 
-  /* ---- light palette ---- */
-  :root[data-theme="light"] {
-    color-scheme: light;
-    --bg: #f4f6fa;
-    --surface: #ffffff;
-    --surface-2: #edf0f5;
-    --field-bg: #ffffff;
-    --code-bg: #f8fafc;
+      /* 用于 Markdown 加粗高亮的颜色（深色模式用亮红色） */
+      --highlight-red: #f87171;
 
-    --text: #1a202c;
-    --muted: #64748b;
-    --code-text: #0f2940;
+      --accent-teal: #49ccba;
+      --bar-track: #1c222e;
+      --on-accent: #ffffff;
+      --shadow: 0 4px 20px rgba(0, 0, 0, .25);
+    }
 
-    --border: #d2dce6;
-    --border-strong: #cbd5e1;
-    --accent: #2f4fe0;
-    --accent-hover: #2640b3;
-    --accent-soft: #2f4fe015;
-    --warn: #d97706;
-    --warn-soft: #fef3c7;
-    --warn-text: #b45309;
+    /* ---- light palette ---- */
+    :root[data-theme="light"] {
+      color-scheme: light;
+      --bg: #f4f6fa;
+      --surface: #ffffff;
+      --surface-2: #edf0f5;
+      --field-bg: #ffffff;
+      --code-bg: #f8fafc;
 
-    --accent-teal: #0d9488;
-    --bar-track: #e2e8f0;
-    --on-accent: #ffffff;
-    --shadow: 0 4px 15px rgba(20, 26, 36, .06);
-  }
+      --text: #1a202c;
+      --muted: #64748b;
+      --code-text: #0f2940;
 
-  * { box-sizing: border-box; }
+      --border: #d2dce6;
+      --border-strong: #cbd5e1;
+      --accent: #2f4fe0;
+      --accent-hover: #2640b3;
+      --accent-soft: #2f4fe015;
+      --warn: #d97706;
+      --warn-soft: #fef3c7;
+      --warn-text: #b45309;
 
-  body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--text);
-    font: var(--font-body)/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif;
-    overflow-x: hidden;
-  }
+      /* 用于 Markdown 加粗高亮的颜色（浅色模式用深红色） */
+      --highlight-red: #dc2626;
 
-  /* ---- Elegant Scrollbar for webkit ---- */
-  ::-webkit-scrollbar { width: 8px; height: 8px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
-  ::-webkit-scrollbar-thumb:hover { background-color: var(--muted); }
+      --accent-teal: #0d9488;
+      --bar-track: #e2e8f0;
+      --on-accent: #ffffff;
+      --shadow: 0 4px 15px rgba(20, 26, 36, .06);
+    }
 
-  /* ---- Header Refactored ---- */
-  .app-header {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    align-items: center;
-    gap: var(--gap);
-    padding: calc(var(--pad-page) * 0.7) var(--pad-page);
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-  }
+    * { box-sizing: border-box; }
 
-  .header-left {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 12px;
-  }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: var(--font-body)/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif;
+      overflow-x: hidden;
+    }
 
-  .brand { font-family: Fraunces, Georgia, serif; font-size: 1.2em; font-weight: 600; }
-  .slash { color: var(--border-strong); font-weight: 300; }
-  .course-tag {
-    background: var(--accent-soft);
-    color: var(--accent);
-    padding: 0.2rem 0.6rem;
-    border-radius: 6px;
-    font-size: 0.85em;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-  }
+    /* ---- Elegant Scrollbar for webkit ---- */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
+    ::-webkit-scrollbar-thumb:hover { background-color: var(--muted); }
 
-  .badge {
-    padding: 0.25rem 0.7rem;
-    background: var(--warn-soft);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-pill);
-    color: var(--warn-text);
-    font-size: .75em;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .badge::before { content: ""; display: block; width: 6px; height: 6px; background: var(--warn); border-radius: 50%; }
+    /* ---- Header Refactored ---- */
+    .app-header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: var(--gap);
+      padding: calc(var(--pad-page) * 0.7) var(--pad-page);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
 
-  .header-right {
-    display: flex;
-    align-items: center;
-    gap: var(--gap);
-    margin-left: auto;
-  }
+    .header-left {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
 
-  /* ---- theme switch ---- */
-  .segmented {
-    display: flex;
-    gap: .15rem;
-    padding: .2rem;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-pill);
-  }
-  .segmented button {
-    border: 0;
-    background: transparent;
-    color: var(--muted);
-    padding: .25rem .75rem;
-    border-radius: var(--radius-pill);
-    font: inherit;
-    font-size: 0.85em;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  .segmented button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+    .brand { font-family: Fraunces, Georgia, serif; font-size: 1.2em; font-weight: 600; }
+    .slash { color: var(--border-strong); font-weight: 300; }
+    .course-tag {
+      background: var(--accent-soft);
+      color: var(--accent);
+      padding: 0.2rem 0.6rem;
+      border-radius: 6px;
+      font-size: 0.85em;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
 
-  /* ---- Two-column layout ---- */
-  main {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, var(--right-col));
-    align-items: start;
-    gap: calc(var(--gap) * 1.5);
-    padding: var(--pad-page);
-    max-width: 1500px;
-    margin: 0 auto;
-  }
+    .badge {
+      padding: 0.25rem 0.7rem;
+      background: var(--warn-soft);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-pill);
+      color: var(--warn-text);
+      font-size: .75em;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .badge::before { content: ""; display: block; width: 6px; height: 6px; background: var(--warn); border-radius: 50%; }
 
-  .col-left {
-    display: flex;
-    flex-direction: column;
-    gap: calc(var(--gap) * 1.5);
-    width: 100%;
-    min-width: 0;
-  }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: var(--gap);
+      margin-left: auto;
+    }
 
-  .col-right {
-    display: flex;
-    flex-direction: column;
-    gap: calc(var(--gap) * 1.5);
-    width: 100%;
-    min-width: 0;
-    /* 右侧跟随滚动条粘性定位，提升对比查看体验 */
-    position: sticky;
-    top: 1.5rem;
-  }
+    /* ---- theme switch ---- */
+    .segmented {
+      display: flex;
+      gap: .15rem;
+      padding: .2rem;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-pill);
+    }
+    .segmented button {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      padding: .25rem .75rem;
+      border-radius: var(--radius-pill);
+      font: inherit;
+      font-size: 0.85em;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .segmented button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); font-weight: 600; }
 
-  .stack { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
+    /* ---- Two-column layout ---- */
+    main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, var(--right-col));
+      align-items: start;
+      gap: calc(var(--gap) * 1.5);
+      padding: var(--pad-page);
+      max-width: 1600px; /* 稍微放大整体页面容器 */
+      margin: 0 auto;
+    }
 
-  .actions {
-    display: flex;
-    gap: 12px;
-    margin-top: calc(var(--gap) * 0.5);
-  }
+    .col-left {
+      display: flex;
+      flex-direction: column;
+      gap: calc(var(--gap) * 1.5);
+      width: 100%;
+      min-width: 0;
+    }
 
-  /* ---- Cards ---- */
-  .card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-card);
-    padding: var(--pad-card);
-    box-shadow: var(--shadow);
-    width: 100%;
-  }
-  .card-title {
-    margin: 0 0 var(--gap);
-    color: var(--text);
-    font-size: .8rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: .06em;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
+    .col-right {
+      display: flex;
+      flex-direction: column;
+      gap: calc(var(--gap) * 1.5);
+      width: 100%;
+      min-width: 0;
+      position: sticky;
+      top: 1.5rem;
+    }
 
-  /* ---- Controls ---- */
-  select, button, input {
-    background: var(--field-bg);
-    color: var(--text);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-control);
-    padding: var(--pad-control);
-    font: inherit;
-    transition: all 0.2s;
-  }
-  input { width: 100%; }
-  button { cursor: pointer; font-weight: 500; }
-  button:hover:not(.btn-primary) { background: var(--surface-2); border-color: var(--muted); }
-  button:focus-visible, input:focus-visible, select:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 1px;
-    border-color: var(--accent);
-  }
+    .stack { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
 
-  .btn-primary {
-    background: var(--accent);
-    color: var(--on-accent);
-    border-color: var(--accent);
-  }
-  .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+    .actions {
+      display: flex;
+      align-items: center; /* 确保文字和按钮水平居中对齐 */
+      gap: 12px;
+      margin-top: calc(var(--gap) * 0.5);
+    }
 
-  .field { flex: 1 1 12rem; min-width: 0; }
+    /* ---- Cards ---- */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-card);
+      padding: var(--pad-card);
+      box-shadow: var(--shadow);
+      width: 100%;
+    }
 
-  /* ---- Editor ---- */
-  textarea {
-    display: block;
-    width: 100%;
-    box-sizing: border-box;
-    height: var(--editor-h);
-    background: var(--code-bg);
-    color: var(--code-text);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-control);
-    padding: 1rem;
-    font: var(--font-code)/1.6 "JetBrains Mono", ui-monospace, monospace;
-    resize: vertical;
-  }
-  textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+    /* 优化标题与内容的间距，使其更紧凑 */
+    .card-title {
+      margin: 0 0 10px; /* 从 var(--gap) 缩小为 10px */
+      color: var(--text);
+      font-size: .8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px; /* 缩小底部内边距 */
+    }
 
-  /* ---- Scrollable Output Areas (Fixes the Stretching Issue) ---- */
-  .scroll-output {
-    margin: 0;
-    padding: 1rem;
-    background: var(--code-bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-control);
-    font: var(--font-code)/1.5 "JetBrains Mono", ui-monospace, monospace;
-    white-space: pre-wrap;
-    word-break: break-word;
-    max-height: 40vh; /* 限制最大高度 */
-    overflow-y: auto; /* 超出则显示滚动条 */
-  }
+    /* ---- Controls ---- */
+    select, button, input {
+      background: var(--field-bg);
+      color: var(--text);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-control);
+      padding: var(--pad-control);
+      font: inherit;
+      transition: all 0.2s;
+    }
+    input { width: 100%; }
+    button { cursor: pointer; font-weight: 500; }
+    button:hover:not(.btn-primary) { background: var(--surface-2); border-color: var(--muted); }
+    button:focus-visible, input:focus-visible, select:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+      border-color: var(--accent);
+    }
 
-  /* ---- glass box bits ---- */
-  .bar { flex: 1 1 auto; height: var(--bar-h); min-width: 3rem; background: var(--bar-track); border-radius: var(--radius-pill); overflow: hidden; }
-  .bar > span { display: block; width: 0; height: 100%; background: var(--accent-teal); transition: width .4s cubic-bezier(0.4, 0, 0.2, 1); }
-  .pill {
-    padding: 0.3rem 0.8rem;
-    border-radius: var(--radius-pill);
-    background: var(--surface-2);
-    border: 1px solid var(--border-strong);
-    font-size: .8em;
-    font-weight: 500;
-  }
-  .label {
-    flex: 0 0 6.5rem;
-    color: var(--muted);
-    font-size: .75em;
-    text-transform: uppercase;
-    letter-spacing: .05em;
-    font-weight: 600;
-  }
-  .row {
-    display: flex; flex-wrap: nowrap; width: 100%; align-items: center; gap: var(--gap); margin: 0;
-  }
-  .row-data {
-    font-size: 0.85em; color: var(--text); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
+    .btn-primary {
+      background: var(--accent);
+      color: var(--on-accent);
+      border-color: var(--accent);
+    }
+    .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 
-  .muted { color: var(--muted); }
+    .field { flex: 1 1 12rem; min-width: 0; }
 
-  /* ---- narrow viewports ---- */
-  @media (max-width: 65rem) {
-    main { grid-template-columns: minmax(0, 1fr); gap: var(--gap); }
-    .col-right { position: relative; top: 0; order: 2; }
-    :root { --editor-h: clamp(12rem, 35vh, 20rem); }
-  }
-</style>
+    /* ---- Editor ---- */
+    textarea {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      height: var(--editor-h);
+      background: var(--code-bg);
+      color: var(--code-text);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-control);
+      padding: 1rem;
+      font: var(--font-code)/1.6 "JetBrains Mono", ui-monospace, monospace;
+      resize: vertical;
+    }
+    textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+    /* ---- Scrollable Output Areas ---- */
+    .scroll-output {
+      margin: 0;
+      padding: 1rem;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-control);
+      font: var(--font-code)/1.5 "JetBrains Mono", ui-monospace, monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 40vh;
+      overflow-y: auto;
+    }
+
+    /* ---- Markdown Render Styles ---- */
+    .markdown-body {
+      font-family: var(--font-body);
+      font-size: 0.95em;
+      line-height: 1.6;
+      white-space: normal; /* 覆盖 pre-wrap 允许正常折行 */
+    }
+    .markdown-body p { margin-top: 0; margin-bottom: 0.8em; }
+    .markdown-body p:last-child { margin-bottom: 0; }
+    /* 【需求 2】加粗字体自动标红高亮 */
+    .markdown-body strong {
+      color: var(--highlight-red);
+      font-weight: 700;
+    }
+    .markdown-body code {
+      font-family: var(--font-code);
+      background: var(--surface-2);
+      color: var(--code-text);
+      padding: 0.15em 0.35em;
+      border-radius: 4px;
+      font-size: 0.85em;
+      border: 1px solid var(--border);
+    }
+    .markdown-body pre {
+      background: var(--surface-2);
+      padding: 10px;
+      border-radius: 6px;
+      overflow-x: auto;
+      border: 1px solid var(--border-strong);
+      margin-bottom: 0.8em;
+    }
+    .markdown-body pre code {
+      background: transparent;
+      padding: 0;
+      border: none;
+      color: var(--code-text);
+    }
+
+    /* ---- glass box bits ---- */
+    .bar { flex: 1 1 auto; height: var(--bar-h); min-width: 3rem; background: var(--bar-track); border-radius: var(--radius-pill); overflow: hidden; }
+    .bar > span { display: block; width: 0; height: 100%; background: var(--accent-teal); transition: width .4s cubic-bezier(0.4, 0, 0.2, 1); }
+    .pill {
+      padding: 0.3rem 0.8rem;
+      border-radius: var(--radius-pill);
+      background: var(--surface-2);
+      border: 1px solid var(--border-strong);
+      font-size: .8em;
+      font-weight: 500;
+    }
+    .label {
+      flex: 0 0 6.5rem;
+      color: var(--muted);
+      font-size: .75em;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      font-weight: 600;
+    }
+    .row {
+      display: flex; flex-wrap: nowrap; width: 100%; align-items: center; gap: var(--gap); margin: 0;
+    }
+    .row-data {
+      font-size: 0.85em; color: var(--text); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .muted { color: var(--muted); }
+
+    /* ---- narrow viewports ---- */
+    @media (max-width: 65rem) {
+      main { grid-template-columns: minmax(0, 1fr); gap: var(--gap); }
+      .col-right { position: relative; top: 0; order: 2; }
+      :root { --editor-h: clamp(12rem, 35vh, 20rem); }
+    }
+  </style>
 </head>
 <body>
 
@@ -367,17 +419,19 @@
     </div>
 
     <div class="card stack">
-      <label class="card-title" for="source">Code Editor <span id="status" class="muted" style="font-weight: normal; font-size: 0.8em; text-transform: none;"></span></label>
+      <!-- 移除了这里的 status span -->
+      <label class="card-title" for="source">Code Editor</label>
       <textarea id="source" spellcheck="false"></textarea>
+      <!-- 【需求 1】将 Status 移入 actions 并与按钮对齐 -->
       <div class="actions">
         <button id="run" class="btn-primary">Synthesize &amp; Run</button>
         <button id="ask">Ask Sol</button>
+        <span id="status" class="muted" style="font-size: 0.85em; font-weight: 500;"></span>
       </div>
     </div>
 
     <div class="card stack">
       <div class="card-title">Run Result</div>
-      <!-- Added .scroll-output to prevent huge python errors from stretching -->
       <pre id="result" class="scroll-output muted">—</pre>
     </div>
   </section>
@@ -386,8 +440,8 @@
   <section class="col-right">
     <div class="card stack" style="border-top: 3px solid var(--accent);">
       <div class="card-title">Sol Response</div>
-      <!-- Added .scroll-output so long LLM texts become scrollable -->
-      <pre id="solmsg" class="scroll-output">—</pre>
+      <!-- 【需求 2】改为 div 并加上 markdown-body 类以支持富文本渲染 -->
+      <div id="solmsg" class="scroll-output markdown-body">—</div>
       <p id="solq" style="margin: 0; font-size: 0.9em; color: var(--accent-teal); font-weight: 500;"></p>
     </div>
 
@@ -455,86 +509,93 @@
 </script>
 
 <script type="module">
-const $ = (id) => document.getElementById(id);
-const PID = "p_dev";
-let EXERCISES = {};
+  const $ = (id) => document.getElementById(id);
+  const PID = "p_dev";
+  let EXERCISES = {};
 
-function base() { return $("backend").value.replace(/\/$/, ""); }
-async function jpost(path, body) {
-  const r = await fetch(base() + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  if (!r.ok) throw new Error(path + " -> " + r.status);
-  return r.json();
-}
-
-async function loadCurriculum() {
-  try {
-    const r = await fetch(base() + "/api/curriculum");
-    if (!r.ok) throw new Error("Status " + r.status);
-    const data = await r.json();
-    const sel = $("exercise"); sel.innerHTML = "";
-    data.modules.forEach((m) => m.exercises.forEach((ex) => {
-      EXERCISES[ex.id] = ex;
-      const o = document.createElement("option"); o.value = ex.id; o.textContent = ex.title; sel.appendChild(o);
-    }));
-    pick();
-  } catch(e) {
-    $("status").textContent = "Curriculum load failed: " + e.message;
+  function base() { return $("backend").value.replace(/\/$/, ""); }
+  async function jpost(path, body) {
+    const r = await fetch(base() + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error(path + " -> " + r.status);
+    return r.json();
   }
-}
-function pick() {
-  const ex = EXERCISES[$("exercise").value]; if (!ex) return;
-  $("prompt").textContent = ex.prompt;
-  $("source").value = ex.starter;
-}
 
-let lastResult = null;
-async function run() {
-  $("status").textContent = "— Running...";
-  $("result").textContent = "Executing...";
-  try {
-    lastResult = await jpost("/api/run", { participant_id: PID, exercise_id: $("exercise").value, source: $("source").value });
-    $("result").textContent = lastResult.ok
-      ? `backend=${lastResult.backend}  goalMet=${lastResult.goalMet}  tvd=${(+lastResult.tvd).toFixed(3)}\n` +
-        lastResult.dist.map((d) => `${d.bits}: ${(d.p * 100).toFixed(0)}%`).join("   ") + `\n${lastResult.diff}`
-      : "Error:\n" + lastResult.error;
-    $("status").textContent = "";
-  } catch (e) { $("status").textContent = ""; $("result").textContent = String(e); }
-}
+  async function loadCurriculum() {
+    try {
+      const r = await fetch(base() + "/api/curriculum");
+      if (!r.ok) throw new Error("Status " + r.status);
+      const data = await r.json();
+      const sel = $("exercise"); sel.innerHTML = "";
+      data.modules.forEach((m) => m.exercises.forEach((ex) => {
+        EXERCISES[ex.id] = ex;
+        const o = document.createElement("option"); o.value = ex.id; o.textContent = ex.title; sel.appendChild(o);
+      }));
+      pick();
+    } catch(e) {
+      $("status").textContent = "Curriculum load failed";
+      console.error(e);
+    }
+  }
+  function pick() {
+    const ex = EXERCISES[$("exercise").value]; if (!ex) return;
+    $("prompt").textContent = ex.prompt;
+    $("source").value = ex.starter;
+  }
 
-async function ask(event) {
-  $("status").textContent = "— Sol is thinking...";
-  try {
-    const out = await jpost("/api/sol/turn", {
-      participant_id: PID, exercise_id: $("exercise").value,
-      event: event || "chat", mode: $("mode").value, stance: "peer",
-      source: $("source").value, result: lastResult, recent: [],
-    });
-    $("solmsg").textContent = out.message;
-    $("solq").textContent = out.check_question ? "↳ " + out.check_question : "";
-    $("affect").textContent = `affect: ${out.affective_state || '—'}`;
-    $("interv").textContent = `intervention: ${out.intervention || '—'}`;
-    const c = Math.round((out.confidence || 0) * 100);
-    $("confbar").style.width = c + "%"; $("conf").textContent = c + "%";
-    $("planner").textContent = out.planner_note || "—";
-    $("planner").title = out.planner_note || ""; // tooltip for truncated text
-    const se = out.components?.self_eval || {};
-    $("selfeval").textContent = `${out.self_critique || "—"} (leak_risk=${se.leak_risk ?? "—"})`;
-    $("selfeval").title = $("selfeval").textContent;
-    $("gov").textContent = out.components?.governance?.prose || out.governance || "—";
-    $("gov").title = $("gov").textContent;
-    $("mem").textContent = `grasped: ${(out.memory?.grasped || []).join(", ") || "—"} | shaky: ${(out.memory?.shaky || []).join(", ") || "—"}`;
-    $("mem").title = $("mem").textContent;
-    const t = out.components?.timings_ms || {};
-    $("timings").textContent = Object.keys(t).length > 0 ? Object.entries(t).map(([k, v]) => `${k}=${v}`).join(" ") : "—";
-    $("status").textContent = "";
-  } catch (e) { $("status").textContent = ""; $("solmsg").textContent = "Error connecting to Sol:\n" + String(e); }
-}
+  let lastResult = null;
+  async function run() {
+    $("status").textContent = "Running...";
+    $("result").textContent = "Executing...";
+    try {
+      lastResult = await jpost("/api/run", { participant_id: PID, exercise_id: $("exercise").value, source: $("source").value });
+      $("result").textContent = lastResult.ok
+              ? `backend=${lastResult.backend}  goalMet=${lastResult.goalMet}  tvd=${(+lastResult.tvd).toFixed(3)}\n` +
+              lastResult.dist.map((d) => `${d.bits}: ${(d.p * 100).toFixed(0)}%`).join("   ") + `\n${lastResult.diff}`
+              : "Error:\n" + lastResult.error;
+      $("status").textContent = "";
+    } catch (e) { $("status").textContent = ""; $("result").textContent = String(e); }
+  }
 
-$("exercise").addEventListener("change", pick);
-$("backend").addEventListener("change", loadCurriculum);
-$("run").addEventListener("click", () => run().then(() => ask("run")));
-$("ask").addEventListener("click", () => ask("chat"));
-loadCurriculum();
+  async function ask(event) {
+    $("status").textContent = "Sol is thinking...";
+    try {
+      const out = await jpost("/api/sol/turn", {
+        participant_id: PID, exercise_id: $("exercise").value,
+        event: event || "chat", mode: $("mode").value, stance: "peer",
+        source: $("source").value, result: lastResult, recent: [],
+      });
+
+      // 【需求 2】使用 marked.js 渲染 Markdown
+      $("solmsg").innerHTML = out.message ? marked.parse(out.message) : "—";
+
+      $("solq").textContent = out.check_question ? "↳ " + out.check_question : "";
+      $("affect").textContent = `affect: ${out.affective_state || '—'}`;
+      $("interv").textContent = `intervention: ${out.intervention || '—'}`;
+      const c = Math.round((out.confidence || 0) * 100);
+      $("confbar").style.width = c + "%"; $("conf").textContent = c + "%";
+      $("planner").textContent = out.planner_note || "—";
+      $("planner").title = out.planner_note || "";
+      const se = out.components?.self_eval || {};
+      $("selfeval").textContent = `${out.self_critique || "—"} (leak_risk=${se.leak_risk ?? "—"})`;
+      $("selfeval").title = $("selfeval").textContent;
+      $("gov").textContent = out.components?.governance?.prose || out.governance || "—";
+      $("gov").title = $("gov").textContent;
+      $("mem").textContent = `grasped: ${(out.memory?.grasped || []).join(", ") || "—"} | shaky: ${(out.memory?.shaky || []).join(", ") || "—"}`;
+      $("mem").title = $("mem").textContent;
+      const t = out.components?.timings_ms || {};
+      $("timings").textContent = Object.keys(t).length > 0 ? Object.entries(t).map(([k, v]) => `${k}=${v}`).join(" ") : "—";
+      $("status").textContent = "";
+    } catch (e) {
+      $("status").textContent = "";
+      $("solmsg").innerHTML = `<span style="color: var(--highlight-red);">Error connecting to Sol:<br>${String(e)}</span>`;
+    }
+  }
+
+  $("exercise").addEventListener("change", pick);
+  $("backend").addEventListener("change", loadCurriculum);
+  $("run").addEventListener("click", () => run().then(() => ask("run")));
+  $("ask").addEventListener("click", () => ask("chat"));
+  loadCurriculum();
 </script>
 </body>
 </html>
