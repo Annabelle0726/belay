@@ -414,7 +414,7 @@
         <select id="mode"><option value="study">Study</option><option value="teach">Teach</option></select>
       </div>
       <div style="padding: 12px; background: var(--surface-2); border-radius: 6px; border: 1px solid var(--border);">
-        <p id="prompt" style="margin: 0; font-size: 0.9em; color: var(--text);"></p>
+        <p id="prompt" style="margin: 0; font-size: 0.9em; color: var(--text);user-select: none; -webkit-user-select: none; -ms-user-select: none;"></p>
       </div>
     </div>
 
@@ -547,13 +547,35 @@
     $("status").textContent = "Running...";
     $("result").textContent = "Executing...";
     try {
-      lastResult = await jpost("/api/run", { participant_id: PID, exercise_id: $("exercise").value, source: $("source").value });
-      $("result").textContent = lastResult.ok
-              ? `backend=${lastResult.backend}  goalMet=${lastResult.goalMet}  tvd=${(+lastResult.tvd).toFixed(3)}\n` +
-              lastResult.dist.map((d) => `${d.bits}: ${(d.p * 100).toFixed(0)}%`).join("   ") + `\n${lastResult.diff}`
-              : "Error:\n" + lastResult.error;
+      lastResult = await jpost("/api/run", {
+        participant_id: PID,
+        exercise_id: $("exercise").value,
+        source: $("source").value
+      });
+
+      if (lastResult.ok) {
+        const outputText = lastResult.stdout || lastResult.output || lastResult.result || "";
+        const metaParts = [];
+        if (lastResult.backend) metaParts.push(`backend=${lastResult.backend}`);
+        if (lastResult.goalMet !== undefined) metaParts.push(`goalMet=${lastResult.goalMet}`);
+        if (lastResult.tvd !== undefined) metaParts.push(`tvd=${(+lastResult.tvd).toFixed(3)}`);
+
+        const metaHeader = metaParts.length > 0 ? metaParts.join("  ") + "\n" : "";
+
+        const distStr = Array.isArray(lastResult.dist)
+                ? lastResult.dist.map((d) => `${d.bits}: ${(d.p * 100).toFixed(0)}%`).join("   ") + "\n"
+                : "";
+
+        $("result").textContent = metaHeader + distStr + (outputText || lastResult.diff || "Execution successful with no output.");
+      } else {
+        $("result").textContent = "Error:\n" + (lastResult.error || JSON.stringify(lastResult, null, 2));
+      }
+
       $("status").textContent = "";
-    } catch (e) { $("status").textContent = ""; $("result").textContent = String(e); }
+    } catch (e) {
+      $("status").textContent = "";
+      $("result").textContent = "Frontend Exception:\n" + String(e);
+    }
   }
 
   async function ask(event) {
