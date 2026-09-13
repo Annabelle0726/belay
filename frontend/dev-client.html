@@ -21,36 +21,36 @@
     --font-code: clamp(.8rem, .3vw + .7rem, .9rem);
 
     --right-col: clamp(21rem, 28vw, 32rem);
-    --editor-h: clamp(14rem, 30vh, 28rem);
+    --editor-h: clamp(16rem, 35vh, 32rem);
     --bar-h: .5rem;
   }
 
   /* ---- dark palette (default) ---- */
   :root, :root[data-theme="dark"] {
     color-scheme: dark;
-    --bg: #0e1116;
-    --surface: #13171f;
-    --surface-2: #1a212c;
-    --field-bg: #0b0f14;
-    --code-bg: #070a0e;
+    --bg: #0b0d11;
+    --surface: #141820;
+    --surface-2: #1c222e;
+    --field-bg: #0b0d11;
+    --code-bg: #06080a;
 
-    --text: #e6e9ef;
-    --muted: #8b93a7;
-    --code-text: #d7f7e9;
+    --text: #e2e6f0;
+    --muted: #838da3;
+    --code-text: #c0f3d9;
 
-    --border: #222a35;
-    --border-strong: #2b3543;
-    --accent: #3a64ff;
-    --accent-hover: #4e74ff;
-    --accent-soft: #e7a93e15;
-    --accent-soft-border: #e7a93e44;
-    --accent-soft-text: #e7a93e;
+    --border: #262e3d;
+    --border-strong: #333d52;
+    --accent: #456cff;
+    --accent-hover: #5a7dff;
+    --accent-soft: #456cff1a;
     --warn: #e7a93e;
+    --warn-soft: #e7a93e15;
+    --warn-text: #f0bd66;
 
-    --accent-teal: #5fd0c5;
-    --bar-track: #1a212c;
+    --accent-teal: #49ccba;
+    --bar-track: #1c222e;
     --on-accent: #ffffff;
-    --shadow: 0 4px 12px rgba(0, 0, 0, .2);
+    --shadow: 0 4px 20px rgba(0, 0, 0, .25);
   }
 
   /* ---- light palette ---- */
@@ -58,27 +58,27 @@
     color-scheme: light;
     --bg: #f4f6fa;
     --surface: #ffffff;
-    --surface-2: #eef1f7;
+    --surface-2: #edf0f5;
     --field-bg: #ffffff;
     --code-bg: #f8fafc;
 
-    --text: #141a24;
-    --muted: #5b6577;
+    --text: #1a202c;
+    --muted: #64748b;
     --code-text: #0f2940;
 
-    --border: #dce2ec;
-    --border-strong: #c6cfdd;
+    --border: #d2dce6;
+    --border-strong: #cbd5e1;
     --accent: #2f4fe0;
     --accent-hover: #2640b3;
-    --accent-soft: #b26b0011;
-    --accent-soft-border: #b26b0033;
-    --accent-soft-text: #8a5300;
-    --warn: #8a5300;
+    --accent-soft: #2f4fe015;
+    --warn: #d97706;
+    --warn-soft: #fef3c7;
+    --warn-text: #b45309;
 
-    --accent-teal: #12897c;
-    --bar-track: #e6eaf2;
+    --accent-teal: #0d9488;
+    --bar-track: #e2e8f0;
     --on-accent: #ffffff;
-    --shadow: 0 4px 12px rgba(20, 26, 36, .05);
+    --shadow: 0 4px 15px rgba(20, 26, 36, .06);
   }
 
   * { box-sizing: border-box; }
@@ -87,59 +87,64 @@
     margin: 0;
     background: var(--bg);
     color: var(--text);
-    font: var(--font-body)/1.5 ui-sans-serif, system-ui, -apple-system, "Hanken Grotesk", sans-serif;
+    font: var(--font-body)/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif;
     overflow-x: hidden;
   }
 
-  /* ---- header refactored ---- */
+  /* ---- Elegant Scrollbar for webkit ---- */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background-color: var(--muted); }
+
+  /* ---- Header Refactored ---- */
   .app-header {
-    top: 0;
-    z-index: 10;
     display: flex;
     flex-wrap: wrap;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: center;
     gap: var(--gap);
-    padding: var(--pad-page);
+    padding: calc(var(--pad-page) * 0.7) var(--pad-page);
     background: var(--surface);
     border-bottom: 1px solid var(--border);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
   }
 
-  .header-info {
+  .header-left {
     display: flex;
-    flex-direction: column;
-    gap: 8px;
-    flex: 1 1 auto;
-    min-width: 0; /* 防止子元素撑爆 */
-  }
-
-  .header-title-row {
-    display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: 8px 12px;
+    flex-wrap: wrap;
+    gap: 12px;
   }
 
-  .brand { font-family: Fraunces, Georgia, serif; font-size: 1.1em; }
+  .brand { font-family: Fraunces, Georgia, serif; font-size: 1.2em; font-weight: 600; }
+  .slash { color: var(--border-strong); font-weight: 300; }
+  .course-tag {
+    background: var(--accent-soft);
+    color: var(--accent);
+    padding: 0.2rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.85em;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+  }
 
   .badge {
-    display: inline-block;
-    width: fit-content;
-    padding: var(--pad-pill);
-    background: var(--accent-soft);
-    border: 1px solid var(--accent-soft-border);
-    border-radius: var(--radius-control);
-    color: var(--accent-soft-text);
-    font-size: .8em;
+    padding: 0.25rem 0.7rem;
+    background: var(--warn-soft);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    color: var(--warn-text);
+    font-size: .75em;
     font-weight: 600;
-    line-height: 1.3;
+    display: flex;
+    align-items: center;
+    gap: 6px;
   }
+  .badge::before { content: ""; display: block; width: 6px; height: 6px; background: var(--warn); border-radius: 50%; }
 
   .header-right {
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
     gap: var(--gap);
     margin-left: auto;
   }
@@ -157,50 +162,54 @@
     border: 0;
     background: transparent;
     color: var(--muted);
-    padding: .3rem .8rem;
+    padding: .25rem .75rem;
     border-radius: var(--radius-pill);
     font: inherit;
-    font-size: 0.9em;
+    font-size: 0.85em;
     cursor: pointer;
     transition: all 0.2s;
   }
-  .segmented button[aria-pressed="true"] {
-    background: var(--accent);
-    color: var(--on-accent);
-    font-weight: 600;
-  }
+  .segmented button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); font-weight: 600; }
 
-  /* ---- two-column master grid ---- */
+  /* ---- Two-column layout ---- */
   main {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, var(--right-col));
     align-items: start;
-    gap: calc(var(--gap) * 1.2);
+    gap: calc(var(--gap) * 1.5);
     padding: var(--pad-page);
-    max-width: 1600px; /* 增加最大宽度约束，避免超宽屏显示散乱 */
-    margin: 0 auto;    /* 居中对齐 */
+    max-width: 1500px;
+    margin: 0 auto;
   }
 
-  .col-left, .col-right {
+  .col-left {
     display: flex;
     flex-direction: column;
-    gap: calc(var(--gap) * 1.2);
+    gap: calc(var(--gap) * 1.5);
     width: 100%;
     min-width: 0;
-    align-self: start;
   }
+
+  .col-right {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--gap) * 1.5);
+    width: 100%;
+    min-width: 0;
+    /* 右侧跟随滚动条粘性定位，提升对比查看体验 */
+    position: sticky;
+    top: 1.5rem;
+  }
+
   .stack { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
 
   .actions {
     display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: flex-start;
-    gap: var(--gap);
+    gap: 12px;
     margin-top: calc(var(--gap) * 0.5);
   }
 
-  /* ---- shared card scaffold ---- */
+  /* ---- Cards ---- */
   .card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -208,21 +217,20 @@
     padding: var(--pad-card);
     box-shadow: var(--shadow);
     width: 100%;
-    box-sizing: border-box;
-    min-width: 0;
   }
   .card-title {
     margin: 0 0 var(--gap);
     color: var(--text);
-    font-size: .85rem;
+    font-size: .8rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: .05em;
-    border-bottom: 1px solid var(--border);
-    padding-bottom: calc(var(--gap) * 0.5);
+    letter-spacing: .06em;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
   }
 
-  /* ---- controls ---- */
+  /* ---- Controls ---- */
   select, button, input {
     background: var(--field-bg);
     color: var(--text);
@@ -230,11 +238,11 @@
     border-radius: var(--radius-control);
     padding: var(--pad-control);
     font: inherit;
-    transition: border-color 0.2s;
+    transition: all 0.2s;
   }
   input { width: 100%; }
   button { cursor: pointer; font-weight: 500; }
-  button:hover { border-color: var(--accent); }
+  button:hover:not(.btn-primary) { background: var(--surface-2); border-color: var(--muted); }
   button:focus-visible, input:focus-visible, select:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
@@ -246,89 +254,90 @@
     color: var(--on-accent);
     border-color: var(--accent);
   }
-  .btn-primary:hover {
-    background: var(--accent-hover);
-    border-color: var(--accent-hover);
-  }
+  .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 
   .field { flex: 1 1 12rem; min-width: 0; }
 
+  /* ---- Editor ---- */
   textarea {
     display: block;
     width: 100%;
     box-sizing: border-box;
-    flex: 1 1 auto;
     height: var(--editor-h);
-    min-height: var(--editor-h);
     background: var(--code-bg);
     color: var(--code-text);
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-control);
-    padding: var(--pad-card);
+    padding: 1rem;
     font: var(--font-code)/1.6 "JetBrains Mono", ui-monospace, monospace;
     resize: vertical;
   }
-  textarea:focus {
-    outline: none;
-    border-color: var(--accent);
-    box-shadow: 0 0 0 1px var(--accent);
+  textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+  /* ---- Scrollable Output Areas (Fixes the Stretching Issue) ---- */
+  .scroll-output {
+    margin: 0;
+    padding: 1rem;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    font: var(--font-code)/1.5 "JetBrains Mono", ui-monospace, monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 40vh; /* 限制最大高度 */
+    overflow-y: auto; /* 超出则显示滚动条 */
   }
 
   /* ---- glass box bits ---- */
   .bar { flex: 1 1 auto; height: var(--bar-h); min-width: 3rem; background: var(--bar-track); border-radius: var(--radius-pill); overflow: hidden; }
-  .bar > span { display: block; width: 0; height: 100%; background: var(--accent-teal); transition: width .25s ease; }
+  .bar > span { display: block; width: 0; height: 100%; background: var(--accent-teal); transition: width .4s cubic-bezier(0.4, 0, 0.2, 1); }
   .pill {
-    padding: var(--pad-pill);
+    padding: 0.3rem 0.8rem;
     border-radius: var(--radius-pill);
     background: var(--surface-2);
     border: 1px solid var(--border-strong);
-    font-size: .85em;
+    font-size: .8em;
+    font-weight: 500;
   }
   .label {
-    flex: 0 0 7rem;
+    flex: 0 0 6.5rem;
     color: var(--muted);
-    font-size: .8em;
+    font-size: .75em;
     text-transform: uppercase;
-    letter-spacing: .04em;
+    letter-spacing: .05em;
     font-weight: 600;
   }
   .row {
-    display: flex;
-    flex-wrap: wrap;
-    width: 100%;
-    align-items: center;
-    gap: var(--gap);
-    margin: 0;
+    display: flex; flex-wrap: nowrap; width: 100%; align-items: center; gap: var(--gap); margin: 0;
   }
-  pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 0.9em; }
+  .row-data {
+    font-size: 0.85em; color: var(--text); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
   .muted { color: var(--muted); }
 
   /* ---- narrow viewports ---- */
   @media (max-width: 65rem) {
-    main { grid-template-columns: minmax(0, 1fr); }
-    .col-right { order: 2; }
+    main { grid-template-columns: minmax(0, 1fr); gap: var(--gap); }
+    .col-right { position: relative; top: 0; order: 2; }
     :root { --editor-h: clamp(12rem, 35vh, 20rem); }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .bar > span, .segmented button { transition: none; }
   }
 </style>
 </head>
 <body>
+
 <header class="app-header">
-  <div class="header-info">
-    <div class="header-title-row">
-      <span class="brand">Sol</span>
-      <span class="muted">— backend dev client</span>
-      <span class="muted">·&nbsp;proves the live loop (run → grade → Sol)</span>
-    </div>
-    <span class="badge">
-      DEV ONLY — not for pilot: uses hardcoded PID, skips consent registration, omits stance
-    </span>
+  <div class="header-left">
+    <span class="brand">Sol</span>
+    <span class="slash">/</span>
+    <span class="course-tag">Data Science Module</span>
+    <span class="muted" style="font-size: 0.9em; margin-left: 8px;">Backend Live Loop Client</span>
   </div>
+
   <div class="header-right">
-    <span id="status" class="muted"></span>
+    <span class="badge" title="Uses hardcoded PID, skips consent registration, omits stance">
+      DEV ONLY
+    </span>
     <div class="segmented" role="group" aria-label="Colour theme">
       <button type="button" data-theme-set="auto">Auto</button>
       <button type="button" data-theme-set="light">Light</button>
@@ -336,11 +345,12 @@
     </div>
   </div>
 </header>
+
 <main>
-  <!-- left: user controls, editor, action buttons and run result -->
+  <!-- Left Column -->
   <section class="col-left">
     <div class="card stack">
-      <div class="card-title">Controls</div>
+      <div class="card-title">Session Controls</div>
       <div class="row">
         <label class="label" for="backend">Backend URL</label>
         <input id="backend" value="http://localhost:8000" class="field" />
@@ -349,13 +359,15 @@
         <label class="label" for="exercise">Exercise</label>
         <select id="exercise" class="field"></select>
         <label class="label" for="mode" style="flex: 0 0 auto;">Mode</label>
-        <select id="mode"><option value="study">study</option><option value="teach">teach</option></select>
+        <select id="mode"><option value="study">Study</option><option value="teach">Teach</option></select>
       </div>
-      <p id="prompt" class="muted" style="margin: 0; padding-top: 8px; font-size: 0.9em;"></p>
+      <div style="padding: 12px; background: var(--surface-2); border-radius: 6px; border: 1px solid var(--border);">
+        <p id="prompt" style="margin: 0; font-size: 0.9em; color: var(--text);"></p>
+      </div>
     </div>
 
     <div class="card stack">
-      <label class="card-title" for="source">Code Editor</label>
+      <label class="card-title" for="source">Code Editor <span id="status" class="muted" style="font-weight: normal; font-size: 0.8em; text-transform: none;"></span></label>
       <textarea id="source" spellcheck="false"></textarea>
       <div class="actions">
         <button id="run" class="btn-primary">Synthesize &amp; Run</button>
@@ -363,28 +375,53 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card stack">
       <div class="card-title">Run Result</div>
-      <pre id="result" class="muted">—</pre>
+      <!-- Added .scroll-output to prevent huge python errors from stretching -->
+      <pre id="result" class="scroll-output muted">—</pre>
     </div>
   </section>
 
-  <!-- right: Sol's turn and the glass-box telemetry -->
+  <!-- Right Column -->
   <section class="col-right">
-    <div class="card stack">
+    <div class="card stack" style="border-top: 3px solid var(--accent);">
       <div class="card-title">Sol Response</div>
-      <pre id="solmsg">—</pre>
-      <p id="solq" class="muted" style="margin: 0;"></p>
+      <!-- Added .scroll-output so long LLM texts become scrollable -->
+      <pre id="solmsg" class="scroll-output">—</pre>
+      <p id="solq" style="margin: 0; font-size: 0.9em; color: var(--accent-teal); font-weight: 500;"></p>
     </div>
+
     <div class="card stack">
-      <div class="card-title">Glass Box · The Five Components</div>
-      <div class="row"><span class="pill" id="affect">affect</span><span class="pill" id="interv">intervention</span></div>
-      <div class="row"><span class="label">confidence</span><div class="bar"><span id="confbar"></span></div><span id="conf" class="muted"></span></div>
-      <div class="row"><span class="label">planner</span><span id="planner" class="muted">—</span></div>
-      <div class="row"><span class="label">self-eval</span><span id="selfeval" class="muted">—</span></div>
-      <div class="row"><span class="label">governance</span><span id="gov" class="muted">—</span></div>
-      <div class="row"><span class="label">memory</span><span id="mem" class="muted">—</span></div>
-      <div class="row"><span class="label">timings</span><span id="timings" class="muted">—</span></div>
+      <div class="card-title">Telemetry · Glass Box</div>
+      <div class="row" style="margin-bottom: 8px;">
+        <span class="pill" id="affect">affect: —</span>
+        <span class="pill" id="interv">intervention: —</span>
+      </div>
+      <div class="row">
+        <span class="label">Confidence</span>
+        <div class="bar"><span id="confbar"></span></div>
+        <span id="conf" class="row-data" style="flex: 0 0 30px; text-align: right;">0%</span>
+      </div>
+      <div class="row">
+        <span class="label">Planner</span>
+        <span id="planner" class="row-data muted">—</span>
+      </div>
+      <div class="row">
+        <span class="label">Self-Eval</span>
+        <span id="selfeval" class="row-data muted">—</span>
+      </div>
+      <div class="row">
+        <span class="label">Governance</span>
+        <span id="gov" class="row-data muted">—</span>
+      </div>
+      <div class="row">
+        <span class="label">Memory</span>
+        <span id="mem" class="row-data muted">—</span>
+      </div>
+      <div class="row">
+        <span class="label">Timings</span>
+        <span id="timings" class="row-data muted">—</span>
+      </div>
     </div>
   </section>
 </main>
@@ -392,9 +429,7 @@
 <script>
   (function () {
     var mq = window.matchMedia("(prefers-color-scheme: light)");
-    function preference() {
-      try { return localStorage.getItem("sol-theme") || "auto"; } catch (e) { return "auto"; }
-    }
+    function preference() { try { return localStorage.getItem("sol-theme") || "auto"; } catch (e) { return "auto"; } }
     function resolve(pref) { return pref === "auto" ? (mq.matches ? "light" : "dark") : pref; }
     function apply(pref) {
       document.documentElement.dataset.themePref = pref;
@@ -408,10 +443,7 @@
     if (mq.addEventListener) mq.addEventListener("change", onSystemChange);
     else mq.addListener(onSystemChange);
     window.solTheme = {
-      set: function (next) {
-        try { localStorage.setItem("sol-theme", next); } catch (e) { }
-        apply(next);
-      },
+      set: function (next) { try { localStorage.setItem("sol-theme", next); } catch (e) { } apply(next); },
     };
     document.addEventListener("DOMContentLoaded", function () {
       apply(preference());
@@ -457,19 +489,20 @@ function pick() {
 
 let lastResult = null;
 async function run() {
-  $("status").textContent = "running…";
+  $("status").textContent = "— Running...";
+  $("result").textContent = "Executing...";
   try {
     lastResult = await jpost("/api/run", { participant_id: PID, exercise_id: $("exercise").value, source: $("source").value });
     $("result").textContent = lastResult.ok
       ? `backend=${lastResult.backend}  goalMet=${lastResult.goalMet}  tvd=${(+lastResult.tvd).toFixed(3)}\n` +
         lastResult.dist.map((d) => `${d.bits}: ${(d.p * 100).toFixed(0)}%`).join("   ") + `\n${lastResult.diff}`
-      : "error: " + lastResult.error;
+      : "Error:\n" + lastResult.error;
     $("status").textContent = "";
-  } catch (e) { $("status").textContent = String(e); }
+  } catch (e) { $("status").textContent = ""; $("result").textContent = String(e); }
 }
 
 async function ask(event) {
-  $("status").textContent = "Sol is thinking…";
+  $("status").textContent = "— Sol is thinking...";
   try {
     const out = await jpost("/api/sol/turn", {
       participant_id: PID, exercise_id: $("exercise").value,
@@ -478,19 +511,23 @@ async function ask(event) {
     });
     $("solmsg").textContent = out.message;
     $("solq").textContent = out.check_question ? "↳ " + out.check_question : "";
-    $("affect").textContent = out.affective_state;
-    $("interv").textContent = out.intervention;
+    $("affect").textContent = `affect: ${out.affective_state || '—'}`;
+    $("interv").textContent = `intervention: ${out.intervention || '—'}`;
     const c = Math.round((out.confidence || 0) * 100);
     $("confbar").style.width = c + "%"; $("conf").textContent = c + "%";
     $("planner").textContent = out.planner_note || "—";
+    $("planner").title = out.planner_note || ""; // tooltip for truncated text
     const se = out.components?.self_eval || {};
-    $("selfeval").textContent = `${out.self_critique || "—"}  ·  leak_risk=${se.leak_risk ?? "—"}`;
+    $("selfeval").textContent = `${out.self_critique || "—"} (leak_risk=${se.leak_risk ?? "—"})`;
+    $("selfeval").title = $("selfeval").textContent;
     $("gov").textContent = out.components?.governance?.prose || out.governance || "—";
-    $("mem").textContent = `grasped: ${(out.memory?.grasped || []).join(", ") || "—"}  ·  shaky: ${(out.memory?.shaky || []).join(", ") || "—"}`;
+    $("gov").title = $("gov").textContent;
+    $("mem").textContent = `grasped: ${(out.memory?.grasped || []).join(", ") || "—"} | shaky: ${(out.memory?.shaky || []).join(", ") || "—"}`;
+    $("mem").title = $("mem").textContent;
     const t = out.components?.timings_ms || {};
-    $("timings").textContent = Object.keys(t).length > 0 ? Object.entries(t).map(([k, v]) => `${k}=${v}`).join("  ") : "—";
+    $("timings").textContent = Object.keys(t).length > 0 ? Object.entries(t).map(([k, v]) => `${k}=${v}`).join(" ") : "—";
     $("status").textContent = "";
-  } catch (e) { $("status").textContent = String(e); }
+  } catch (e) { $("status").textContent = ""; $("solmsg").textContent = "Error connecting to Sol:\n" + String(e); }
 }
 
 $("exercise").addEventListener("change", pick);
