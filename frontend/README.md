@@ -7,7 +7,7 @@ glue, not part of the tested framework; the backend is the source of truth.
 |------|---------|
 | `widget.html` | The reference widget (Slice E/F), wired to the `/quad/v1` sidecar. Drop-in embeddable; routes entirely through the backend (no browser-side key). |
 | `embed-demo.html` | A minimal page showing how to embed the widget on a host site. |
-| `dev-client.html` | Zero-dependency page that routes through the backend to verify a deployment. Marked DEV ONLY: uses a hardcoded `PID = "p_dev"` without consent registration, so it is not suitable for a pilot session. |
+| `dev-client.html` | Developer playground page with Markdown rendering `(marked.js)` that routes through the backend to verify a deployment. Marked DEV ONLY: uses a hardcoded `PID = "p_dev"` without consent registration, so it is not suitable for a pilot session. |
 | `api-client.js` | A small API client (`runModel`, `solTurn`, `createParticipant`, `exportEvents`, `getCurriculum`) for a custom front-end. |
 
 ## Backend wiring
