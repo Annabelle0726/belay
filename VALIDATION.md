@@ -1468,6 +1468,65 @@ python backend/scripts/extract_measures.py <path/to/trace.jsonl>   # writes the 
 
 ---
 
+## 6. Turn-request boundary: the `recent` history window 🟢
+
+Reproduce (`cd backend && python -m pytest tests/test_sol_turn_request.py`, 21 tests,
+all offline — no LLM, no DB, `TestClient` only). The sidecar leg is
+`tests/test_quad_sidecar.py` (16 tests).
+
+**The defect this pins.** `frontend/dev-client.html` sent `recent` as
+`[{"role": "user", "content": ...}]` (the standard chat-transcript shape) while
+`SolTurnRequest` declared `list[DialogueTurn]` — `{"who", "text"}`. FastAPI therefore
+rejected **every turn that carried history** with `422 Unprocessable Entity` before
+the tutor ran, at `body.recent.0.role: Field required`. Two aggravating details: the
+client built its history but always sent an empty window in the version before this
+fix, so the mismatch was invisible until history was actually populated; and the
+rejection message named a field the client had not heard of.
+
+**Fix.** The edge declares `RecentTurn` (`role`/`content`) and normalizes the legacy
+`{who, text}` spelling onto it, so both the dev client and the already-shipped widget
+validate. Normalization lives in `app/core/domain/dialogue.py` and is shared with the
+`/quad/v1/turn` sidecar, which had the same latent defect. An entry that cannot be
+labelled is **dropped**, not coerced and not rejected: the reflect-routing,
+distress-routing and answer-seeking checks all read the student's latest turn, so a
+mislabelled turn must never be able to masquerade as student speech, and one junk
+history line must not cost the learner their reply.
+
+**Also fixed while at the boundary.** `result` declared `dict | None` while the client
+echoes the whole run envelope back: a non-mapping value reached `context._last_result`,
+which calls `.get` on it, and 500'd the turn. It now degrades to `None` ("no run yet").
+
+**Verification.**
+
+- `tests/test_sol_turn_request.py` (21): the exact dev-client payload validates and
+  becomes `{"who": "student", "text": ...}` in the agent vocabulary; the learner's
+  reflect cue survives that translation end-to-end; the legacy spelling still
+  validates; malformed history (non-list, non-objects, no role, unknown role) never
+  422s; a non-mapping `result` cannot 500 the turn; `/openapi.json` publishes the new
+  shape; a genuinely invalid body still 422s with the offending field named.
+- `tests/test_quad_sidecar.py`: both spellings accepted on `/quad/v1/turn`, and the
+  sidecar shares the normalizer (4 of its 16 tests are new).
+- Live server (uvicorn, `BELAY_LOG` on): `{role, content}` → 404 (parsed; synthetic
+  exercise) / 502 (parsed; real exercise, LLM unreachable), legacy `{who, text}` →
+  404, junk history → 404, `event: "banana"` → 422 logged as
+  `422 POST /api/sol/turn rejected: body/event (string_pattern_mismatch)`.
+- Browser (headless Chrome, transport mocked, page's own code running): the first turn
+  sends `recent: []`, the second sends the first exchange, the window resets when the
+  exercise changes, and a 422 renders the field path in the UI. Against the live
+  backend the same client returned 200 and rendered Sol's reply.
+
+**Privacy note on the new diagnostics.** A `RequestValidationError` handler and a
+per-turn `INFO` line make a 422 diagnosable from the server log. Neither records a
+submitted value — `recent`/`source` hold the learner's own words, and `request.body`
+would put a second copy of them in the logs. Two tests assert the pointers/levels are
+present and the submitted text is absent.
+
+**Suite: `413 passed, 7 skipped`** (`cd backend && python -m pytest`, SQLite default;
+was `392 passed, 7 skipped` before this change, +21 = 21 new in
+`tests/test_sol_turn_request.py` plus 4 new in `tests/test_quad_sidecar.py`).
+
+---
+
 ## Maintenance map
 
 When you add… | …update here

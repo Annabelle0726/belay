@@ -31,6 +31,39 @@ Stance is assigned per enrollment URL (`?stance=peer|oracle|control`, default `"
 and held constant for the session. It is the RQ2/H2 manipulated variable, not a
 student-facing toggle.
 
+### The `recent` dialogue window
+
+`recent` is the transcript the tutor reasons over. The shape is:
+
+```json
+"recent": [{ "role": "user", "content": "how do I group by category?" },
+           { "role": "assistant", "content": "..." }]
+```
+
+Both edges (`/api/sol/turn` and `/quad/v1/turn`) accept the older
+`{ "who": "student"|"tutor", "text": "..." }` spelling too, because a host page may
+be serving a cached widget. An entry that cannot be labelled — not an object, no
+role, or an unknown role — is **dropped** rather than rejected or guessed: the
+tutor's reflect-routing, distress-routing and answer-seeking checks all read the
+student's latest turn, so a mislabelled turn must not be able to masquerade as
+student speech, and one junk history line must not cost the learner their reply.
+`result` likewise accepts any JSON but only a mapping is used; anything else is
+treated as "no run yet".
+
+### CORS: the page's origin must be allowlisted
+
+The client is served as a page and calls the API cross-origin, so the page's origin
+has to be in the backend's `CORS_ORIGINS` (default
+`http://localhost:5173,http://localhost:3000`). Two consequences worth knowing
+before debugging:
+
+- `localhost` and `127.0.0.1` are different origins. Opening the client from the
+  spelling that is not listed fails the preflight with a **400 on `OPTIONS`**, and
+  the browser then reports a bare `TypeError: Failed to fetch` — the server log is
+  where the real cause appears.
+- An `http://localhost:8000` backend and a `file://` client do not work together:
+  a `file://` page sends `Origin: null`, which is not in any allowlist.
+
 ## Glass-box telemetry (rendered per turn)
 
 A front-end renders the `solTurn` response. Top-level fields drive the five stage
