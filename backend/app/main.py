@@ -171,16 +171,9 @@ def sol_turn(req: SolTurnRequest):
         # The wire carries {role, content}; the agent layer reads recent_dialogue as
         # {who, text} with "student" for the learner. Translate once, here, so the
         # floor checks (_student_asked_for_answer / _student_wants_reflect /
-        # _latest_student_message) keep their single vocabulary.
-        "recent": [
-            {
-                "who": "student"
-                if t.role == "user"
-                else _pack.persona.id,  # persona id from the pack seam, never a literal
-                "text": t.content,
-            }
-            for t in req.recent
-        ],
+        # _latest_student_message) keep their single vocabulary. The persona id comes
+        # from the pack seam, never a literal.
+        "recent": [t.as_turn().as_dialogue(_pack.persona.id) for t in req.recent],
         "signals": req.signals,
         "request": req.request,
         "overlay": req.overlay,

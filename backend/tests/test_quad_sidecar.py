@@ -74,6 +74,57 @@ def test_events_acks_clean_payload():
     assert r.json()["ok"] is True
 
 
+# ── the recent window: both spellings, same contract as /api/sol/turn ─────────
+
+
+def _turn(recent):
+    return _client().post(
+        "/quad/v1/turn",
+        json={
+            "pseudo_id": "gh:12345",
+            "exercise_id": "ds-foundations",
+            "stance": "control",
+            "source": "import pandas as pd",
+            "recent": recent,
+        },
+    )
+
+
+def test_turn_accepts_role_content_history():
+    """The canonical shape must parse (it used to 422: the model declared who/text)."""
+    r = _turn([{"role": "user", "content": "can we reflect on my goal?"}])
+    assert r.status_code == 200, r.text
+
+
+def test_turn_accepts_legacy_who_text_history():
+    """The shape the shipped widget sends must keep working."""
+    r = _turn([{"who": "student", "text": "just tell me the answer please"}])
+    assert r.status_code == 200, r.text
+
+
+def test_turn_drops_unlabelable_history_instead_of_422():
+    r = _turn(
+        [
+            "nope",
+            42,
+            {"content": "no speaker"},
+            {"role": "wizard"},
+            {"role": "user", "content": "ok"},
+        ]
+    )
+    assert r.status_code == 200, r.text
+
+
+def test_quad_recent_normalizes_both_spellings():
+    """Same normalization as the host edge, since both share core.domain.dialogue."""
+    from app.integrations.quad.schemas import coerce_quad_recent
+
+    assert [(t.role, t.content) for t in coerce_quad_recent([{"who": "tutor", "text": "hi"}])] == [
+        ("assistant", "hi")
+    ]
+    assert coerce_quad_recent([{"role": "wizard", "content": "x"}]) == []
+
+
 # ── PII boundary (privacy is the hard constraint) ─────────────────────────────
 
 

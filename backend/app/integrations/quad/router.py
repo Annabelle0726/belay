@@ -146,7 +146,10 @@ def build_router(
             "stance": req.stance,
             "source": req.source,
             "result": req.gradingspec_result,
-            "recent": [t.model_dump() for t in req.recent],
+            # Same edge contract as /api/sol/turn: the wire carries {role, content},
+            # the agent layer reads {who, text}. The sidecar has no pack in hand here,
+            # so the persona id comes from the active pack.
+            "recent": [t.as_turn().as_dialogue(get_active_pack().persona.id) for t in req.recent],
             "signals": req.signals,
             "request": payload.get("request"),  # e.g. "reflect" (student-initiated)
             # Optional per-learner customization overlay; floor-checked in run_turn.
