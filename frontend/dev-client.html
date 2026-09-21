@@ -4,8 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Sol — backend dev client</title>
-  <!-- 引入 marked.js 用于渲染 Sol 的 Markdown 响应 -->
+  <!-- marked.js: Markdown -> HTML for Sol's replies -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- DOMPurify: sanitize the rendered HTML before it reaches the DOM (XSS) -->
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.8/dist/purify.min.js"></script>
 
   <style>
     /* ---- design tokens ---- */
@@ -23,7 +25,7 @@
       --font-body: clamp(.85rem, .35vw + .75rem, .95rem);
       --font-code: clamp(.8rem, .3vw + .7rem, .9rem);
 
-      /* 放宽右侧响应区域，提升阅读体验 */
+      /* Wider reply column: the tutor's prose is the reading surface here */
       --right-col: clamp(26rem, 38vw, 42rem);
       --editor-h: clamp(16rem, 35vh, 32rem);
       --bar-h: .5rem;
@@ -51,7 +53,6 @@
       --warn-soft: #e7a93e15;
       --warn-text: #f0bd66;
 
-      /* 用于 Markdown 加粗高亮的颜色（深色模式用亮红色） */
       --highlight-red: #f87171;
 
       --accent-teal: #49ccba;
@@ -82,7 +83,6 @@
       --warn-soft: #fef3c7;
       --warn-text: #b45309;
 
-      /* 用于 Markdown 加粗高亮的颜色（浅色模式用深红色） */
       --highlight-red: #dc2626;
 
       --accent-teal: #0d9488;
@@ -101,13 +101,11 @@
       overflow-x: hidden;
     }
 
-    /* ---- Elegant Scrollbar for webkit ---- */
     ::-webkit-scrollbar { width: 8px; height: 8px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
     ::-webkit-scrollbar-thumb:hover { background-color: var(--muted); }
 
-    /* ---- Header Refactored ---- */
     .app-header {
       display: flex;
       flex-wrap: wrap;
@@ -159,7 +157,6 @@
       margin-left: auto;
     }
 
-    /* ---- theme switch ---- */
     .segmented {
       display: flex;
       gap: .15rem;
@@ -181,14 +178,13 @@
     }
     .segmented button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); font-weight: 600; }
 
-    /* ---- Two-column layout ---- */
     main {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, var(--right-col));
       align-items: start;
       gap: calc(var(--gap) * 1.5);
       padding: var(--pad-page);
-      max-width: 1600px; /* 稍微放大整体页面容器 */
+      max-width: 1600px;
       margin: 0 auto;
     }
 
@@ -214,12 +210,11 @@
 
     .actions {
       display: flex;
-      align-items: center; /* 确保文字和按钮水平居中对齐 */
+      align-items: center;
       gap: 12px;
       margin-top: calc(var(--gap) * 0.5);
     }
 
-    /* ---- Cards ---- */
     .card {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -229,9 +224,8 @@
       width: 100%;
     }
 
-    /* 优化标题与内容的间距，使其更紧凑 */
     .card-title {
-      margin: 0 0 10px; /* 从 var(--gap) 缩小为 10px */
+      margin: 0 0 10px;
       color: var(--text);
       font-size: .8rem;
       font-weight: 700;
@@ -241,10 +235,9 @@
       align-items: center;
       justify-content: space-between;
       border-bottom: 1px solid var(--border);
-      padding-bottom: 8px; /* 缩小底部内边距 */
+      padding-bottom: 8px;
     }
 
-    /* ---- Controls ---- */
     select, button, input {
       background: var(--field-bg);
       color: var(--text);
@@ -272,7 +265,6 @@
 
     .field { flex: 1 1 12rem; min-width: 0; }
 
-    /* ---- Editor ---- */
     textarea {
       display: block;
       width: 100%;
@@ -288,7 +280,6 @@
     }
     textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 
-    /* ---- Scrollable Output Areas ---- */
     .scroll-output {
       margin: 0;
       padding: 1rem;
@@ -307,11 +298,10 @@
       font-family: var(--font-body);
       font-size: 0.95em;
       line-height: 1.6;
-      white-space: normal; /* 覆盖 pre-wrap 允许正常折行 */
+      white-space: normal;
     }
     .markdown-body p { margin-top: 0; margin-bottom: 0.8em; }
     .markdown-body p:last-child { margin-bottom: 0; }
-    /* 【需求 2】加粗字体自动标红高亮 */
     .markdown-body strong {
       color: var(--highlight-red);
       font-weight: 700;
@@ -340,7 +330,6 @@
       color: var(--code-text);
     }
 
-    /* ---- glass box bits ---- */
     .bar { flex: 1 1 auto; height: var(--bar-h); min-width: 3rem; background: var(--bar-track); border-radius: var(--radius-pill); overflow: hidden; }
     .bar > span { display: block; width: 0; height: 100%; background: var(--accent-teal); transition: width .4s cubic-bezier(0.4, 0, 0.2, 1); }
     .pill {
@@ -368,7 +357,6 @@
 
     .muted { color: var(--muted); }
 
-    /* ---- narrow viewports ---- */
     @media (max-width: 65rem) {
       main { grid-template-columns: minmax(0, 1fr); gap: var(--gap); }
       .col-right { position: relative; top: 0; order: 2; }
@@ -414,18 +402,18 @@
         <select id="mode"><option value="study">Study</option><option value="teach">Teach</option></select>
       </div>
       <div style="padding: 12px; background: var(--surface-2); border-radius: 6px; border: 1px solid var(--border);">
-        <p id="prompt" style="margin: 0; font-size: 0.9em; color: var(--text);user-select: none; -webkit-user-select: none; -ms-user-select: none;"></p>
+        <!-- Exercise prompt: selectable so it can be copied while working -->
+        <p id="prompt" style="margin: 0; font-size: 0.9em; color: var(--text);"></p>
       </div>
     </div>
 
     <div class="card stack">
-      <!-- 移除了这里的 status span -->
       <label class="card-title" for="source">Code Editor</label>
       <textarea id="source" spellcheck="false"></textarea>
-      <!-- 【需求 1】将 Status 移入 actions 并与按钮对齐 -->
       <div class="actions">
         <button id="run" class="btn-primary">Synthesize &amp; Run</button>
         <button id="ask">Ask Sol</button>
+        <input id="question" class="field" type="text" placeholder="Ask Sol something specific (optional)…" autocomplete="off" />
         <span id="status" class="muted" style="font-size: 0.85em; font-weight: 500;"></span>
       </div>
     </div>
@@ -440,9 +428,9 @@
   <section class="col-right">
     <div class="card stack" style="border-top: 3px solid var(--accent);">
       <div class="card-title">Sol Response</div>
-      <!-- 【需求 2】改为 div 并加上 markdown-body 类以支持富文本渲染 -->
       <div id="solmsg" class="scroll-output markdown-body">—</div>
-      <p id="solq" style="margin: 0; font-size: 0.9em; color: var(--accent-teal); font-weight: 500;"></p>
+      <!-- check_question shares the reply's markdown styling -->
+      <div id="solq" class="markdown-body" style="margin-top: 8px; font-size: 0.9em; color: var(--accent-teal); font-weight: 500;"></div>
     </div>
 
     <div class="card stack">
@@ -513,10 +501,89 @@
   const PID = "p_dev";
   let EXERCISES = {};
 
+  // Dialogue history for the /api/sol/turn `recent` window. The wire shape is
+  // {role, content} — the same shape the backend's RecentTurn declares — and it is
+  // capped so one long session cannot grow the payload without bound.
+  const MAX_RECENT_TURNS = 12; // ~6 exchanges
+  let recentHistory = [];
+  // Exposed for the same reason the endpoint is: this is a dev client, and watching
+  // the history window grow is how you tell the context story is actually wired.
+  window.solHistory = () => recentHistory.slice();
+
+  // marked: do not pass raw HTML through
+  marked.setOptions({
+    gfm: true,
+    breaks: true
+  });
+
+  /**
+   * Render Markdown safely. Sol's reply is model output, so it is untrusted text:
+   * parse it, sanitize the result, then harden any external link.
+   */
+  function renderSafeMarkdown(text) {
+    if (!text) return "—";
+
+    // 1. Markdown -> HTML
+    const rawHtml = marked.parse(text);
+
+    // 2. Sanitize (strips scripts and event handlers; keeps safe HTML only)
+    const cleanHtml = DOMPurify.sanitize(rawHtml, {
+      USE_PROFILES: { html: true },
+      ADD_ATTR: ['target', 'rel']
+    });
+
+    // 3. External links open in a new tab, without handing over the opener
+    const tempDiv = document.createElement("div");
+    tempDiv.innerHTML = cleanHtml;
+    tempDiv.querySelectorAll("a").forEach(a => {
+      a.setAttribute("target", "_blank");
+      a.setAttribute("rel", "noopener noreferrer");
+    });
+
+    return tempDiv.innerHTML;
+  }
+
   function base() { return $("backend").value.replace(/\/$/, ""); }
+
+  /**
+   * A 4xx body carries FastAPI's validation detail. Read it so a rejected request
+   * reports the offending field instead of a bare status — the same thing the
+   * Network tab shows, surfaced where the developer is already looking.
+   */
+  async function readBody(r) {
+    try { return await r.json(); } catch (e) { return null; }
+  }
+
+  function describeValidation(detail) {
+    if (!Array.isArray(detail)) return String(detail || "rejected");
+    return detail.map((d) => `${(d.loc || []).join(".")}: ${d.msg || d.type}`).join("; ");
+  }
+
+  // Rendered to plain text instead of innerHTML: this string can quote the rejection
+  // detail, which can quote submitted values.
+  function statusText(node, html) {
+    const d = document.createElement("div");
+    d.innerHTML = html;
+    node.textContent = d.textContent;
+  }
+
+  function trimHistory() {
+    if (recentHistory.length > MAX_RECENT_TURNS) {
+      recentHistory = recentHistory.slice(-MAX_RECENT_TURNS);
+    }
+  }
+
   async function jpost(path, body) {
-    const r = await fetch(base() + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    if (!r.ok) throw new Error(path + " -> " + r.status);
+    const r = await fetch(base() + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) {
+      const detail = await readBody(r);
+      const reason = detail && detail.detail ? describeValidation(detail.detail) : "";
+      throw new Error(`${path} -> ${r.status}${reason ? ": " + reason : ""}`);
+    }
     return r.json();
   }
 
@@ -536,10 +603,14 @@
       console.error(e);
     }
   }
+
   function pick() {
     const ex = EXERCISES[$("exercise").value]; if (!ex) return;
     $("prompt").textContent = ex.prompt;
     $("source").value = ex.starter;
+    // A different exercise is a different conversation: history from the previous
+    // one would be sent as context for a problem it does not describe.
+    recentHistory = [];
   }
 
   let lastResult = null;
@@ -561,7 +632,6 @@
         if (lastResult.tvd !== undefined) metaParts.push(`tvd=${(+lastResult.tvd).toFixed(3)}`);
 
         const metaHeader = metaParts.length > 0 ? metaParts.join("  ") + "\n" : "";
-
         const distStr = Array.isArray(lastResult.dist)
                 ? lastResult.dist.map((d) => `${d.bits}: ${(d.p * 100).toFixed(0)}%`).join("   ") + "\n"
                 : "";
@@ -581,20 +651,52 @@
   async function ask(event) {
     $("status").textContent = "Sol is thinking...";
     try {
-      const out = await jpost("/api/sol/turn", {
-        participant_id: PID, exercise_id: $("exercise").value,
-        event: event || "chat", mode: $("mode").value, stance: "peer",
-        source: $("source").value, result: lastResult, recent: [],
-      });
+      const typed = ($("question").value || "").trim();
+      // 1. Context for this turn. `recent` holds PRIOR turns in the {role, content}
+      //    shape the backend's RecentTurn declares; the current message travels in
+      //    `source` + the `event` flag, so it is appended only after a successful
+      //    turn (below) — that keeps the window step-aligned with the server's view
+      //    of the same conversation.
+      const payload = {
+        participant_id: PID,
+        exercise_id: $("exercise").value,
+        event: event || "chat",
+        mode: $("mode").value,
+        stance: "peer",
+        source: $("source").value,
+        result: lastResult,
+        recent: recentHistory.slice(-MAX_RECENT_TURNS),
+      };
 
-      // 【需求 2】使用 marked.js 渲染 Markdown
-      $("solmsg").innerHTML = out.message ? marked.parse(out.message) : "—";
+      const out = await jpost("/api/sol/turn", payload);
 
-      $("solq").textContent = out.check_question ? "↳ " + out.check_question : "";
+      // 2. Render the reply as sanitized markdown
+      $("solmsg").innerHTML = renderSafeMarkdown(out.message);
+
+      // 3. check_question shares the reply surface
+      if (out.check_question) {
+        $("solq").innerHTML = "↳ " + renderSafeMarkdown(out.check_question);
+      } else {
+        $("solq").innerHTML = "";
+      }
+
+      // 4. Record the exchange. The user entry is what the backend's floor checks
+      //    read as student speech, so prefer the typed question and fall back to an
+      //    explicit action marker — never an empty string, which would read as a
+      //    silent turn.
+      const userContent = typed || (event === "run" ? "[Ran code]" : "[Asked Sol for help]");
+      let solContent = out.message || "";
+      if (out.check_question) solContent += "\n\n" + out.check_question;
+      recentHistory.push({ role: "user", content: userContent });
+      recentHistory.push({ role: "assistant", content: solContent });
+      trimHistory();
+      $("question").value = "";
+
+      // 5. Glass-box telemetry for this turn
       $("affect").textContent = `affect: ${out.affective_state || '—'}`;
       $("interv").textContent = `intervention: ${out.intervention || '—'}`;
       const c = Math.round((out.confidence || 0) * 100);
-      $("confbar").style.width = c + "%"; $("conf").textContent = c + "%";
+      $("confbar").style.width = c + "\%"; $("conf").textContent = c + "%";
       $("planner").textContent = out.planner_note || "—";
       $("planner").title = out.planner_note || "";
       const se = out.components?.self_eval || {};
@@ -606,10 +708,12 @@
       $("mem").title = $("mem").textContent;
       const t = out.components?.timings_ms || {};
       $("timings").textContent = Object.keys(t).length > 0 ? Object.entries(t).map(([k, v]) => `${k}=${v}`).join(" ") : "—";
+
       $("status").textContent = "";
     } catch (e) {
+      // A rejected turn is reported without dumping the learner's text into the DOM.
       $("status").textContent = "";
-      $("solmsg").innerHTML = `<span style="color: var(--highlight-red);">Error connecting to Sol:<br>${String(e)}</span>`;
+      statusText($("solmsg"), `<span style="color: var(--highlight-red);">Error talking to Sol:<br>${String(e)}</span>`);
     }
   }
 
@@ -617,6 +721,7 @@
   $("backend").addEventListener("change", loadCurriculum);
   $("run").addEventListener("click", () => run().then(() => ask("run")));
   $("ask").addEventListener("click", () => ask("chat"));
+  $("question").addEventListener("keydown", (e) => { if (e.key === "Enter") ask("chat"); });
   loadCurriculum();
 </script>
 </body>
