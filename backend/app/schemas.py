@@ -6,11 +6,72 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+class RecentTurn(BaseModel):
+    """One turn of the client's `recent` history window (the canonical wire shape).
+
+    Built through `coerce_recent_turns`, which also accepts the legacy spelling, so
+    the strict field patterns here are the *post-normalization* contract.
+    """
+
+    role: str = Field(..., pattern="^(user|assistant)$")
+    content: str = ""
+
+
+#: Raw-history spelling -> canonical wire role. The agent layer reads the history to
+#: decide whether the STUDENT asked for the answer or signalled distress (the safety
+#: floors), so this map is deliberately explicit: anything not listed is dropped rather
+#: than guessed, and can never masquerade as student speech.
+_ROLE_ALIASES = {
+    "user": "user",
+    "student": "user",
+    "learner": "user",
+    "assistant": "assistant",
+    "sol": "assistant",
+    "tutor": "assistant",
+    "system": "assistant",
+}
+
+
+def coerce_recent_turns(raw: object) -> list[RecentTurn]:
+    """Normalize a client's `recent` history window onto `RecentTurn`.
+
+    Canonical wire shape is ``{"role": "user"|"assistant", "content": "..."}``. The
+    legacy ``{"who": "student"|"tutor", "text": "..."}`` spelling — still sent by the
+    embeddable widget, which may be cached in a host page — normalizes onto the same
+    model, so both clients validate.
+
+    A malformed entry (not an object, no role, or an unknown role) is DROPPED rather
+    than coerced or rejected: coercing a mislabelled turn could let it masquerade as
+    student speech at the floor checks, while a 422 would cost the learner their
+    reply over one junk history line.
+    """
+    if not isinstance(raw, list):
+        return []
+    turns: list[RecentTurn] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        raw_role = item.get("role", item.get("who"))
+        raw_text = item.get("content", item.get("text", ""))
+        role = _ROLE_ALIASES.get(str(raw_role).strip().lower()) if raw_role is not None else None
+        if role is None:
+            continue
+        turns.append(RecentTurn(role=role, content="" if raw_text is None else str(raw_text)))
+    return turns
 
 
 class DialogueTurn(BaseModel):
-    who: str  # "student" | the active pack's persona id (e.g. "sol"), supplied through the seam
+    """An *internal* dialogue turn: ``who`` is ``"student"`` or the active pack's
+    persona id.
+
+    This is the shape the agent layer reads as ``recent_dialogue`` — `RecentTurn` is
+    what crosses the HTTP edge, and ``main.sol_turn`` translates between the two.
+    """
+
+    who: str
     text: str
 
 
@@ -45,11 +106,32 @@ class SolTurnRequest(BaseModel):
     mode: str = Field("study", pattern="^(study|teach)$")
     stance: str = Field("peer", pattern="^(peer|oracle|control)$")
     source: str = ""
-    result: dict | None = None
-    recent: list[DialogueTurn] = []
+    # The run envelope as the client echoes it back (RunResult shape). Accepts Any so a
+    # client that wraps or extends the envelope still validates; a non-mapping value is
+    # dropped by the validator below rather than crashing the turn in `context.py`.
+    result: Any | None = None
+    recent: list[RecentTurn] = Field(default_factory=list)
     signals: dict | None = None
     request: str | None = None  # e.g. "reflect" — student-initiated reflect
     overlay: dict | None = None  # opt-in per-learner customization overlay (bounded)
+
+    @field_validator("recent", mode="before")
+    @classmethod
+    def _normalize_recent(cls, v: object) -> list[RecentTurn]:
+        """Accept both history spellings and drop unlabelable entries: one junk
+        history line must not cost the learner their reply (see
+        `coerce_recent_turns`)."""
+        return coerce_recent_turns(v)
+
+    @field_validator("result", mode="before")
+    @classmethod
+    def _result_must_be_a_mapping(cls, v: object) -> object:
+        """`context._last_result` calls ``.get`` on this, so anything that is not a
+        mapping (a list, a string, a number) would 500 the turn. Drop it to ``None``
+        — the tutor then reads "no run yet", which is the honest degradation."""
+        if v is None or isinstance(v, dict):
+            return v
+        return None
 
 
 class Memory(BaseModel):

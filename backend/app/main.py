@@ -27,10 +27,13 @@ Consent gating (DMP §3 / IRB)
 
 from __future__ import annotations
 
+import logging
 import uuid
 
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from .agent import distress as distress_mod
 from .agent import get_llm, run_turn
@@ -51,6 +54,14 @@ from .schemas import (
 )
 from .store import ConsentRouter, InMemoryStore, SqlStore, make_event
 
+_log = logging.getLogger("Belay.http")
+
+# Without a root handler the boundary logs are dropped (the root level defaults to
+# WARNING), which is exactly the debug trail a 422 needs. `basicConfig` is a no-op if
+# the embedding process already configured logging (uvicorn does), so this only takes
+# effect for a bare `python -c` / notebook import.
+logging.basicConfig(level=logging.INFO)
+
 app = FastAPI(title="Peer-Tutor Framework", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
@@ -58,6 +69,28 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def _log_rejected_body(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """Log WHY a body was rejected, then return the normal 422.
+
+    FastAPI already returns the field locations in `detail`, but the server log is
+    where a 422 has to be diagnosable — the browser console cannot tell you whether
+    the edge rejected `recent[0].role` or `result`.
+
+    Deliberately logs the JSON pointer and the reason, NEVER the submitted value:
+    `recent`/`source` carry the learner's own words, and a validation log must not
+    become a second copy of them (PRIVACY.md). A test pins this.
+    """
+    _log.warning(
+        "422 %s %s rejected: %s",
+        request.method,
+        request.url.path,
+        "; ".join(f"{'/'.join(str(p) for p in e['loc'])} ({e['type']})" for e in exc.errors()),
+    )
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
 
 # --- wiring (swappable via env) ----------------------------------------------
 _durable = SqlStore() if settings.store_backend == "sql" else InMemoryStore()
@@ -135,13 +168,44 @@ def sol_turn(req: SolTurnRequest):
         "stance": req.stance,
         "source": req.source,
         "result": req.result,
-        "recent": [t.model_dump() for t in req.recent],
+        # The wire carries {role, content}; the agent layer reads recent_dialogue as
+        # {who, text} with "student" for the learner. Translate once, here, so the
+        # floor checks (_student_asked_for_answer / _student_wants_reflect /
+        # _latest_student_message) keep their single vocabulary.
+        "recent": [
+            {
+                "who": "student"
+                if t.role == "user"
+                else _pack.persona.id,  # persona id from the pack seam, never a literal
+                "text": t.content,
+            }
+            for t in req.recent
+        ],
         "signals": req.signals,
         "request": req.request,
         "overlay": req.overlay,
     }
     # Route events + learner-state writes to durable or ephemeral by consent.
     store = _router.store_for(req.participant_id)
+    # One line per accepted turn, for the "did my payload arrive?" question. INFO with
+    # metadata only — set BELAY_LOG_LEVEL=DEBUG to also get the request body summary
+    # (counts and shapes, still no learner text).
+    _log.info(
+        "turn pid=%s exercise=%s event=%s mode=%s stance=%s history=%d result=%s",
+        req.participant_id,
+        req.exercise_id,
+        req.event,
+        req.mode,
+        req.stance,
+        len(req.recent),
+        "yes" if req.result else "none",
+    )
+    _log.debug(
+        "turn body: recent=%s result_keys=%s source_chars=%d",
+        [(t.role, len(t.content)) for t in req.recent],
+        sorted(req.result) if isinstance(req.result, dict) else None,
+        len(req.source),
+    )
     try:
         return run_turn(payload, _llm(), store)
     except Exception as e:  # surface a clean error; the front-end shows a graceful note
