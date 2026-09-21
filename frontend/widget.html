@@ -134,7 +134,7 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
 const baseURL = () => $("base").value.replace(/\/$/, "");
-const recent = [];   // dialogue history for the turn loop
+const recent = [];   // dialogue history for the turn loop, as {role, content}
 
 function addMsg(who, text) {
   const d = document.createElement("div");
@@ -198,7 +198,7 @@ function renderSignals(t) {
 
 $("send").addEventListener("click", async () => {
   const text = $("say").value.trim();
-  if (text) { addMsg("student", text); recent.push({ who: "student", text }); $("say").value = ""; }
+  if (text) { addMsg("student", text); recent.push({ role: "user", content: text }); $("say").value = ""; }
   const body = {
     pseudo_id: $("pid").value, exercise_id: $("ex").value, stance: $("stance").value,
     event: "chat", mode: "study", source: "", recent: recent.slice(-8),
@@ -209,7 +209,7 @@ $("send").addEventListener("click", async () => {
   if (status !== 200) { addMsg("tutor", "(" + status + ") " + (data.detail || JSON.stringify(data))); return; }
   addMsg("tutor", data.message || "(no message)");
   if (data.check_question) addMsg("tutor", data.check_question);
-  recent.push({ who: "tutor", text: data.message || "" });
+  recent.push({ role: "assistant", content: data.message || "" });
   renderSignals(data);
   // Surface any declined overlay field (floor check) without echoing the raw value.
   const decl = ((data.components || {}).overlay_declined) || [];
