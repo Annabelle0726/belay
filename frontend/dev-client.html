@@ -28,6 +28,9 @@
       /* Wider reply column: the tutor's prose is the reading surface here */
       --right-col: clamp(26rem, 38vw, 42rem);
       --editor-h: clamp(16rem, 35vh, 32rem);
+      /* Conversation pane: tall enough to read several turns, still capped so the
+         telemetry below it stays within reach instead of being pushed a page down. */
+      --chat-h: clamp(22rem, 70vh, 60rem);
       --bar-h: .5rem;
     }
 
@@ -293,6 +296,76 @@
       overflow-y: auto;
     }
 
+    /* ---- Conversation feed ----
+       Bubbles are styled here rather than inline in the append path: inline styles
+       bypass the token layer (so they cannot follow the theme) and cannot carry a
+       media query. The marker/tutor variants are what tells a real student question
+       apart from an action marker when reading the transcript back. */
+    .chat-feed {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      padding: 0.75rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-control);
+      white-space: normal;
+      max-height: var(--chat-h);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+    .chat-empty {
+      color: var(--muted);
+      font-size: 0.85em;
+      text-align: center;
+      padding: 1rem 0;
+    }
+    .bubble {
+      max-width: 85%;
+      padding: 0.5rem 0.75rem;
+      border-radius: var(--radius-control);
+      word-break: break-word;
+      font-size: 0.9em;
+    }
+    /* The learner */
+    .bubble-user { align-self: flex-end; background: var(--surface-2); border: 1px solid var(--border-strong); }
+    /* Sol's turn: full width, because its prose is the reading surface. Released from
+       the .bubble max-width below, which is sized for the learner's short messages. */
+    .bubble-tutor {
+      align-self: flex-start;
+      width: 100%;
+      max-width: none;
+      padding: 0.75rem 0.9rem;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+    }
+    /* A synthetic marker ("[Ran code]") is not a student utterance, so it must not
+       read like one: muted and italic, against the user bubble's normal weight. */
+    .bubble-marker {
+      align-self: flex-end;
+      background: transparent;
+      border: 1px dashed var(--border-strong);
+      color: var(--muted);
+      font-size: 0.8em;
+      font-style: italic;
+    }
+    .bubble-error {
+      align-self: flex-start;
+      width: 100%;
+      background: var(--surface-2);
+      border: 1px solid var(--highlight-red);
+      color: var(--highlight-red);
+      font-size: 0.85em;
+    }
+    .check-question {
+      margin-top: 0.6rem;
+      padding-top: 0.5rem;
+      border-top: 1px dashed var(--border);
+      color: var(--accent-teal);
+      font-weight: 500;
+    }
+
     /* ---- Markdown Render Styles ---- */
     .markdown-body {
       font-family: var(--font-body);
@@ -426,11 +499,14 @@
 
   <!-- Right Column -->
   <section class="col-right">
+    <!-- Conversation Stream Panel: displays appended turns instead of overwriting -->
     <div class="card stack" style="border-top: 3px solid var(--accent);">
-      <div class="card-title">Sol Response</div>
-      <div id="solmsg" class="scroll-output markdown-body">—</div>
-      <!-- check_question shares the reply's markdown styling -->
-      <div id="solq" class="markdown-body" style="margin-top: 8px; font-size: 0.9em; color: var(--accent-teal); font-weight: 500;"></div>
+      <div class="card-title">
+        <span>Conversation Feed</span>
+      </div>
+      <div id="chat-feed" class="chat-feed">
+        <div id="chat-empty" class="chat-empty">— Conversation history will appear here —</div>
+      </div>
     </div>
 
     <div class="card stack">
@@ -506,8 +582,7 @@
   // capped so one long session cannot grow the payload without bound.
   const MAX_RECENT_TURNS = 12; // ~6 exchanges
   let recentHistory = [];
-  // Exposed for the same reason the endpoint is: this is a dev client, and watching
-  // the history window grow is how you tell the context story is actually wired.
+  // Exposed for dev inspection.
   window.solHistory = () => recentHistory.slice();
 
   // marked: do not pass raw HTML through
@@ -559,8 +634,6 @@
     return detail.map((d) => `${(d.loc || []).join(".")}: ${d.msg || d.type}`).join("; ");
   }
 
-  // Rendered to plain text instead of innerHTML: this string can quote the rejection
-  // detail, which can quote submitted values.
   function statusText(node, html) {
     const d = document.createElement("div");
     d.innerHTML = html;
@@ -611,6 +684,10 @@
     // A different exercise is a different conversation: history from the previous
     // one would be sent as context for a problem it does not describe.
     recentHistory = [];
+
+    // Reset UI conversation feed on exercise switch to stay aligned with recentHistory
+    const feed = $("chat-feed");
+    feed.innerHTML = '<div id="chat-empty" class="muted" style="font-size: 0.85em; text-align: center; padding: 1rem 0;">— Conversation history will appear here —</div>';
   }
 
   let lastResult = null;
@@ -652,11 +729,8 @@
     $("status").textContent = "Sol is thinking...";
     try {
       const typed = ($("question").value || "").trim();
-      // 1. Context for this turn. `recent` holds PRIOR turns in the {role, content}
-      //    shape the backend's RecentTurn declares; the current message travels in
-      //    `source` + the `event` flag, so it is appended only after a successful
-      //    turn (below) — that keeps the window step-aligned with the server's view
-      //    of the same conversation.
+      const userContent = typed || (event === "run" ? "[Ran code]" : "[Asked Sol for help]");
+
       const payload = {
         participant_id: PID,
         exercise_id: $("exercise").value,
@@ -670,21 +744,34 @@
 
       const out = await jpost("/api/sol/turn", payload);
 
-      // 2. Render the reply as sanitized markdown
-      $("solmsg").innerHTML = renderSafeMarkdown(out.message);
+      // Remove the initial empty placeholder if present
+      const emptyNotice = $("chat-empty");
+      if (emptyNotice) emptyNotice.remove();
 
-      // 3. check_question shares the reply surface
+      // 1. Append the learner's turn. An action marker ("[Ran code]") is not a
+      //    student utterance, so it gets its own class and does not read like one.
+      const feed = $("chat-feed");
+      const userBubble = document.createElement("div");
+      userBubble.className = "bubble " + (typed ? "bubble-user" : "bubble-user bubble-marker");
+      userBubble.textContent = userContent;
+      feed.appendChild(userBubble);
+
+      // 2. Append Sol's turn as sanitized markdown
+      const solBubble = document.createElement("div");
+      solBubble.className = "bubble bubble-tutor markdown-body";
+
+      let responseHtml = renderSafeMarkdown(out.message);
       if (out.check_question) {
-        $("solq").innerHTML = "↳ " + renderSafeMarkdown(out.check_question);
-      } else {
-        $("solq").innerHTML = "";
+        responseHtml += `<div class="check-question">↳ ${renderSafeMarkdown(out.check_question)}</div>`;
       }
 
-      // 4. Record the exchange. The user entry is what the backend's floor checks
-      //    read as student speech, so prefer the typed question and fall back to an
-      //    explicit action marker — never an empty string, which would read as a
-      //    silent turn.
-      const userContent = typed || (event === "run" ? "[Ran code]" : "[Asked Sol for help]");
+      solBubble.innerHTML = responseHtml;
+      feed.appendChild(solBubble);
+
+      // Scroll the chat stream to the newest message
+      feed.scrollTop = feed.scrollHeight;
+
+      // 3. Record exchange in client state and trim window
       let solContent = out.message || "";
       if (out.check_question) solContent += "\n\n" + out.check_question;
       recentHistory.push({ role: "user", content: userContent });
@@ -692,7 +779,7 @@
       trimHistory();
       $("question").value = "";
 
-      // 5. Glass-box telemetry for this turn
+      // 4. Glass-box telemetry for this turn
       $("affect").textContent = `affect: ${out.affective_state || '—'}`;
       $("interv").textContent = `intervention: ${out.intervention || '—'}`;
       const c = Math.round((out.confidence || 0) * 100);
@@ -711,9 +798,13 @@
 
       $("status").textContent = "";
     } catch (e) {
-      // A rejected turn is reported without dumping the learner's text into the DOM.
       $("status").textContent = "";
-      statusText($("solmsg"), `<span style="color: var(--highlight-red);">Error talking to Sol:<br>${String(e)}</span>`);
+      const feed = $("chat-feed");
+      const errBubble = document.createElement("div");
+      errBubble.className = "bubble bubble-error";
+      statusText(errBubble, `Error talking to Sol:<br>${String(e)}`);
+      feed.appendChild(errBubble);
+      feed.scrollTop = feed.scrollHeight;
     }
   }
 
