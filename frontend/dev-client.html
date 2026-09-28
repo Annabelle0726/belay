@@ -1,819 +1,989 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Sol — backend dev client</title>
-  <!-- marked.js: Markdown -> HTML for Sol's replies -->
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <!-- DOMPurify: sanitize the rendered HTML before it reaches the DOM (XSS) -->
-  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.8/dist/purify.min.js"></script>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Sol — backend dev client</title>
+    <link rel="icon" type="image/svg+xml" href="AI-Powered-Spark.svg"/>
+    <!-- marked.js: Markdown -> HTML for Sol's replies -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- DOMPurify: sanitize the rendered HTML before it reaches the DOM (XSS) -->
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.8/dist/purify.min.js"></script>
 
-  <style>
-    /* ---- design tokens ---- */
-    :root {
-      --radius-card: 12px;
-      --radius-control: 8px;
-      --radius-pill: 999px;
+    <style>
+        /* ---- design tokens ---- */
+        :root {
+            --radius-card: 12px;
+            --radius-control: 8px;
+            --radius-pill: 999px;
 
-      --pad-card: clamp(16px, 1.5vw + 8px, 24px);
-      --pad-page: clamp(16px, 2vw + 8px, 32px);
-      --gap: clamp(12px, 1vw + 6px, 20px);
-      --pad-control: .6rem .8rem;
-      --pad-pill: .2rem .6rem;
+            --pad-card: clamp(16px, 1.5vw + 8px, 24px);
+            --pad-page: clamp(16px, 2vw + 8px, 32px);
+            --gap: clamp(12px, 1vw + 6px, 20px);
+            --pad-control: .6rem .8rem;
+            --pad-pill: .2rem .6rem;
 
-      --font-body: clamp(.85rem, .35vw + .75rem, .95rem);
-      --font-code: clamp(.8rem, .3vw + .7rem, .9rem);
+            --font-body: clamp(.85rem, .35vw + .75rem, .95rem);
+            --font-code: clamp(.8rem, .3vw + .7rem, .9rem);
 
-      /* Wider reply column: the tutor's prose is the reading surface here */
-      --right-col: clamp(26rem, 38vw, 42rem);
-      --editor-h: clamp(16rem, 35vh, 32rem);
-      /* Conversation pane: tall enough to read several turns, still capped so the
-         telemetry below it stays within reach instead of being pushed a page down. */
-      --chat-h: clamp(22rem, 70vh, 60rem);
-      --bar-h: .5rem;
-    }
+            /* Wider reply column: the tutor's prose is the reading surface here */
+            --right-col: clamp(26rem, 38vw, 42rem);
+            --editor-h: clamp(16rem, 35vh, 32rem);
+            /* Conversation pane: tall enough to read several turns, still capped so the
+               telemetry below it stays within reach instead of being pushed a page down. */
+            --chat-h: clamp(22rem, 70vh, 60rem);
+            --bar-h: .5rem;
+        }
 
-    /* ---- dark palette (default) ---- */
-    :root, :root[data-theme="dark"] {
-      color-scheme: dark;
-      --bg: #0b0d11;
-      --surface: #141820;
-      --surface-2: #1c222e;
-      --field-bg: #0b0d11;
-      --code-bg: #06080a;
+        /* ---- dark palette (default) ---- */
+        :root, :root[data-theme="dark"] {
+            color-scheme: dark;
+            --bg: #0b0d11;
+            --surface: #141820;
+            --surface-2: #1c222e;
+            --field-bg: #0b0d11;
+            --code-bg: #06080a;
 
-      --text: #e2e6f0;
-      --muted: #838da3;
-      --code-text: #c0f3d9;
+            --text: #e2e6f0;
+            --muted: #838da3;
+            --code-text: #c0f3d9;
 
-      --border: #262e3d;
-      --border-strong: #333d52;
-      --accent: #456cff;
-      --accent-hover: #5a7dff;
-      --accent-soft: #456cff1a;
-      --warn: #e7a93e;
-      --warn-soft: #e7a93e15;
-      --warn-text: #f0bd66;
+            --border: #262e3d;
+            --border-strong: #333d52;
+            --accent: #456cff;
+            --accent-hover: #5a7dff;
+            --accent-soft: #456cff1a;
+            --warn: #e7a93e;
+            --warn-soft: #e7a93e15;
+            --warn-text: #f0bd66;
 
-      --highlight-red: #f87171;
+            --highlight-red: #f87171;
 
-      --accent-teal: #49ccba;
-      --bar-track: #1c222e;
-      --on-accent: #ffffff;
-      --shadow: 0 4px 20px rgba(0, 0, 0, .25);
-    }
+            --accent-teal: #49ccba;
+            --bar-track: #1c222e;
+            --on-accent: #ffffff;
+            --shadow: 0 4px 20px rgba(0, 0, 0, .25);
+        }
 
-    /* ---- light palette ---- */
-    :root[data-theme="light"] {
-      color-scheme: light;
-      --bg: #f4f6fa;
-      --surface: #ffffff;
-      --surface-2: #edf0f5;
-      --field-bg: #ffffff;
-      --code-bg: #f8fafc;
+        /* ---- light palette ---- */
+        :root[data-theme="light"] {
+            color-scheme: light;
+            --bg: #f4f6fa;
+            --surface: #ffffff;
+            --surface-2: #edf0f5;
+            --field-bg: #ffffff;
+            --code-bg: #f8fafc;
 
-      --text: #1a202c;
-      --muted: #64748b;
-      --code-text: #0f2940;
+            --text: #1a202c;
+            --muted: #64748b;
+            --code-text: #0f2940;
 
-      --border: #d2dce6;
-      --border-strong: #cbd5e1;
-      --accent: #2f4fe0;
-      --accent-hover: #2640b3;
-      --accent-soft: #2f4fe015;
-      --warn: #d97706;
-      --warn-soft: #fef3c7;
-      --warn-text: #b45309;
+            --border: #d2dce6;
+            --border-strong: #cbd5e1;
+            --accent: #2f4fe0;
+            --accent-hover: #2640b3;
+            --accent-soft: #2f4fe015;
+            --warn: #d97706;
+            --warn-soft: #fef3c7;
+            --warn-text: #b45309;
 
-      --highlight-red: #dc2626;
+            --highlight-red: #dc2626;
 
-      --accent-teal: #0d9488;
-      --bar-track: #e2e8f0;
-      --on-accent: #ffffff;
-      --shadow: 0 4px 15px rgba(20, 26, 36, .06);
-    }
+            --accent-teal: #0d9488;
+            --bar-track: #e2e8f0;
+            --on-accent: #ffffff;
+            --shadow: 0 4px 15px rgba(20, 26, 36, .06);
+        }
 
-    * { box-sizing: border-box; }
+        * {
+            box-sizing: border-box;
+        }
 
-    body {
-      margin: 0;
-      background: var(--bg);
-      color: var(--text);
-      font: var(--font-body)/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif;
-      overflow-x: hidden;
-    }
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font: var(--font-body)/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif;
+            overflow-x: hidden;
+        }
 
-    ::-webkit-scrollbar { width: 8px; height: 8px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
-    ::-webkit-scrollbar-thumb:hover { background-color: var(--muted); }
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
 
-    .app-header {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      align-items: center;
-      gap: var(--gap);
-      padding: calc(var(--pad-page) * 0.7) var(--pad-page);
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-    }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
 
-    .header-left {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 12px;
-    }
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-strong);
+            border-radius: 4px;
+            border: 2px solid transparent;
+            background-clip: padding-box;
+        }
 
-    .brand { font-family: Fraunces, Georgia, serif; font-size: 1.2em; font-weight: 600; }
-    .slash { color: var(--border-strong); font-weight: 300; }
-    .course-tag {
-      background: var(--accent-soft);
-      color: var(--accent);
-      padding: 0.2rem 0.6rem;
-      border-radius: 6px;
-      font-size: 0.85em;
-      font-weight: 600;
-      letter-spacing: 0.03em;
-    }
+        ::-webkit-scrollbar-thumb:hover {
+            background-color: var(--muted);
+        }
 
-    .badge {
-      padding: 0.25rem 0.7rem;
-      background: var(--warn-soft);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-pill);
-      color: var(--warn-text);
-      font-size: .75em;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .badge::before { content: ""; display: block; width: 6px; height: 6px; background: var(--warn); border-radius: 50%; }
+        .app-header {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: var(--gap);
+            padding: calc(var(--pad-page) * 0.7) var(--pad-page);
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+        }
 
-    .header-right {
-      display: flex;
-      align-items: center;
-      gap: var(--gap);
-      margin-left: auto;
-    }
+        .header-left {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
 
-    .segmented {
-      display: flex;
-      gap: .15rem;
-      padding: .2rem;
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-pill);
-    }
-    .segmented button {
-      border: 0;
-      background: transparent;
-      color: var(--muted);
-      padding: .25rem .75rem;
-      border-radius: var(--radius-pill);
-      font: inherit;
-      font-size: 0.85em;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .segmented button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+        .brand {
+            font-family: Fraunces, Georgia, serif;
+            font-size: 1.2em;
+            font-weight: 600;
+        }
 
-    main {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, var(--right-col));
-      align-items: start;
-      gap: calc(var(--gap) * 1.5);
-      padding: var(--pad-page);
-      max-width: 1600px;
-      margin: 0 auto;
-    }
+        .slash {
+            color: var(--border-strong);
+            font-weight: 300;
+        }
 
-    .col-left {
-      display: flex;
-      flex-direction: column;
-      gap: calc(var(--gap) * 1.5);
-      width: 100%;
-      min-width: 0;
-    }
+        .course-tag {
+            background: var(--accent-soft);
+            color: var(--accent);
+            padding: 0.2rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.85em;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+        }
 
-    .col-right {
-      display: flex;
-      flex-direction: column;
-      gap: calc(var(--gap) * 1.5);
-      width: 100%;
-      min-width: 0;
-      position: sticky;
-      top: 1.5rem;
-    }
+        .badge {
+            padding: 0.25rem 0.7rem;
+            background: var(--warn-soft);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-pill);
+            color: var(--warn-text);
+            font-size: .75em;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
 
-    .stack { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
+        .badge::before {
+            content: "";
+            display: block;
+            width: 6px;
+            height: 6px;
+            background: var(--warn);
+            border-radius: 50%;
+        }
 
-    .actions {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-top: calc(var(--gap) * 0.5);
-    }
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: var(--gap);
+            margin-left: auto;
+        }
 
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-card);
-      padding: var(--pad-card);
-      box-shadow: var(--shadow);
-      width: 100%;
-    }
+        .segmented {
+            display: flex;
+            gap: .15rem;
+            padding: .2rem;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-pill);
+        }
 
-    .card-title {
-      margin: 0 0 10px;
-      color: var(--text);
-      font-size: .8rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .06em;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 8px;
-    }
+        .segmented button {
+            border: 0;
+            background: transparent;
+            color: var(--muted);
+            padding: .25rem .75rem;
+            border-radius: var(--radius-pill);
+            font: inherit;
+            font-size: 0.85em;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
 
-    select, button, input {
-      background: var(--field-bg);
-      color: var(--text);
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius-control);
-      padding: var(--pad-control);
-      font: inherit;
-      transition: all 0.2s;
-    }
-    input { width: 100%; }
-    button { cursor: pointer; font-weight: 500; }
-    button:hover:not(.btn-primary) { background: var(--surface-2); border-color: var(--muted); }
-    button:focus-visible, input:focus-visible, select:focus-visible {
-      outline: 2px solid var(--accent);
-      outline-offset: 1px;
-      border-color: var(--accent);
-    }
+        .segmented button[aria-pressed="true"] {
+            background: var(--accent);
+            color: var(--on-accent);
+            font-weight: 600;
+        }
 
-    .btn-primary {
-      background: var(--accent);
-      color: var(--on-accent);
-      border-color: var(--accent);
-    }
-    .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+        main {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, var(--right-col));
+            align-items: start;
+            gap: calc(var(--gap) * 1.5);
+            padding: var(--pad-page);
+            max-width: 1600px;
+            margin: 0 auto;
+        }
 
-    .field { flex: 1 1 12rem; min-width: 0; }
+        .col-left {
+            display: flex;
+            flex-direction: column;
+            gap: calc(var(--gap) * 1.5);
+            width: 100%;
+            min-width: 0;
+        }
 
-    textarea {
-      display: block;
-      width: 100%;
-      box-sizing: border-box;
-      height: var(--editor-h);
-      background: var(--code-bg);
-      color: var(--code-text);
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius-control);
-      padding: 1rem;
-      font: var(--font-code)/1.6 "JetBrains Mono", ui-monospace, monospace;
-      resize: vertical;
-    }
-    textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+        .col-right {
+            display: flex;
+            flex-direction: column;
+            gap: calc(var(--gap) * 1.5);
+            width: 100%;
+            min-width: 0;
+            position: sticky;
+            top: 1.5rem;
+        }
 
-    .scroll-output {
-      margin: 0;
-      padding: 1rem;
-      background: var(--code-bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-control);
-      font: var(--font-code)/1.5 "JetBrains Mono", ui-monospace, monospace;
-      white-space: pre-wrap;
-      word-break: break-word;
-      max-height: 40vh;
-      overflow-y: auto;
-    }
+        .stack {
+            display: flex;
+            flex-direction: column;
+            gap: var(--gap);
+            min-width: 0;
+        }
 
-    /* ---- Conversation feed ----
-       Bubbles are styled here rather than inline in the append path: inline styles
-       bypass the token layer (so they cannot follow the theme) and cannot carry a
-       media query. The marker/tutor variants are what tells a real student question
-       apart from an action marker when reading the transcript back. */
-    .chat-feed {
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-      padding: 0.75rem;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-control);
-      white-space: normal;
-      max-height: var(--chat-h);
-      overflow-y: auto;
-      overscroll-behavior: contain;
-    }
-    .chat-empty {
-      color: var(--muted);
-      font-size: 0.85em;
-      text-align: center;
-      padding: 1rem 0;
-    }
-    .bubble {
-      max-width: 85%;
-      padding: 0.5rem 0.75rem;
-      border-radius: var(--radius-control);
-      word-break: break-word;
-      font-size: 0.9em;
-    }
-    /* The learner */
-    .bubble-user { align-self: flex-end; background: var(--surface-2); border: 1px solid var(--border-strong); }
-    /* Sol's turn: full width, because its prose is the reading surface. Released from
-       the .bubble max-width below, which is sized for the learner's short messages. */
-    .bubble-tutor {
-      align-self: flex-start;
-      width: 100%;
-      max-width: none;
-      padding: 0.75rem 0.9rem;
-      background: var(--code-bg);
-      border: 1px solid var(--border);
-      box-shadow: var(--shadow);
-    }
-    /* A synthetic marker ("[Ran code]") is not a student utterance, so it must not
-       read like one: muted and italic, against the user bubble's normal weight. */
-    .bubble-marker {
-      align-self: flex-end;
-      background: transparent;
-      border: 1px dashed var(--border-strong);
-      color: var(--muted);
-      font-size: 0.8em;
-      font-style: italic;
-    }
-    .bubble-error {
-      align-self: flex-start;
-      width: 100%;
-      background: var(--surface-2);
-      border: 1px solid var(--highlight-red);
-      color: var(--highlight-red);
-      font-size: 0.85em;
-    }
-    .check-question {
-      margin-top: 0.6rem;
-      padding-top: 0.5rem;
-      border-top: 1px dashed var(--border);
-      color: var(--accent-teal);
-      font-weight: 500;
-    }
+        .actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: calc(var(--gap) * 0.5);
+        }
 
-    /* ---- Markdown Render Styles ---- */
-    .markdown-body {
-      font-family: var(--font-body);
-      font-size: 0.95em;
-      line-height: 1.6;
-      white-space: normal;
-    }
-    .markdown-body p { margin-top: 0; margin-bottom: 0.8em; }
-    .markdown-body p:last-child { margin-bottom: 0; }
-    .markdown-body strong {
-      color: var(--highlight-red);
-      font-weight: 700;
-    }
-    .markdown-body code {
-      font-family: var(--font-code);
-      background: var(--surface-2);
-      color: var(--code-text);
-      padding: 0.15em 0.35em;
-      border-radius: 4px;
-      font-size: 0.85em;
-      border: 1px solid var(--border);
-    }
-    .markdown-body pre {
-      background: var(--surface-2);
-      padding: 10px;
-      border-radius: 6px;
-      overflow-x: auto;
-      border: 1px solid var(--border-strong);
-      margin-bottom: 0.8em;
-    }
-    .markdown-body pre code {
-      background: transparent;
-      padding: 0;
-      border: none;
-      color: var(--code-text);
-    }
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-card);
+            padding: var(--pad-card);
+            box-shadow: var(--shadow);
+            width: 100%;
+        }
 
-    .bar { flex: 1 1 auto; height: var(--bar-h); min-width: 3rem; background: var(--bar-track); border-radius: var(--radius-pill); overflow: hidden; }
-    .bar > span { display: block; width: 0; height: 100%; background: var(--accent-teal); transition: width .4s cubic-bezier(0.4, 0, 0.2, 1); }
-    .pill {
-      padding: 0.3rem 0.8rem;
-      border-radius: var(--radius-pill);
-      background: var(--surface-2);
-      border: 1px solid var(--border-strong);
-      font-size: .8em;
-      font-weight: 500;
-    }
-    .label {
-      flex: 0 0 6.5rem;
-      color: var(--muted);
-      font-size: .75em;
-      text-transform: uppercase;
-      letter-spacing: .05em;
-      font-weight: 600;
-    }
-    .row {
-      display: flex; flex-wrap: nowrap; width: 100%; align-items: center; gap: var(--gap); margin: 0;
-    }
-    .row-data {
-      font-size: 0.85em; color: var(--text); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
+        .card-title {
+            margin: 0 0 10px;
+            color: var(--text);
+            font-size: .8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 8px;
+        }
 
-    .muted { color: var(--muted); }
+        select, button, input {
+            background: var(--field-bg);
+            color: var(--text);
+            border: 1px solid var(--border-strong);
+            border-radius: var(--radius-control);
+            padding: var(--pad-control);
+            font: inherit;
+            transition: all 0.2s;
+        }
 
-    @media (max-width: 65rem) {
-      main { grid-template-columns: minmax(0, 1fr); gap: var(--gap); }
-      .col-right { position: relative; top: 0; order: 2; }
-      :root { --editor-h: clamp(12rem, 35vh, 20rem); }
-    }
-  </style>
+        input {
+            width: 100%;
+        }
+
+        button {
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        button:hover:not(.btn-primary) {
+            background: var(--surface-2);
+            border-color: var(--muted);
+        }
+
+        button:focus-visible, input:focus-visible, select:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 1px;
+            border-color: var(--accent);
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: var(--on-accent);
+            border-color: var(--accent);
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+            border-color: var(--accent-hover);
+        }
+
+        .field {
+            flex: 1 1 12rem;
+            min-width: 0;
+        }
+
+        textarea {
+            display: block;
+            width: 100%;
+            box-sizing: border-box;
+            height: var(--editor-h);
+            background: var(--code-bg);
+            color: var(--code-text);
+            border: 1px solid var(--border-strong);
+            border-radius: var(--radius-control);
+            padding: 1rem;
+            font: var(--font-code)/1.6 "JetBrains Mono", ui-monospace, monospace;
+            resize: vertical;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 1px var(--accent);
+        }
+
+        .scroll-output {
+            margin: 0;
+            padding: 1rem;
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-control);
+            font: var(--font-code)/1.5 "JetBrains Mono", ui-monospace, monospace;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 40vh;
+            overflow-y: auto;
+        }
+
+        /* ---- Conversation feed ----
+           Bubbles are styled here rather than inline in the append path: inline styles
+           bypass the token layer (so they cannot follow the theme) and cannot carry a
+           media query. The marker/tutor variants are what tells a real student question
+           apart from an action marker when reading the transcript back. */
+        .chat-feed {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-control);
+            white-space: normal;
+            max-height: var(--chat-h);
+            overflow-y: auto;
+            overscroll-behavior: contain;
+        }
+
+        .chat-empty {
+            color: var(--muted);
+            font-size: 0.85em;
+            text-align: center;
+            padding: 1rem 0;
+        }
+
+        .bubble {
+            max-width: 85%;
+            padding: 0.5rem 0.75rem;
+            border-radius: var(--radius-control);
+            word-break: break-word;
+            font-size: 0.9em;
+        }
+
+        /* The learner */
+        .bubble-user {
+            align-self: flex-end;
+            background: var(--surface-2);
+            border: 1px solid var(--border-strong);
+        }
+
+        /* Sol's turn: full width, because its prose is the reading surface. Released from
+           the .bubble max-width below, which is sized for the learner's short messages. */
+        .bubble-tutor {
+            align-self: flex-start;
+            width: 100%;
+            max-width: none;
+            padding: 0.75rem 0.9rem;
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+        }
+
+        /* A synthetic marker ("[Ran code]") is not a student utterance, so it must not
+           read like one: muted and italic, against the user bubble's normal weight. */
+        .bubble-marker {
+            align-self: flex-end;
+            background: transparent;
+            border: 1px dashed var(--border-strong);
+            color: var(--muted);
+            font-size: 0.8em;
+            font-style: italic;
+        }
+
+        .bubble-error {
+            align-self: flex-start;
+            width: 100%;
+            background: var(--surface-2);
+            border: 1px solid var(--highlight-red);
+            color: var(--highlight-red);
+            font-size: 0.85em;
+        }
+
+        .check-question {
+            margin-top: 0.6rem;
+            padding-top: 0.5rem;
+            border-top: 1px dashed var(--border);
+            color: var(--accent-teal);
+            font-weight: 500;
+        }
+
+        /* ---- Markdown Render Styles ---- */
+        .markdown-body {
+            font-family: var(--font-body);
+            font-size: 0.95em;
+            line-height: 1.6;
+            white-space: normal;
+        }
+
+        .markdown-body p {
+            margin-top: 0;
+            margin-bottom: 0.8em;
+        }
+
+        .markdown-body p:last-child {
+            margin-bottom: 0;
+        }
+
+        .markdown-body strong {
+            color: var(--highlight-red);
+            font-weight: 700;
+        }
+
+        .markdown-body code {
+            font-family: var(--font-code);
+            background: var(--surface-2);
+            color: var(--code-text);
+            padding: 0.15em 0.35em;
+            border-radius: 4px;
+            font-size: 0.85em;
+            border: 1px solid var(--border);
+        }
+
+        .markdown-body pre {
+            background: var(--surface-2);
+            padding: 10px;
+            border-radius: 6px;
+            overflow-x: auto;
+            border: 1px solid var(--border-strong);
+            margin-bottom: 0.8em;
+        }
+
+        .markdown-body pre code {
+            background: transparent;
+            padding: 0;
+            border: none;
+            color: var(--code-text);
+        }
+
+        .bar {
+            flex: 1 1 auto;
+            height: var(--bar-h);
+            min-width: 3rem;
+            background: var(--bar-track);
+            border-radius: var(--radius-pill);
+            overflow: hidden;
+        }
+
+        .bar > span {
+            display: block;
+            width: 0;
+            height: 100%;
+            background: var(--accent-teal);
+            transition: width .4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .pill {
+            padding: 0.3rem 0.8rem;
+            border-radius: var(--radius-pill);
+            background: var(--surface-2);
+            border: 1px solid var(--border-strong);
+            font-size: .8em;
+            font-weight: 500;
+        }
+
+        .label {
+            flex: 0 0 6.5rem;
+            color: var(--muted);
+            font-size: .75em;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            font-weight: 600;
+        }
+
+        .row {
+            display: flex;
+            flex-wrap: nowrap;
+            width: 100%;
+            align-items: center;
+            gap: var(--gap);
+            margin: 0;
+        }
+
+        .row-data {
+            font-size: 0.85em;
+            color: var(--text);
+            flex: 1;
+            min-width: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .muted {
+            color: var(--muted);
+        }
+
+        @media (max-width: 65rem) {
+            main {
+                grid-template-columns: minmax(0, 1fr);
+                gap: var(--gap);
+            }
+
+            .col-right {
+                position: relative;
+                top: 0;
+                order: 2;
+            }
+
+            :root {
+                --editor-h: clamp(12rem, 35vh, 20rem);
+            }
+        }
+    </style>
 </head>
 <body>
 
-<header class="app-header">
-  <div class="header-left">
-    <span class="brand">Sol</span>
-    <span class="slash">/</span>
-    <span class="course-tag">Data Science Module</span>
-    <span class="muted" style="font-size: 0.9em; margin-left: 8px;">Backend Live Loop Client</span>
-  </div>
-
-  <div class="header-right">
-    <span class="badge" title="Uses hardcoded PID, skips consent registration, omits stance">
-      DEV ONLY
+<header class="navbar"
+        style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1.25rem; background: #0f172a; border-bottom: 1px solid #1e293b;">
+    <div class="brand-group" style="display: flex; align-items: center; gap: 10px;">
+        <img src="AI-Powered-Spark.svg" alt="Sol AI Logo" width="28" height="28" style="display: block;"/>
+        <span style="font-weight: 700; font-size: 1.15rem; color: #f8fafc; letter-spacing: -0.02em;">Sol</span>
+        <span style="background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); padding: 2px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 500;">
+      Data Science Module
     </span>
-    <div class="segmented" role="group" aria-label="Colour theme">
-      <button type="button" data-theme-set="auto">Auto</button>
-      <button type="button" data-theme-set="light">Light</button>
-      <button type="button" data-theme-set="dark">Dark</button>
+        <span style="color: #64748b; font-size: 0.85rem; margin-left: 4px;">Backend Live Loop Client</span>
     </div>
-  </div>
+    <div class="controls-group" style="display: flex; align-items: center; gap: 8px;">
+        <span style="background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); padding: 2px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 600;">• DEV ONLY</span>
+    </div>
 </header>
 
 <main>
-  <!-- Left Column -->
-  <section class="col-left">
-    <div class="card stack">
-      <div class="card-title">Session Controls</div>
-      <div class="row">
-        <label class="label" for="backend">Backend URL</label>
-        <input id="backend" value="http://localhost:8000" class="field" />
-      </div>
-      <div class="row">
-        <label class="label" for="exercise">Exercise</label>
-        <select id="exercise" class="field"></select>
-        <label class="label" for="mode" style="flex: 0 0 auto;">Mode</label>
-        <select id="mode"><option value="study">Study</option><option value="teach">Teach</option></select>
-      </div>
-      <div style="padding: 12px; background: var(--surface-2); border-radius: 6px; border: 1px solid var(--border);">
-        <!-- Exercise prompt: selectable so it can be copied while working -->
-        <p id="prompt" style="margin: 0; font-size: 0.9em; color: var(--text);"></p>
-      </div>
-    </div>
+    <!-- Left Column -->
+    <section class="col-left">
+        <div class="card stack">
+            <div class="card-title">Session Controls</div>
+            <div class="row">
+                <label class="label" for="backend">Backend URL</label>
+                <input id="backend" value="http://localhost:8000" class="field"/>
+            </div>
+            <div class="row">
+                <label class="label" for="exercise">Exercise</label>
+                <select id="exercise" class="field"></select>
+                <label class="label" for="mode" style="flex: 0 0 auto;">Mode</label>
+                <select id="mode">
+                    <option value="study">Study</option>
+                    <option value="teach">Teach</option>
+                </select>
+            </div>
+            <div style="padding: 12px; background: var(--surface-2); border-radius: 6px; border: 1px solid var(--border);">
+                <!-- Exercise prompt: selectable so it can be copied while working -->
+                <p id="prompt" style="margin: 0; font-size: 0.9em; color: var(--text);"></p>
+            </div>
+        </div>
 
-    <div class="card stack">
-      <label class="card-title" for="source">Code Editor</label>
-      <textarea id="source" spellcheck="false"></textarea>
-      <div class="actions">
-        <button id="run" class="btn-primary">Synthesize &amp; Run</button>
-        <button id="ask">Ask Sol</button>
-        <input id="question" class="field" type="text" placeholder="Ask Sol something specific (optional)…" autocomplete="off" />
-        <span id="status" class="muted" style="font-size: 0.85em; font-weight: 500;"></span>
-      </div>
-    </div>
+        <div class="card stack">
+            <label class="card-title" for="source">Code Editor</label>
+            <textarea id="source" spellcheck="false"></textarea>
+            <div class="actions">
+                <button id="run" class="btn-primary">Synthesize &amp; Run</button>
+                <button id="ask">Ask Sol</button>
+                <input id="question" class="field" type="text" placeholder="Ask Sol something specific (optional)…"
+                       autocomplete="off"/>
+                <span id="status" class="muted" style="font-size: 0.85em; font-weight: 500;"></span>
+            </div>
+        </div>
 
-    <div class="card stack">
-      <div class="card-title">Run Result</div>
-      <pre id="result" class="scroll-output muted">—</pre>
-    </div>
-  </section>
+        <div class="card stack">
+            <div class="card-title">Run Result</div>
+            <pre id="result" class="scroll-output muted">—</pre>
+        </div>
+    </section>
 
-  <!-- Right Column -->
-  <section class="col-right">
-    <!-- Conversation Stream Panel: displays appended turns instead of overwriting -->
-    <div class="card stack" style="border-top: 3px solid var(--accent);">
-      <div class="card-title">
-        <span>Conversation Feed</span>
-      </div>
-      <div id="chat-feed" class="chat-feed">
-        <div id="chat-empty" class="chat-empty">— Conversation history will appear here —</div>
-      </div>
-    </div>
+    <!-- Right Column -->
+    <section class="col-right">
+        <!-- Conversation Stream Panel: displays appended turns instead of overwriting -->
+        <div class="card stack" style="border-top: 3px solid var(--accent);">
+            <div class="card-title">
+                <span>Conversation Feed</span>
+            </div>
+            <div id="chat-feed" class="chat-feed">
+                <div id="chat-empty" class="chat-empty">— Conversation history will appear here —</div>
+            </div>
+        </div>
 
-    <div class="card stack">
-      <div class="card-title">Telemetry · Glass Box</div>
-      <div class="row" style="margin-bottom: 8px;">
-        <span class="pill" id="affect">affect: —</span>
-        <span class="pill" id="interv">intervention: —</span>
-      </div>
-      <div class="row">
-        <span class="label">Confidence</span>
-        <div class="bar"><span id="confbar"></span></div>
-        <span id="conf" class="row-data" style="flex: 0 0 30px; text-align: right;">0%</span>
-      </div>
-      <div class="row">
-        <span class="label">Planner</span>
-        <span id="planner" class="row-data muted">—</span>
-      </div>
-      <div class="row">
-        <span class="label">Self-Eval</span>
-        <span id="selfeval" class="row-data muted">—</span>
-      </div>
-      <div class="row">
-        <span class="label">Governance</span>
-        <span id="gov" class="row-data muted">—</span>
-      </div>
-      <div class="row">
-        <span class="label">Memory</span>
-        <span id="mem" class="row-data muted">—</span>
-      </div>
-      <div class="row">
-        <span class="label">Timings</span>
-        <span id="timings" class="row-data muted">—</span>
-      </div>
-    </div>
-  </section>
+        <div class="card stack">
+            <div class="card-title">Telemetry · Glass Box</div>
+            <div class="row" style="margin-bottom: 8px;">
+                <span class="pill" id="affect">affect: —</span>
+                <span class="pill" id="interv">intervention: —</span>
+            </div>
+            <div class="row">
+                <span class="label">Confidence</span>
+                <div class="bar"><span id="confbar"></span></div>
+                <span id="conf" class="row-data" style="flex: 0 0 30px; text-align: right;">0%</span>
+            </div>
+            <div class="row">
+                <span class="label">Planner</span>
+                <span id="planner" class="row-data muted">—</span>
+            </div>
+            <div class="row">
+                <span class="label">Self-Eval</span>
+                <span id="selfeval" class="row-data muted">—</span>
+            </div>
+            <div class="row">
+                <span class="label">Governance</span>
+                <span id="gov" class="row-data muted">—</span>
+            </div>
+            <div class="row">
+                <span class="label">Memory</span>
+                <span id="mem" class="row-data muted">—</span>
+            </div>
+            <div class="row">
+                <span class="label">Timings</span>
+                <span id="timings" class="row-data muted">—</span>
+            </div>
+        </div>
+    </section>
 </main>
 
 <script>
-  (function () {
-    var mq = window.matchMedia("(prefers-color-scheme: light)");
-    function preference() { try { return localStorage.getItem("sol-theme") || "auto"; } catch (e) { return "auto"; } }
-    function resolve(pref) { return pref === "auto" ? (mq.matches ? "light" : "dark") : pref; }
-    function apply(pref) {
-      document.documentElement.dataset.themePref = pref;
-      document.documentElement.dataset.theme = resolve(pref);
-      document.querySelectorAll("[data-theme-set]").forEach(function (b) {
-        b.setAttribute("aria-pressed", String(b.dataset.themeSet === pref));
-      });
-    }
-    apply(preference());
-    var onSystemChange = function () { if (preference() === "auto") apply("auto"); };
-    if (mq.addEventListener) mq.addEventListener("change", onSystemChange);
-    else mq.addListener(onSystemChange);
-    window.solTheme = {
-      set: function (next) { try { localStorage.setItem("sol-theme", next); } catch (e) { } apply(next); },
-    };
-    document.addEventListener("DOMContentLoaded", function () {
-      apply(preference());
-      document.querySelectorAll("[data-theme-set]").forEach(function (b) {
-        b.addEventListener("click", function () { window.solTheme.set(b.dataset.themeSet); });
-      });
-    });
-  })();
+    (function () {
+        var mq = window.matchMedia("(prefers-color-scheme: light)");
+
+        function preference() {
+            try {
+                return localStorage.getItem("sol-theme") || "auto";
+            } catch (e) {
+                return "auto";
+            }
+        }
+
+        function resolve(pref) {
+            return pref === "auto" ? (mq.matches ? "light" : "dark") : pref;
+        }
+
+        function apply(pref) {
+            document.documentElement.dataset.themePref = pref;
+            document.documentElement.dataset.theme = resolve(pref);
+            document.querySelectorAll("[data-theme-set]").forEach(function (b) {
+                b.setAttribute("aria-pressed", String(b.dataset.themeSet === pref));
+            });
+        }
+
+        apply(preference());
+        var onSystemChange = function () {
+            if (preference() === "auto") apply("auto");
+        };
+        if (mq.addEventListener) mq.addEventListener("change", onSystemChange);
+        else mq.addListener(onSystemChange);
+        window.solTheme = {
+            set: function (next) {
+                try {
+                    localStorage.setItem("sol-theme", next);
+                } catch (e) {
+                }
+                apply(next);
+            },
+        };
+        document.addEventListener("DOMContentLoaded", function () {
+            apply(preference());
+            document.querySelectorAll("[data-theme-set]").forEach(function (b) {
+                b.addEventListener("click", function () {
+                    window.solTheme.set(b.dataset.themeSet);
+                });
+            });
+        });
+    })();
 </script>
 
 <script type="module">
-  const $ = (id) => document.getElementById(id);
-  const PID = "p_dev";
-  let EXERCISES = {};
+    const $ = (id) => document.getElementById(id);
+    const PID = "p_dev";
+    let EXERCISES = {};
 
-  // Dialogue history for the /api/sol/turn `recent` window. The wire shape is
-  // {role, content} — the same shape the backend's RecentTurn declares — and it is
-  // capped so one long session cannot grow the payload without bound.
-  const MAX_RECENT_TURNS = 12; // ~6 exchanges
-  let recentHistory = [];
-  // Exposed for dev inspection.
-  window.solHistory = () => recentHistory.slice();
+    // Dialogue history for the /api/sol/turn `recent` window. The wire shape is
+    // {role, content} — the same shape the backend's RecentTurn declares — and it is
+    // capped so one long session cannot grow the payload without bound.
+    const MAX_RECENT_TURNS = 12; // ~6 exchanges
+    let recentHistory = [];
+    // Exposed for dev inspection.
+    window.solHistory = () => recentHistory.slice();
 
-  // marked: do not pass raw HTML through
-  marked.setOptions({
-    gfm: true,
-    breaks: true
-  });
-
-  /**
-   * Render Markdown safely. Sol's reply is model output, so it is untrusted text:
-   * parse it, sanitize the result, then harden any external link.
-   */
-  function renderSafeMarkdown(text) {
-    if (!text) return "—";
-
-    // 1. Markdown -> HTML
-    const rawHtml = marked.parse(text);
-
-    // 2. Sanitize (strips scripts and event handlers; keeps safe HTML only)
-    const cleanHtml = DOMPurify.sanitize(rawHtml, {
-      USE_PROFILES: { html: true },
-      ADD_ATTR: ['target', 'rel']
+    // marked: do not pass raw HTML through
+    marked.setOptions({
+        gfm: true,
+        breaks: true
     });
 
-    // 3. External links open in a new tab, without handing over the opener
-    const tempDiv = document.createElement("div");
-    tempDiv.innerHTML = cleanHtml;
-    tempDiv.querySelectorAll("a").forEach(a => {
-      a.setAttribute("target", "_blank");
-      a.setAttribute("rel", "noopener noreferrer");
+    /**
+     * Render Markdown safely. Sol's reply is model output, so it is untrusted text:
+     * parse it, sanitize the result, then harden any external link.
+     */
+    function renderSafeMarkdown(text) {
+        if (!text) return "—";
+
+        // 1. Markdown -> HTML
+        const rawHtml = marked.parse(text);
+
+        // 2. Sanitize (strips scripts and event handlers; keeps safe HTML only)
+        const cleanHtml = DOMPurify.sanitize(rawHtml, {
+            USE_PROFILES: {html: true},
+            ADD_ATTR: ['target', 'rel']
+        });
+
+        // 3. External links open in a new tab, without handing over the opener
+        const tempDiv = document.createElement("div");
+        tempDiv.innerHTML = cleanHtml;
+        tempDiv.querySelectorAll("a").forEach(a => {
+            a.setAttribute("target", "_blank");
+            a.setAttribute("rel", "noopener noreferrer");
+        });
+
+        return tempDiv.innerHTML;
+    }
+
+    function base() {
+        return $("backend").value.replace(/\/$/, "");
+    }
+
+    /**
+     * A 4xx body carries FastAPI's validation detail. Read it so a rejected request
+     * reports the offending field instead of a bare status — the same thing the
+     * Network tab shows, surfaced where the developer is already looking.
+     */
+    async function readBody(r) {
+        try {
+            return await r.json();
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function describeValidation(detail) {
+        if (!Array.isArray(detail)) return String(detail || "rejected");
+        return detail.map((d) => `${(d.loc || []).join(".")}: ${d.msg || d.type}`).join("; ");
+    }
+
+    function statusText(node, html) {
+        const d = document.createElement("div");
+        d.innerHTML = html;
+        node.textContent = d.textContent;
+    }
+
+    function trimHistory() {
+        if (recentHistory.length > MAX_RECENT_TURNS) {
+            recentHistory = recentHistory.slice(-MAX_RECENT_TURNS);
+        }
+    }
+
+    async function jpost(path, body) {
+        const r = await fetch(base() + path, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(body)
+        });
+        if (!r.ok) {
+            const detail = await readBody(r);
+            const reason = detail && detail.detail ? describeValidation(detail.detail) : "";
+            throw new Error(`${path} -> ${r.status}${reason ? ": " + reason : ""}`);
+        }
+        return r.json();
+    }
+
+    async function loadCurriculum() {
+        try {
+            const r = await fetch(base() + "/api/curriculum");
+            if (!r.ok) throw new Error("Status " + r.status);
+            const data = await r.json();
+            const sel = $("exercise");
+            sel.innerHTML = "";
+            data.modules.forEach((m) => m.exercises.forEach((ex) => {
+                EXERCISES[ex.id] = ex;
+                const o = document.createElement("option");
+                o.value = ex.id;
+                o.textContent = ex.title;
+                sel.appendChild(o);
+            }));
+            pick();
+        } catch (e) {
+            $("status").textContent = "Curriculum load failed";
+            console.error(e);
+        }
+    }
+
+    function pick() {
+        const ex = EXERCISES[$("exercise").value];
+        if (!ex) return;
+        $("prompt").textContent = ex.prompt;
+        $("source").value = ex.starter;
+        // A different exercise is a different conversation: history from the previous
+        // one would be sent as context for a problem it does not describe.
+        recentHistory = [];
+
+        // Reset UI conversation feed on exercise switch to stay aligned with recentHistory
+        const feed = $("chat-feed");
+        feed.innerHTML = '<div id="chat-empty" class="muted" style="font-size: 0.85em; text-align: center; padding: 1rem 0;">— Conversation history will appear here —</div>';
+    }
+
+    let lastResult = null;
+
+    async function run() {
+        $("status").textContent = "Running...";
+        $("result").textContent = "Executing...";
+        try {
+            lastResult = await jpost("/api/run", {
+                participant_id: PID,
+                exercise_id: $("exercise").value,
+                source: $("source").value
+            });
+
+            if (lastResult.ok) {
+                const outputText = lastResult.stdout || lastResult.output || lastResult.result || "";
+                const metaParts = [];
+                if (lastResult.backend) metaParts.push(`backend=${lastResult.backend}`);
+                if (lastResult.goalMet !== undefined) metaParts.push(`goalMet=${lastResult.goalMet}`);
+                if (lastResult.tvd !== undefined) metaParts.push(`tvd=${(+lastResult.tvd).toFixed(3)}`);
+
+                const metaHeader = metaParts.length > 0 ? metaParts.join("  ") + "\n" : "";
+                const distStr = Array.isArray(lastResult.dist)
+                    ? lastResult.dist.map((d) => `${d.bits}: ${(d.p * 100).toFixed(0)}%`).join("   ") + "\n"
+                    : "";
+
+                $("result").textContent = metaHeader + distStr + (outputText || lastResult.diff || "Execution successful with no output.");
+            } else {
+                $("result").textContent = "Error:\n" + (lastResult.error || JSON.stringify(lastResult, null, 2));
+            }
+
+            $("status").textContent = "";
+        } catch (e) {
+            $("status").textContent = "";
+            $("result").textContent = "Frontend Exception:\n" + String(e);
+        }
+    }
+
+    async function ask(event) {
+        $("status").textContent = "Sol is thinking...";
+        try {
+            const typed = ($("question").value || "").trim();
+            const userContent = typed || (event === "run" ? "[Ran code]" : "[Asked Sol for help]");
+
+            const payload = {
+                participant_id: PID,
+                exercise_id: $("exercise").value,
+                event: event || "chat",
+                mode: $("mode").value,
+                stance: "peer",
+                source: $("source").value,
+                result: lastResult,
+                recent: recentHistory.slice(-MAX_RECENT_TURNS),
+            };
+
+            const out = await jpost("/api/sol/turn", payload);
+
+            // Remove the initial empty placeholder if present
+            const emptyNotice = $("chat-empty");
+            if (emptyNotice) emptyNotice.remove();
+
+            // 1. Append the learner's turn. An action marker ("[Ran code]") is not a
+            //    student utterance, so it gets its own class and does not read like one.
+            const feed = $("chat-feed");
+            const userBubble = document.createElement("div");
+            userBubble.className = "bubble " + (typed ? "bubble-user" : "bubble-user bubble-marker");
+            userBubble.textContent = userContent;
+            feed.appendChild(userBubble);
+
+            // 2. Append Sol's turn as sanitized markdown
+            const solBubble = document.createElement("div");
+            solBubble.className = "bubble bubble-tutor markdown-body";
+
+            let responseHtml = renderSafeMarkdown(out.message);
+            if (out.check_question) {
+                responseHtml += `<div class="check-question">↳ ${renderSafeMarkdown(out.check_question)}</div>`;
+            }
+
+            solBubble.innerHTML = responseHtml;
+            feed.appendChild(solBubble);
+
+            // Scroll the chat stream to the newest message
+            feed.scrollTop = feed.scrollHeight;
+
+            // 3. Record exchange in client state and trim window
+            let solContent = out.message || "";
+            if (out.check_question) solContent += "\n\n" + out.check_question;
+            recentHistory.push({role: "user", content: userContent});
+            recentHistory.push({role: "assistant", content: solContent});
+            trimHistory();
+            $("question").value = "";
+
+            // 4. Glass-box telemetry for this turn
+            $("affect").textContent = `affect: ${out.affective_state || '—'}`;
+            $("interv").textContent = `intervention: ${out.intervention || '—'}`;
+            const c = Math.round((out.confidence || 0) * 100);
+            $("confbar").style.width = c + "\%";
+            $("conf").textContent = c + "%";
+            $("planner").textContent = out.planner_note || "—";
+            $("planner").title = out.planner_note || "";
+            const se = out.components?.self_eval || {};
+            $("selfeval").textContent = `${out.self_critique || "—"} (leak_risk=${se.leak_risk ?? "—"})`;
+            $("selfeval").title = $("selfeval").textContent;
+            $("gov").textContent = out.components?.governance?.prose || out.governance || "—";
+            $("gov").title = $("gov").textContent;
+            $("mem").textContent = `grasped: ${(out.memory?.grasped || []).join(", ") || "—"} | shaky: ${(out.memory?.shaky || []).join(", ") || "—"}`;
+            $("mem").title = $("mem").textContent;
+            const t = out.components?.timings_ms || {};
+            $("timings").textContent = Object.keys(t).length > 0 ? Object.entries(t).map(([k, v]) => `${k}=${v}`).join(" ") : "—";
+
+            $("status").textContent = "";
+        } catch (e) {
+            $("status").textContent = "";
+            const feed = $("chat-feed");
+            const errBubble = document.createElement("div");
+            errBubble.className = "bubble bubble-error";
+            statusText(errBubble, `Error talking to Sol:<br>${String(e)}`);
+            feed.appendChild(errBubble);
+            feed.scrollTop = feed.scrollHeight;
+        }
+    }
+
+    $("exercise").addEventListener("change", pick);
+    $("backend").addEventListener("change", loadCurriculum);
+    $("run").addEventListener("click", () => run().then(() => ask("run")));
+    $("ask").addEventListener("click", () => ask("chat"));
+    $("question").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") ask("chat");
     });
-
-    return tempDiv.innerHTML;
-  }
-
-  function base() { return $("backend").value.replace(/\/$/, ""); }
-
-  /**
-   * A 4xx body carries FastAPI's validation detail. Read it so a rejected request
-   * reports the offending field instead of a bare status — the same thing the
-   * Network tab shows, surfaced where the developer is already looking.
-   */
-  async function readBody(r) {
-    try { return await r.json(); } catch (e) { return null; }
-  }
-
-  function describeValidation(detail) {
-    if (!Array.isArray(detail)) return String(detail || "rejected");
-    return detail.map((d) => `${(d.loc || []).join(".")}: ${d.msg || d.type}`).join("; ");
-  }
-
-  function statusText(node, html) {
-    const d = document.createElement("div");
-    d.innerHTML = html;
-    node.textContent = d.textContent;
-  }
-
-  function trimHistory() {
-    if (recentHistory.length > MAX_RECENT_TURNS) {
-      recentHistory = recentHistory.slice(-MAX_RECENT_TURNS);
-    }
-  }
-
-  async function jpost(path, body) {
-    const r = await fetch(base() + path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
-    });
-    if (!r.ok) {
-      const detail = await readBody(r);
-      const reason = detail && detail.detail ? describeValidation(detail.detail) : "";
-      throw new Error(`${path} -> ${r.status}${reason ? ": " + reason : ""}`);
-    }
-    return r.json();
-  }
-
-  async function loadCurriculum() {
-    try {
-      const r = await fetch(base() + "/api/curriculum");
-      if (!r.ok) throw new Error("Status " + r.status);
-      const data = await r.json();
-      const sel = $("exercise"); sel.innerHTML = "";
-      data.modules.forEach((m) => m.exercises.forEach((ex) => {
-        EXERCISES[ex.id] = ex;
-        const o = document.createElement("option"); o.value = ex.id; o.textContent = ex.title; sel.appendChild(o);
-      }));
-      pick();
-    } catch(e) {
-      $("status").textContent = "Curriculum load failed";
-      console.error(e);
-    }
-  }
-
-  function pick() {
-    const ex = EXERCISES[$("exercise").value]; if (!ex) return;
-    $("prompt").textContent = ex.prompt;
-    $("source").value = ex.starter;
-    // A different exercise is a different conversation: history from the previous
-    // one would be sent as context for a problem it does not describe.
-    recentHistory = [];
-
-    // Reset UI conversation feed on exercise switch to stay aligned with recentHistory
-    const feed = $("chat-feed");
-    feed.innerHTML = '<div id="chat-empty" class="muted" style="font-size: 0.85em; text-align: center; padding: 1rem 0;">— Conversation history will appear here —</div>';
-  }
-
-  let lastResult = null;
-  async function run() {
-    $("status").textContent = "Running...";
-    $("result").textContent = "Executing...";
-    try {
-      lastResult = await jpost("/api/run", {
-        participant_id: PID,
-        exercise_id: $("exercise").value,
-        source: $("source").value
-      });
-
-      if (lastResult.ok) {
-        const outputText = lastResult.stdout || lastResult.output || lastResult.result || "";
-        const metaParts = [];
-        if (lastResult.backend) metaParts.push(`backend=${lastResult.backend}`);
-        if (lastResult.goalMet !== undefined) metaParts.push(`goalMet=${lastResult.goalMet}`);
-        if (lastResult.tvd !== undefined) metaParts.push(`tvd=${(+lastResult.tvd).toFixed(3)}`);
-
-        const metaHeader = metaParts.length > 0 ? metaParts.join("  ") + "\n" : "";
-        const distStr = Array.isArray(lastResult.dist)
-                ? lastResult.dist.map((d) => `${d.bits}: ${(d.p * 100).toFixed(0)}%`).join("   ") + "\n"
-                : "";
-
-        $("result").textContent = metaHeader + distStr + (outputText || lastResult.diff || "Execution successful with no output.");
-      } else {
-        $("result").textContent = "Error:\n" + (lastResult.error || JSON.stringify(lastResult, null, 2));
-      }
-
-      $("status").textContent = "";
-    } catch (e) {
-      $("status").textContent = "";
-      $("result").textContent = "Frontend Exception:\n" + String(e);
-    }
-  }
-
-  async function ask(event) {
-    $("status").textContent = "Sol is thinking...";
-    try {
-      const typed = ($("question").value || "").trim();
-      const userContent = typed || (event === "run" ? "[Ran code]" : "[Asked Sol for help]");
-
-      const payload = {
-        participant_id: PID,
-        exercise_id: $("exercise").value,
-        event: event || "chat",
-        mode: $("mode").value,
-        stance: "peer",
-        source: $("source").value,
-        result: lastResult,
-        recent: recentHistory.slice(-MAX_RECENT_TURNS),
-      };
-
-      const out = await jpost("/api/sol/turn", payload);
-
-      // Remove the initial empty placeholder if present
-      const emptyNotice = $("chat-empty");
-      if (emptyNotice) emptyNotice.remove();
-
-      // 1. Append the learner's turn. An action marker ("[Ran code]") is not a
-      //    student utterance, so it gets its own class and does not read like one.
-      const feed = $("chat-feed");
-      const userBubble = document.createElement("div");
-      userBubble.className = "bubble " + (typed ? "bubble-user" : "bubble-user bubble-marker");
-      userBubble.textContent = userContent;
-      feed.appendChild(userBubble);
-
-      // 2. Append Sol's turn as sanitized markdown
-      const solBubble = document.createElement("div");
-      solBubble.className = "bubble bubble-tutor markdown-body";
-
-      let responseHtml = renderSafeMarkdown(out.message);
-      if (out.check_question) {
-        responseHtml += `<div class="check-question">↳ ${renderSafeMarkdown(out.check_question)}</div>`;
-      }
-
-      solBubble.innerHTML = responseHtml;
-      feed.appendChild(solBubble);
-
-      // Scroll the chat stream to the newest message
-      feed.scrollTop = feed.scrollHeight;
-
-      // 3. Record exchange in client state and trim window
-      let solContent = out.message || "";
-      if (out.check_question) solContent += "\n\n" + out.check_question;
-      recentHistory.push({ role: "user", content: userContent });
-      recentHistory.push({ role: "assistant", content: solContent });
-      trimHistory();
-      $("question").value = "";
-
-      // 4. Glass-box telemetry for this turn
-      $("affect").textContent = `affect: ${out.affective_state || '—'}`;
-      $("interv").textContent = `intervention: ${out.intervention || '—'}`;
-      const c = Math.round((out.confidence || 0) * 100);
-      $("confbar").style.width = c + "\%"; $("conf").textContent = c + "%";
-      $("planner").textContent = out.planner_note || "—";
-      $("planner").title = out.planner_note || "";
-      const se = out.components?.self_eval || {};
-      $("selfeval").textContent = `${out.self_critique || "—"} (leak_risk=${se.leak_risk ?? "—"})`;
-      $("selfeval").title = $("selfeval").textContent;
-      $("gov").textContent = out.components?.governance?.prose || out.governance || "—";
-      $("gov").title = $("gov").textContent;
-      $("mem").textContent = `grasped: ${(out.memory?.grasped || []).join(", ") || "—"} | shaky: ${(out.memory?.shaky || []).join(", ") || "—"}`;
-      $("mem").title = $("mem").textContent;
-      const t = out.components?.timings_ms || {};
-      $("timings").textContent = Object.keys(t).length > 0 ? Object.entries(t).map(([k, v]) => `${k}=${v}`).join(" ") : "—";
-
-      $("status").textContent = "";
-    } catch (e) {
-      $("status").textContent = "";
-      const feed = $("chat-feed");
-      const errBubble = document.createElement("div");
-      errBubble.className = "bubble bubble-error";
-      statusText(errBubble, `Error talking to Sol:<br>${String(e)}`);
-      feed.appendChild(errBubble);
-      feed.scrollTop = feed.scrollHeight;
-    }
-  }
-
-  $("exercise").addEventListener("change", pick);
-  $("backend").addEventListener("change", loadCurriculum);
-  $("run").addEventListener("click", () => run().then(() => ask("run")));
-  $("ask").addEventListener("click", () => ask("chat"));
-  $("question").addEventListener("keydown", (e) => { if (e.key === "Enter") ask("chat"); });
-  loadCurriculum();
+    loadCurriculum();
 </script>
 </body>
 </html>
