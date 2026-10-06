@@ -9,12 +9,12 @@ from __future__ import annotations
 import os
 
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 from app.integrations.quad import build_router
 from app.packs._skeleton import SkeletonPack
 from app.preflight import check_config, check_store, run
 from app.store import ConsentRouter, InMemoryStore
+from tests.http_auth import authenticated_client
 
 # ── preflight doctor ──────────────────────────────────────────────────────────
 
@@ -59,7 +59,7 @@ def test_embed_demo_turn_against_skeleton(monkeypatch):
     app.include_router(
         build_router(ConsentRouter(InMemoryStore()), get_active_pack(), lambda: None)
     )  # control stance: no LLM
-    out = TestClient(app).post(
+    out = authenticated_client(app, "gh:12345").post(
         "/quad/v1/turn",
         json={
             "pseudo_id": "gh:12345",

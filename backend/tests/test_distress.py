@@ -221,17 +221,17 @@ def test_intake_route_surfaces_frame(monkeypatch):
     """The /quad/v1/goals route surfaces the support frame on a distress signal, the
     goal is not honored, and the verbatim signal never reaches the response."""
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient
 
     from app.integrations.quad import build_router
     from app.store import ConsentRouter
+    from tests.http_auth import authenticated_client
 
     _enable(monkeypatch, configured=True)
     app = FastAPI()
     app.include_router(
         build_router(ConsentRouter(InMemoryStore()), get_active_pack(), lambda: None)
     )
-    r = TestClient(app).post(
+    r = authenticated_client(app, "gh:9").post(
         "/quad/v1/goals", json={"pseudo_id": "gh:9", "text": "I want to die, end my life"}
     )
     assert r.status_code == 200

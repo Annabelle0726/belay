@@ -8,12 +8,12 @@ network or DB is touched.
 from __future__ import annotations
 
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 from app.core.registry import get_active_pack
 from app.integrations.quad import build_router
 from app.integrations.quad.pii import PIIRejected, assert_no_pii, pii_reason
 from app.store import ConsentRouter, InMemoryStore
+from tests.http_auth import authenticated_client
 
 
 def _client():
@@ -28,7 +28,7 @@ def _client():
 
     app = FastAPI()
     app.include_router(build_router(cr, get_active_pack(), _no_llm))
-    return TestClient(app)
+    return authenticated_client(app, "gh:12345")
 
 
 # ── the four routes ───────────────────────────────────────────────────────────
@@ -69,7 +69,9 @@ def test_turn_runs_control_stance():
 
 
 def test_events_acks_clean_payload():
-    r = _client().post("/quad/v1/events", json={"type": "workspace.updated", "pseudo_id": "gh:7"})
+    r = _client().post(
+        "/quad/v1/events", json={"type": "workspace.updated", "pseudo_id": "gh:12345"}
+    )
     assert r.status_code == 200
     assert r.json()["ok"] is True
 
@@ -127,7 +129,7 @@ def test_non_pseudonymous_id_rejected():
             "stance": "control",
         },
     )
-    assert r.status_code == 422
+    assert r.status_code == 404
 
 
 def test_pii_helper_unit():
