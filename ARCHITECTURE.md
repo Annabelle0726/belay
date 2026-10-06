@@ -182,6 +182,26 @@ turn at `/quad/v1/turn`, and rejects PII at the boundary with a 422 (`integratio
 Source: `backend/app/main.py`, `backend/app/integrations/quad/` (`router.py`, `pii.py`,
 `schemas.py`), `VALIDATION.md` Quad sidecar section, `README.md` ("Quad sidecar").
 
+## Trusted identity and isolation (production phase 1)
+
+Both HTTP surfaces resolve a verified RS256 bearer subject against an
+operator-owned authorization file (`backend/app/auth.py`). The resulting
+institution/class/learner context and exercise-version grants are authoritative;
+body IDs and membership selectors cannot confer access. Authentication is 401;
+resource authorization uses a uniform 404; incomplete configuration is 503.
+The curriculum is filtered by current authorized exercise versions.
+
+`backend/app/store/scoped.py` wraps the existing store protocol using class-learner
+storage keys and versioned exercise keys. Learner model/customization is class
+scoped; run attempts and exercise events are assignment-version scoped. Old
+unscoped records remain inaccessible, without a schema change or guessed ownership.
+HTTP traces keep the eight-field row with content-free, allowlisted metrics.
+Consent, the grades firewall and deterministic governance remain in place.
+
+The full token contract, authorization JSON, deployment and legacy-data procedure
+are in [docs/authentication.md](docs/authentication.md). Frontend callers use an
+origin-bound, host-supplied in-memory bearer through `frontend/auth-client.js`.
+
 ## Related records
 
 - Privacy and the distress safety posture: `PRIVACY.md`.

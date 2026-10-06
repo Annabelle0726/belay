@@ -1158,18 +1158,20 @@ Sanity: `python -c "import sqlalchemy, fastapi, openai, pytest, numpy, pandas; p
 
 ## 1. Offline core suite 🟢
 
-No network, no DB, no key. This is the gate `main` must always pass.
+No live identity/model service or supplied secret. Identity tests generate local RSA keys;
+store tests use SQLite or the explicitly configured test database. This is the gate
+`main` must always pass.
 
 ```bash
 cd backend && python -m pytest
 ```
 
-**Expected (current, through Slice I, datascience active): `336 passed, 1
-skipped`.** The single skip is the gated live behavioral benchmark
-(`tests/evals/test_behavioral.py::test_live_benchmark_runs`), which skips unless
-`RUN_LLM_EVALS=1` and a reachable tutor + judge endpoint are configured (see §3).
-The running per-phase totals are recorded in the phase sections above (from `221
-passed, 11 skipped` at Phase 0 to `336 passed, 1 skipped` at Slice I). The
+**Expected (current, production identity phase 1): `541 passed, 7 skipped`.**
+The baseline `upstream/main` at `89f2597` was `374 passed, 7 skipped`; 167 new
+identity/isolation cases are in `tests/test_auth_isolation.py`. The seven skips
+are the gated live behavioral benchmark and six verifier-contract cases when the
+sibling contract checkout is absent. The running historical per-phase totals are
+recorded above. The
 quantum-era per-module table below is **historical** (those modules no longer
 exist, and the legacy `sol_behavior_evals.py` was retired into
 `evals/behavioral/` in Slice 6b); the current per-module inventory is the appended
@@ -1186,6 +1188,7 @@ phase sections above.
 | `tests/test_affect.py` | 12 | planner affect-adaptive overlay: encourage, flow→observe, teach/goal_met/oracle precedence | core (re-base fixture) |
 | `tests/test_consent.py` | 15 | consent-gated logging (durable vs ephemeral, fail-safe) | core |
 | `tests/test_sql_store.py` | 15 | SqlStore CRUD + durability + concepts column round-trip (SQLite here; Postgres in §2) | core |
+| `tests/test_auth_isolation.py` | 167 | Real offline RSA verification, both HTTP edges, forged IDs, institution/class/learner and assignment/version isolation, registration/state/export/execution, fail-closed config, consent and SQLite/Postgres upsert | current |
 | `tests/test_learner_model.py` | 40 | concept taxonomy · update_concepts · due_review · planner revisit overlay | core + pack taxonomy |
 | `tests/evals/sol_behavior_evals.py` | 11 (skipped) | behavioral fidelity + affect encourage quality + worked_analogy verification + revisit quality — see §3 | → del (pack evals) |
 | `tests/test_misconceptions.py` | 24 | F6 misconception-tailored dialogue | core + pack content |
@@ -1331,11 +1334,11 @@ curl -s http://localhost:8000/healthz                    # {"ok": true, ...}
 
 Then open `frontend/dev-client.html` and point its backend field at
 `http://localhost:8000`. **Note:** `dev-client.html` routes entirely through the
-backend (no browser-side key), but it uses a **hardcoded `PID = "p_dev"`** without
-consent registration — **dev only; do not use it for a pilot session.** For a
-host-embed surface that takes an already-authenticated pseudonymous id (no hardcoded
-PID), use `frontend/widget.html` (the Slice E/F reference widget). (The origin quantum
-React client was removed in Phase 1d.)
+backend (no browser-side model key). All demos now require the host's short-lived
+bearer callback, allowed backend origin and authorized learner alias; configure
+these using `frontend/README.md` and `docs/authentication.md`. No hardcoded dev
+identity can confer access. The widget and embed demo use the same credential
+helper. (The origin quantum React client was removed in Phase 1d.)
 
 Opt-in learner-customization intake (pseudonymous; PII-checked): `POST /api/goals`,
 `POST /api/reflection`, and `POST /api/overlay` (Slice E), mirrored on the sidecar as
@@ -1361,3 +1364,75 @@ a `scripts/smoke_*.py` | the matching section (§2/§3/§4) + add its expected o
 a new env var / config knob | the section that uses it (and `backend/app/config.py`, the source of truth; there is no `.env.example`)
 a new API route | §5 (and a curl/health example if relevant)
 a new external dependency (instance/account/allocation) | mark the step 🔴 and name the blocker
+
+
+## Production phase 1 — verified identity and institution/class isolation
+
+Baseline: clean `upstream/main` (`89f2597`), isolated branch
+`feature/auth-class-isolation`. Fork `origin/main` includes B1 changes; this
+branch starts from upstream and includes none of B1–B4 or the UI refactor.
+
+- `app/auth.py`: pinned RS256 RSA public key (>=2048 bits), exact issuer/audience,
+  required `iss/aud/exp/iat/sub`, verified optional `nbf`, integer dates and <=900s
+  token lifetime. Token claims cannot grant membership. The operator authorization
+  file supplies institution/class/learner and exercise-version grants, is validated
+  per request and takes immediate effect on revocation. OpenAPI declares Bearer auth.
+- Both `/api/*` resource routes and `/quad/v1/*` POST routes share this dependency;
+  standalone Quad mounting is also protected. Body aliases/classes, resource path
+  learner, membership selectors and assignment versions are checked before stores,
+  models or execution. 401 for failed authentication, uniform 404 for authorization,
+  503 for incomplete/invalid configuration. Public health/capabilities remain public.
+- `store/scoped.py`: class-learner state/customization and assignment-version event
+  and attempt isolation, including durable export. SHA-256 storage namespaces fit
+  existing columns: no DDL migration and no automatic legacy ownership backfill.
+  Legacy unscoped records remain inaccessible through the new HTTP paths. Upgrade
+  and explicit authorization JSON are documented in `docs/authentication.md`.
+- Consent remains coupled to storage, with stable class-scoped participant
+  registration, atomic SQLite/Postgres upsert, and fresh SQL consent lookup across
+  workers. PII rejection now covers `/api` as well as Quad. HTTP trace payloads
+  retain only allowlisted content-free metrics and version metadata; the fixed
+  eight-field row, grades firewall and safety floors are preserved.
+- `frontend/auth-client.js` and the four callers: origin-bound in-memory bearer
+  callback with host refresh, no URL or browser-storage credentials. UI structure
+  is unchanged. Compose passes auth settings and mounts operator files read-only.
+
+New hermetic suite: **167 cases**, including every protected endpoint with missing,
+invalid and expired credentials; issuer/audience/time/signature/algorithm checks;
+all identity aliases and class/institution forgery; same alias across classes and
+institutions; cross-learner denial; legal registration/state/turn/run/export/event
+access; assignment-version attempts/export filtering and immediate revocation;
+legacy exclusion; PII/content-free export; no credential/source logging; repeatable
+SQL registration and cross-worker consent withdrawal; curriculum filtering; route
+inventory and OpenAPI security. Existing sidecar/governance/PII HTTP tests now use
+actual ephemeral RSA credentials, not auth dependency overrides. Execution is spied
+and turns use control stance; no real identity or model service is contacted.
+
+Frontend: **4 passed** with `node frontend/tests/auth-client.test.cjs` (headers on
+all API calls/export and refreshed tokens, origin/URL rejection, malformed/missing
+token rejection, shared helper wiring on all demos). `docker compose config --quiet`
+passes. Full backend: **541 passed, 7 skipped** on SQLite. PostgreSQL full suite
+before the final two OpenAPI/inventory tests: **536 passed, 7 skipped**; the 164-case
+identity suite was then rerun on PostgreSQL with **164 passed**. The final three
+cases additionally constrain sidecar event/mode/stance to their closed vocabularies
+to prevent free-text trace metadata, and pass in the final SQLite run. Quality gates:
+`ruff check .`, `ruff format --check .` (104 files) and `mypy` (98 source files)
+pass. The Starlette/AnyIO deprecation warning is pre-existing. Temporary PostgreSQL
+uses its own Docker container/port and is removed after verification.
+
+Reproduce from `backend/` (install requirements, including `PyJWT[crypto]`):
+
+```bash
+python -m pytest -o addopts='' -q
+python -m pytest -o addopts='' -q tests/test_auth_isolation.py
+ruff check .
+ruff format --check .
+mypy
+```
+
+For the PostgreSQL leg, set `DATABASE_URL` to an isolated test database and run the
+same suite. The `configured` SQL isolation case uses that dialect; its other case
+always uses temporary SQLite. No live identity service, model or institutional
+credentials are needed. Operators still need to provision the issuer/public key,
+protected authorization file and the host token callback before a pilot. Key overlap
+rotation/JWKS discovery and audited recovery of legacy ownership are follow-ups;
+conversation persistence, consent decoupling, queues, budgets and B1–B4 are excluded.
