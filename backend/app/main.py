@@ -27,15 +27,14 @@ Consent gating (DMP §3 / IRB)
 
 from __future__ import annotations
 
-import uuid
-
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from .agent import distress as distress_mod
 from .agent import get_llm, run_turn
 from .agent import goals as goals_mod
 from .agent import overlay as overlay_mod
+from .auth import authorize, denied
 from .config import settings
 from .core.registry import get_active_pack
 from .schemas import (
@@ -50,6 +49,7 @@ from .schemas import (
     SolTurnResponse,
 )
 from .store import ConsentRouter, InMemoryStore, SqlStore, make_event
+from .store.scoped import ScopedStore, register, scoped_store
 
 app = FastAPI(title="Peer-Tutor Framework", version="0.1.0")
 app.add_middleware(
@@ -95,20 +95,30 @@ def healthz():
     }
 
 
-@app.get("/api/curriculum")
-def get_curriculum():
-    return {"modules": _pack.curriculum()}
+@app.get("/api/curriculum", dependencies=[Depends(authorize)])
+def get_curriculum(request: Request):
+    allowed = dict(request.state.identity.active_assignments)
+    modules = []
+    for module in _pack.curriculum():
+        exercises = [
+            {**exercise, "exercise_version": allowed[exercise["id"]]}
+            for exercise in module["exercises"]
+            if exercise["id"] in allowed
+        ]
+        if exercises:
+            modules.append({**module, "exercises": exercises})
+    return {"modules": modules}
 
 
-@app.post("/api/run", response_model=RunResult)
-def run(req: RunRequest):
+@app.post("/api/run", dependencies=[Depends(authorize)], response_model=RunResult)
+def run(request: Request, req: RunRequest):
     try:
         ex = _pack.get_exercise(req.exercise_id)
     except KeyError:
-        raise HTTPException(404, f"unknown exercise: {req.exercise_id}") from None
+        raise denied() from None
     result = _pack.run(req.source, ex)
     # Route the trace event to durable or ephemeral based on consent.
-    store = _router.store_for(req.participant_id)
+    store = scoped_store(_router, request.state.identity)
     store.append_event(
         make_event(
             req.participant_id,
@@ -121,12 +131,12 @@ def run(req: RunRequest):
     return result
 
 
-@app.post("/api/sol/turn", response_model=SolTurnResponse)
-def sol_turn(req: SolTurnRequest):
+@app.post("/api/sol/turn", dependencies=[Depends(authorize)], response_model=SolTurnResponse)
+def sol_turn(request: Request, req: SolTurnRequest):
     try:
         ex = _pack.get_exercise(req.exercise_id)
     except KeyError:
-        raise HTTPException(404, f"unknown exercise: {req.exercise_id}") from None
+        raise denied() from None
     payload = {
         "participant_id": req.participant_id,
         "exercise": ex,
@@ -141,38 +151,43 @@ def sol_turn(req: SolTurnRequest):
         "overlay": req.overlay,
     }
     # Route events + learner-state writes to durable or ephemeral by consent.
-    store = _router.store_for(req.participant_id)
+    store = scoped_store(_router, request.state.identity)
     try:
         return run_turn(payload, _llm(), store)
+    except HTTPException:
+        raise
     except Exception as e:  # surface a clean error; the front-end shows a graceful note
-        raise HTTPException(502, f"tutor unavailable: {e}") from e
+        raise HTTPException(502, "tutor unavailable") from e
 
 
-@app.post("/api/participant", response_model=ParticipantResponse)
-def participant(req: ParticipantRequest):
-    pid = "p_" + uuid.uuid4().hex[:12]
+@app.post("/api/participant", dependencies=[Depends(authorize)], response_model=ParticipantResponse)
+def participant(request: Request, req: ParticipantRequest):
+    pid = request.state.identity.learner_id
     # Participant row always goes to the durable store (DMP §1).
     # register_participant also updates the in-process consent cache so the very
     # next /api/run or /api/sol/turn in this process sees the correct routing
     # without a round-trip to the DB.
-    _router.register_participant(pid, req.anon_code, req.consent)
+    register(_router, request.state.identity, req.consent)
     return ParticipantResponse(id=pid, anon_code=req.anon_code, consent=req.consent)
 
 
-@app.get("/api/session/{pid}/events.jsonl")
-def export_events(pid: str):
+@app.get("/api/session/{pid}/events.jsonl", dependencies=[Depends(authorize)])
+def export_events(request: Request, pid: str):
     # Export reads ONLY the durable store; non-consenters have no trace by design.
-    return Response(_router.durable.export_jsonl(pid), media_type="application/x-ndjson")
+    return Response(
+        ScopedStore(_router.durable, request.state.identity).export_jsonl(pid),
+        media_type="application/x-ndjson",
+    )
 
 
 # --- learner-authored goals (opt-in; pseudonymous, never PII, never to grades) --
 
 
-@app.post("/api/goals")
-def set_goals(req: GoalRequest):
+@app.post("/api/goals", dependencies=[Depends(authorize)])
+def set_goals(request: Request, req: GoalRequest):
     """Set/update (empty text clears) the student's own goals. Stored
     pseudonymously on the learner model, routed by consent like all learner state."""
-    store = _router.store_for(req.participant_id)
+    store = scoped_store(_router, request.state.identity)
     artifact = goals_mod.set_goals(store, req.participant_id, req.text)
     resp = {"participant_id": req.participant_id, "goals": artifact}
     if artifact and artifact.get("floor") == "distress":  # Slice G: surface the frame
@@ -180,17 +195,17 @@ def set_goals(req: GoalRequest):
     return resp
 
 
-@app.get("/api/goals/{pid}")
-def get_goals(pid: str):
-    store = _router.store_for(pid)
+@app.get("/api/goals/{pid}", dependencies=[Depends(authorize)])
+def get_goals(request: Request, pid: str):
+    store = scoped_store(_router, request.state.identity)
     return {"participant_id": pid, "goals": goals_mod.get_goals(store.get_learner_state(pid))}
 
 
-@app.post("/api/reflection")
-def add_reflection(req: ReflectionRequest):
+@app.post("/api/reflection", dependencies=[Depends(authorize)])
+def add_reflection(request: Request, req: ReflectionRequest):
     """Record the student's reflection (their own words), linked to their current
     goal. Stored pseudonymously on the learner model; never surfaced to an instructor."""
-    store = _router.store_for(req.participant_id)
+    store = scoped_store(_router, request.state.identity)
     reflection = goals_mod.add_reflection(store, req.participant_id, req.text)
     resp = {"participant_id": req.participant_id, "reflection": reflection}
     if reflection and reflection.get("floor") == "distress":  # Slice G: surface the frame
@@ -198,12 +213,12 @@ def add_reflection(req: ReflectionRequest):
     return resp
 
 
-@app.post("/api/overlay")
-def set_overlay(req: OverlayRequest):
+@app.post("/api/overlay", dependencies=[Depends(authorize)])
+def set_overlay(request: Request, req: OverlayRequest):
     """Set/replace the learner's customization overlay (opt-in; null/empty clears).
     Bounded knobs only; floor-checked and normalized server-side. Input, never
     authority: it shapes HOW the tutor helps, never loosens a floor. Pseudonymous,
     routed by consent like all learner state; never to grades."""
-    store = _router.store_for(req.participant_id)
+    store = scoped_store(_router, request.state.identity)
     artifact = overlay_mod.set_overlay(store, req.participant_id, req.overlay)
     return {"participant_id": req.participant_id, "overlay": artifact}
