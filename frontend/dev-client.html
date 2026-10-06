@@ -80,20 +80,21 @@
   </section>
 </main>
 
+<script src="auth-client.js"></script>
 <script type="module">
 const $ = (id) => document.getElementById(id);
-const PID = "p_dev";  // for a real session, POST /api/participant first
+const PID = window.BELAY_LEARNER_ID;  // host supplies the authorized pseudonymous alias
 let EXERCISES = {};
 
 function base() { return $("backend").value.replace(/\/$/, ""); }
 async function jpost(path, body) {
-  const r = await fetch(base() + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const r = await fetch(base() + path, { method: "POST", headers: await window.BelayAuth.headers(base()), body: JSON.stringify(body) });
   if (!r.ok) throw new Error(path + " -> " + r.status);
   return r.json();
 }
 
 async function loadCurriculum() {
-  const r = await fetch(base() + "/api/curriculum");
+  const r = await fetch(base() + "/api/curriculum", { headers: await window.BelayAuth.headers(base()) });
   const data = await r.json();
   const sel = $("exercise"); sel.innerHTML = "";
   data.modules.forEach((m) => m.exercises.forEach((ex) => {

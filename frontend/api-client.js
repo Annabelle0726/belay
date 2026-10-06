@@ -1,3 +1,5 @@
+import "./auth-client.js";
+
 /* Minimal API client for the Sol peer-tutor backend.
  *
  * A front-end wires to the real system with two calls:
@@ -11,8 +13,8 @@ const BASE_URL =
 
 async function _json(path, opts) {
   const res = await fetch(BASE_URL + path, {
-    headers: { "Content-Type": "application/json" },
     ...opts,
+    headers: await window.BelayAuth.headers(BASE_URL),
   });
   if (!res.ok) throw new Error(`${path} -> ${res.status}`);
   return res.json();
@@ -60,6 +62,7 @@ export function createParticipant(anonCode, consent) {
 }
 
 export async function exportEvents(participantId) {
-  const res = await fetch(`${BASE_URL}/api/session/${participantId}/events.jsonl`);
+  const res = await fetch(`${BASE_URL}/api/session/${encodeURIComponent(participantId)}/events.jsonl`, { headers: await window.BelayAuth.headers(BASE_URL) });
+  if (!res.ok) throw new Error(`Export failed: ${res.status}`);
   return res.text();
 }
