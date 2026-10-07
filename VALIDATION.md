@@ -1449,3 +1449,11 @@ Conversation restoration tests use temporary SQL databases/keys, stub providers 
 controlled clocks: ownership on both edges, retry/concurrency, payload and context
 bounds, released-output filtering, expiry/deletion and actual SQLite backup recovery.
 See docs/conversations.md for staged results and required PostgreSQL/frontend checks.
+
+Final bounded-restoration validation: 588 backend tests passed, 7 existing skips
+(one live model evaluation and six missing verifier-contract sibling tests); 13
+frontend Node tests passed. The disposable PostgreSQL migration/concurrency test
+ran successfully, plus two SQLite/configured-PostgreSQL scoped-store tests. Ruff
+check/format and complete mypy passed. Actual governance output, distress handling,
+revocation/deletion during inference, and cleanup while saving is disabled are
+covered. Full commands, contracts and deployment limits: docs/conversations.md.

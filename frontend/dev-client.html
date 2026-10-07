@@ -64,6 +64,7 @@
   <section>
     <div class="card">
       <div class="k">Sol</div>
+      <pre id="solhistory" class="muted"></pre>
       <pre id="solmsg">—</pre>
       <p id="solq" class="muted"></p>
     </div>
@@ -81,6 +82,7 @@
 </main>
 
 <script src="auth-client.js"></script>
+<script src="conversation-client.js"></script>
 <script type="module">
 const $ = (id) => document.getElementById(id);
 const PID = window.BELAY_LEARNER_ID;  // host supplies the authorized pseudonymous alias
@@ -107,7 +109,13 @@ function pick() {
   const ex = EXERCISES[$("exercise").value]; if (!ex) return;
   $("prompt").textContent = ex.prompt;
   $("source").value = ex.starter;
+  if (typeof dialogue !== "undefined") dialogue.refresh();
 }
+
+const dialogue = window.BelayConversations.mount({container:$("solmsg").parentElement,
+  base, exercise:() => $("exercise").value,
+  renderHistory(messages) { $("solhistory").textContent = messages.map(m => m.role + ": " + m.text +
+    (m.status === "completed" ? "" : " (" + m.status + ")")).join("\n\n"); }});
 
 let lastResult = null;
 async function run() {
@@ -125,6 +133,10 @@ async function run() {
 async function ask(event) {
   $("status").textContent = "Sol is thinking…";
   try {
+    const saved = await dialogue.send({message: "Help me understand this code.", source:$("source").value, result:lastResult, mode:$("mode").value, stance:"peer"});
+    if (saved) { $("solmsg").textContent = saved.message; $("solq").textContent = saved.check_question || ""; $("status").textContent = "";
+      for (const id of ["affect","interv","conf","planner","selfeval","gov","mem","timings"]) $(id).textContent = "—";
+      $("confbar").style.width = "0%"; return; }
     const out = await jpost("/api/sol/turn", {
       participant_id: PID, exercise_id: $("exercise").value,
       event: event || "chat", mode: $("mode").value, stance: "peer",

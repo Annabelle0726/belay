@@ -131,6 +131,7 @@
 </div>
 
 <script src="auth-client.js"></script>
+<script src="conversation-client.js"></script>
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
@@ -197,24 +198,36 @@ function renderSignals(t) {
   $("signals").innerHTML = parts.join("");
 }
 
+const dialogue = window.BelayConversations.mount({
+  container: $("msgs").parentElement, base: baseURL, prefix: "/quad/v1", exercise: () => $("ex").value,
+  renderHistory(messages) {
+    if (!messages.length) { $("msgs").textContent = ""; return; }
+    $("msgs").textContent = "";
+    messages.forEach(m => addMsg(m.role === "student" ? "student" : "tutor", m.text +
+      (m.status === "completed" ? "" : " (" + m.status + ")")));
+  }
+});
+for (const id of ["base", "ex", "pid"]) $(id).addEventListener("change", () => { recent.length = 0; dialogue.refresh(); });
 $("send").addEventListener("click", async () => {
-  const text = $("say").value.trim();
-  if (text) { addMsg("student", text); recent.push({ who: "student", text }); $("say").value = ""; }
-  const body = {
-    pseudo_id: $("pid").value, exercise_id: $("ex").value, stance: $("stance").value,
-    event: "chat", mode: "study", source: "", recent: recent.slice(-8),
-  };
-  const ov = overlayFromKnob();
-  if (ov) body.overlay = ov;     // the customization knob rides on the turn
-  const { status, data } = await post("/quad/v1/turn", body);
-  if (status !== 200) { addMsg("tutor", "(" + status + ") " + (data.detail || JSON.stringify(data))); return; }
-  addMsg("tutor", data.message || "(no message)");
-  if (data.check_question) addMsg("tutor", data.check_question);
-  recent.push({ who: "tutor", text: data.message || "" });
-  renderSignals(data);
-  // Surface any declined overlay field (floor check) without echoing the raw value.
-  const decl = ((data.components || {}).overlay_declined) || [];
-  $("declined").textContent = decl.length ? ("A preference was declined by the floor check: " + decl.join(", ")) : "";
+  const text = $("say").value.trim(); if (!text) return;
+  $("send").disabled = true;
+  try {
+    let data = await dialogue.send({message:text, stance:$("stance").value, mode:"study",
+                                   source:"", overlay:overlayFromKnob()});
+    if (!data) {
+      addMsg("student", text); recent.push({who:"student",text});
+      const reply = await post("/quad/v1/turn", {pseudo_id:$("pid").value, exercise_id:$("ex").value,
+        stance:$("stance").value, event:"chat", mode:"study", source:"", recent:recent.slice(-8), overlay:overlayFromKnob()});
+      if (reply.status !== 200) throw new Error("Tutor unavailable (" + reply.status + ").");
+      data = reply.data; addMsg("tutor", data.message || "(no message)");
+      if (data.check_question) addMsg("tutor", data.check_question);
+      recent.push({who:"tutor",text:data.message || ""});
+    }
+    if (data.unsaved_exchange) { addMsg("tutor", data.message); if (data.check_question) addMsg("tutor", data.check_question); }
+    $("say").value = "";
+    renderSignals(data);
+  } catch (error) { addMsg("tutor", error.message); }
+  finally { $("send").disabled = false; }
 });
 
 $("setgoal").addEventListener("click", async () => {
