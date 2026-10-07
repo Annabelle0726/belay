@@ -208,3 +208,10 @@ origin-bound, host-supplied in-memory bearer through `frontend/auth-client.js`.
 - Licensing split and per-file SPDX: `LICENSING.md`.
 - Build-phase narrative, test inventory, and the canonical runbook: `VALIDATION.md`.
 - Forward work: `ROADMAP.md`.
+
+## Course storage separation (CC-R2 step 1)
+
+ScopedStore composes a durable class-learner course-state store and a separately
+consent-routed research-event store. Missing participants are initialized without
+research consent; initialization never overwrites an existing choice. Dedicated
+dialogue storage is the next layer; see [docs/conversations.md](docs/conversations.md).

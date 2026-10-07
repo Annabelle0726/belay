@@ -61,9 +61,10 @@ def _metrics(value):
 
 
 class ScopedStore:
-    def __init__(self, store: Store, identity: Identity):
+    def __init__(self, store: Store, identity: Identity, state_store: Store | None = None):
         self.store = store
         self.identity = identity
+        self.state_store = state_store if state_store is not None else store
 
     def _pid(self, pid: str) -> str:
         if pid != self.identity.learner_id:
@@ -78,10 +79,10 @@ class ScopedStore:
         return self.identity.exercise_key(exercise_id, self.identity.exercise_version)
 
     def get_learner_state(self, participant_id: str) -> dict:
-        return self.store.get_learner_state(self._pid(participant_id))
+        return self.state_store.get_learner_state(self._pid(participant_id))
 
     def save_learner_state(self, participant_id: str, state: dict) -> None:
-        self.store.save_learner_state(self._pid(participant_id), state)
+        self.state_store.save_learner_state(self._pid(participant_id), state)
 
     def append_event(self, event: dict) -> None:
         row = dict(event)
@@ -119,7 +120,9 @@ class ScopedStore:
 
 
 def scoped_store(router: ConsentRouter, identity: Identity) -> ScopedStore:
-    return ScopedStore(router.store_for(identity.storage_id), identity)
+    anon = identity.exercise_key(identity.storage_id, "consent")[:32]
+    router.ensure_course_participant(identity.storage_id, anon)
+    return ScopedStore(router.store_for(identity.storage_id), identity, router.durable)
 
 
 def register(router: ConsentRouter, identity: Identity, consent: bool) -> None:
