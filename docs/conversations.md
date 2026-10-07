@@ -73,3 +73,41 @@ policy must rotate policy_id, making prior-policy attempts unavailable.
 
 Step validation: 25 storage and both-edge HTTP tests, including concurrent turn
 reservation, plus the existing 167 auth-isolation tests (192 total).
+
+## Step 4 — independent bounds
+
+All numbers below are provisional LOCAL bounds, not approved course retention or
+shared traffic/budget limits. Environment names are `DIALOGUE_` plus each uppercase
+policy field (e.g. DIALOGUE_MAX_MESSAGE_BYTES). Invalid combinations fail closed.
+
+| Bound | Default | Overflow |
+|---|---:|---|
+| Raw request body | 65,536 bytes | 413 before JSON parsing, including streamed/chunked bodies |
+| New message / released saved message | 8,192 UTF-8 bytes | 413; failed reservation has no assistant message |
+| Retained messages / attempt | 200 | 409; explicitly start another attempt |
+| Retained text + serialized retry responses / attempt | 524,288 bytes | 409 before reservation |
+| Active attempts / owner + assignment/version | 5 | 409; delete an attempt first |
+| History page | 40 messages and 65,536 serialized JSON bytes | Scoped cursor for another page |
+| Restored recent window | 16,384 conservative token units | Keep newest complete exchanges, ordered |
+| Reserved response / model call | 1,024 tokens | Cap adapter max_tokens |
+| Full model input + framing + response reservation | 32,768 units | 413 before provider request |
+| Pending turn lease | 120 seconds | Old lease cannot complete; refresh and use new request ID |
+
+Token accounting conservatively counts UTF-8 bytes, not a model-specific tokenizer,
+plus 256 units for model message framing. Window selection subtracts response
+reservation and retains the new learner message plus whole recent completed pairs.
+A message that cannot fit alone is rejected. Actual planner/reasoner/self-evaluator
+prompts are independently checked before EVERY provider call. Configure these
+bounds for the deployed model's actual window. Anthropic extended thinking must be
+disabled for saved dialogue because its adapter may increase the generation cap.
+No saved history is removed when only the inference window is shortened.
+
+Tests measured the worst JSON control-character expansion: one 8,192-byte message
+can expand to 49,152 bytes before metadata, which fits the 65,536-byte page cap.
+Storage reservations include a worst-case released response and its JSON retry
+copy. The byte bound covers retained payloads, not physical database/index overhead.
+Scoped cursors cannot be reused on another attempt. Page bytes include metadata,
+status and cursor, not only text. Exact-limit tests cover byte/message counts,
+creation quotas, input caps, recent pairs and the actual provider reservation.
+
+Step validation: 31 conversation tests; Ruff and conversation/config mypy pass.
