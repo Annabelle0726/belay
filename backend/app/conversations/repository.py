@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from ..auth import Identity, denied
 from .bounds import wire_size
+from .ledger import DeletionLedger
 from .models import Bucket, Conversation, Message, SchemaVersion, Turn
 from .policy import Policy
 
@@ -33,9 +34,11 @@ class ConversationStore:
         self.sessions = sessionmaker(bind=engine, expire_on_commit=False)
         self.policy = policy
         self.clock = clock
+        self.ledger = DeletionLedger(policy.deletion_ledger_file)
 
     def _ready(self) -> None:
         self.policy.require()
+        self.ledger.deleted()
         from sqlalchemy.exc import SQLAlchemyError
 
         try:
@@ -50,6 +53,7 @@ class ConversationStore:
         row = session.get(Conversation, cid)
         if (
             row is None
+            or cid in self.ledger.deleted()
             or row.owner_key != identity.storage_id
             or row.deleted
             or row.expires_at <= int(self.clock())
@@ -59,8 +63,7 @@ class ConversationStore:
             raise denied()
         return row
 
-    @staticmethod
-    def metadata(row: Conversation) -> dict:
+    def metadata(self, row: Conversation) -> dict:
         return {
             "conversation_id": row.id,
             "attempt_id": row.id,
@@ -69,7 +72,7 @@ class ConversationStore:
             "revision": row.revision,
             "created_at": row.created_at,
             "expires_at": row.expires_at,
-            "pending": row.pending_id is not None,
+            "pending": row.pending_id is not None and row.pending_until > int(self.clock()),
         }
 
     def create(self, identity: Identity, request_id: str) -> dict:
@@ -81,6 +84,8 @@ class ConversationStore:
             raise denied()
         assignment = identity.exercise_key(identity.exercise_id, identity.exercise_version)
         cid = digest([identity.storage_id, assignment, request_id])[:32]
+        if cid in self.ledger.deleted():
+            raise denied()
         with self.sessions.begin() as session:
             # Serialize creation per owner/assignment to make retained-attempt quotas atomic.
             bid = digest([identity.storage_id, assignment])
@@ -145,7 +150,8 @@ class ConversationStore:
                 .order_by(Conversation.created_at.desc(), Conversation.id)
                 .limit(self.policy.max_attempts)
             )
-            return [self.metadata(row) for row in rows]
+            deleted_ids = self.ledger.deleted()
+            return [self.metadata(row) for row in rows if row.id not in deleted_ids]
 
     def history(self, identity: Identity, cid: str, before: str | None = None) -> dict:
         self._ready()
@@ -328,6 +334,11 @@ class ConversationStore:
     def fail(self, identity: Identity, cid: str, request_id: str) -> None:
         # Do not recreate a deleted or expired conversation on a late callback.
         with self.sessions.begin() as session:
+            session.execute(
+                update(Conversation)
+                .where(Conversation.id == cid, Conversation.owner_key == identity.storage_id)
+                .values(revision=Conversation.revision)
+            )
             row = session.get(Conversation, cid)
             if row and row.owner_key == identity.storage_id and row.pending_id == request_id:
                 row.pending_id = None
@@ -338,8 +349,50 @@ class ConversationStore:
     def delete(self, identity: Identity, cid: str) -> None:
         self._ready()
         with self.sessions.begin() as session:
+            session.execute(
+                update(Conversation)
+                .where(Conversation.id == cid, Conversation.owner_key == identity.storage_id)
+                .values(revision=Conversation.revision)
+            )
             row = self._owned(session, identity, cid)
-            row.deleted = True
-            row.pending_id = None
-            session.execute(delete(Message).where(Message.conversation_id == cid))
-            session.execute(delete(Turn).where(Turn.conversation_id == cid))
+            # Persist the external fence before deleting SQL data; failed SQL commit
+            # still hides the resource, and subsequent cleanup removes the payload.
+            self.ledger.record(cid)
+            self._erase(session, row)
+
+    @staticmethod
+    def _erase(session: Session, row: Conversation) -> None:
+        row.deleted = True
+        row.pending_id = None
+        row.pending_until = 0
+        row.message_count = 0
+        row.byte_count = 0
+        session.execute(delete(Message).where(Message.conversation_id == row.id))
+        session.execute(delete(Turn).where(Turn.conversation_id == row.id))
+
+    def cleanup(self) -> int:
+        self._ready()
+        deleted_ids = self.ledger.deleted()
+        with self.sessions() as session:
+            candidates = session.scalars(
+                select(Conversation.id).where(
+                    (Conversation.expires_at <= int(self.clock())) | Conversation.deleted.is_(True)
+                )
+            ).all()
+            candidates = list(set(candidates) | deleted_ids)
+        count = 0
+        for cid in candidates:
+            with self.sessions.begin() as session:
+                session.execute(
+                    update(Conversation)
+                    .where(Conversation.id == cid)
+                    .values(revision=Conversation.revision)
+                )
+                row = session.get(Conversation, cid)
+                if row is None or (row.deleted and row.message_count == 0):
+                    continue
+                if cid not in deleted_ids:
+                    self.ledger.record(cid)
+                self._erase(session, row)
+                count += 1
+        return count

@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine, inspect, select
 
 from app.auth import Identity
+from app.conversations.ledger import DeletionLedger
 from app.conversations.migration import migrate
 from app.conversations.models import Message, Turn
 from app.conversations.policy import Policy
@@ -29,6 +30,7 @@ def dialogue(tmp_path):
         backup_max_age_seconds=300,
         deletion_ledger_file=str(tmp_path / "deletions.jsonl"),
     )
+    DeletionLedger(policy.deletion_ledger_file).initialize()
     owner = Identity(
         "inst-a", "class-a", "gh:1", (("echo-1", "v1"),), "echo-1", "v1", (("echo-1", "v1"),)
     )
