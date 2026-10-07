@@ -161,7 +161,8 @@ def build_router(
             "overlay": req.overlay,
         }
         # 5. Consent and storage use the trusted class learner namespace.
-        register(consent_router, request.state.identity, req.consent)
+        if "consent" in payload:
+            register(consent_router, request.state.identity, req.consent)
         store = scoped_store(consent_router, request.state.identity)
         try:
             return run_turn(turn_payload, _llm(), store)
@@ -181,7 +182,8 @@ def build_router(
         pid = request.state.identity.learner_id
         if "consent" in payload and type(payload["consent"]) is not bool:
             raise HTTPException(422, "consent must be boolean")
-        register(consent_router, request.state.identity, payload.get("consent", False))
+        if "consent" in payload:
+            register(consent_router, request.state.identity, payload["consent"])
         store = scoped_store(consent_router, request.state.identity)
         artifact = _goals.set_goals(store, pid, payload.get("text", ""))
         resp = {"ok": True, "pseudo_id": pid, "goals": artifact}
@@ -200,7 +202,8 @@ def build_router(
         pid = request.state.identity.learner_id
         if "consent" in payload and type(payload["consent"]) is not bool:
             raise HTTPException(422, "consent must be boolean")
-        register(consent_router, request.state.identity, payload.get("consent", False))
+        if "consent" in payload:
+            register(consent_router, request.state.identity, payload["consent"])
         store = scoped_store(consent_router, request.state.identity)
         refl = _goals.add_reflection(store, pid, payload.get("text", ""))
         resp = {"ok": True, "pseudo_id": pid, "reflection": refl}
@@ -220,7 +223,8 @@ def build_router(
         pid = request.state.identity.learner_id
         if "consent" in payload and type(payload["consent"]) is not bool:
             raise HTTPException(422, "consent must be boolean")
-        register(consent_router, request.state.identity, payload.get("consent", False))
+        if "consent" in payload:
+            register(consent_router, request.state.identity, payload["consent"])
         store = scoped_store(consent_router, request.state.identity)
         artifact = _overlay.set_overlay(store, pid, payload.get("overlay"))
         return {"ok": True, "pseudo_id": pid, "overlay": artifact}

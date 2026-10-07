@@ -157,3 +157,20 @@ obligation; the application does not manufacture approval or manage backups.
 Step validation: 35 conversation tests, including expiry at its exact boundary,
 delete during pending inference, repeatable cleanup, missing/corrupt ledger and
 actual backup resurrection prevention; Ruff and conversation mypy pass.
+
+## Step 1 refinement found during regression
+
+Course run-attempt counts now have a dedicated content-free `course_attempts`
+table keyed by the already scoped owner and assignment-version hashes. Atomic
+upserts preserve counts across restart without research events. Migration creates
+this additive table; no old event ownership is inferred and no historical counts
+are guessed. SqlStore initialization remains compatible with existing deployments.
+Memory stores use the same separate counter. Goals/concepts and run counts remain
+available without research participation. Missing Quad consent fields preserve the
+existing explicit research choice; explicit true/false still records that choice.
+SQL parameter values are hidden in engine exception representations/logging.
+
+SQLite restart and consent-preservation tests passed. Disposable PostgreSQL tests
+verified existing records survive repeatable migration and concurrent creation and
+turn reservation have one winner. This correction is committed independently of
+the frontend restoration step.

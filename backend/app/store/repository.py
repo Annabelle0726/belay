@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from threading import Lock
 from typing import Protocol
 
 
@@ -70,6 +71,8 @@ class Store(Protocol):
 class InMemoryStore:
     def __init__(self) -> None:
         self._state: dict[str, dict] = {}
+        self._course_counts: dict[tuple[str, str], int] = {}
+        self._course_lock = Lock()
         self._events: list[dict] = []
 
     def get_learner_state(self, participant_id: str) -> dict:
@@ -100,6 +103,14 @@ class InMemoryStore:
             and e["exercise_id"] == exercise_id
             and e["event_type"] == "run"
         )
+
+    def record_course_attempt(self, participant_id: str, exercise_id: str) -> None:
+        with self._course_lock:
+            key = (participant_id, exercise_id)
+            self._course_counts[key] = self._course_counts.get(key, 0) + 1
+
+    def course_attempts(self, participant_id: str, exercise_id: str) -> int:
+        return self._course_counts.get((participant_id, exercise_id), 0)
 
     def export_jsonl(self, participant_id: str | None = None) -> str:
         rows = [e for e in self._events if participant_id in (None, e["participant_id"])]
@@ -196,6 +207,35 @@ class SqlStore:
                 )
             )
             return int(s.execute(stmt).scalar() or 0)
+
+    def record_course_attempt(self, participant_id: str, exercise_id: str) -> None:
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+        from .models import CourseAttempt
+
+        with self._Session.begin() as session:
+            factory = (
+                pg_insert
+                if session.bind is not None and session.bind.dialect.name == "postgresql"
+                else sqlite_insert
+            )
+            statement = factory(CourseAttempt).values(
+                participant_id=participant_id, exercise_id=exercise_id, count=1
+            )
+            session.execute(
+                statement.on_conflict_do_update(
+                    index_elements=[CourseAttempt.participant_id, CourseAttempt.exercise_id],
+                    set_={"count": CourseAttempt.count + 1},
+                )
+            )
+
+    def course_attempts(self, participant_id: str, exercise_id: str) -> int:
+        from .models import CourseAttempt
+
+        with self._Session() as session:
+            row = session.get(CourseAttempt, (participant_id, exercise_id))
+            return row.count if row else 0
 
     def export_jsonl(self, participant_id: str | None = None) -> str:
         from sqlalchemy import select
