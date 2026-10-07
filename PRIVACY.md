@@ -164,3 +164,10 @@ the existing tutoring behavior. Consent still controls durable versus ephemeral
 state; registration cannot change anyone else's consent. The grades firewall and
 governance/distress floors are unchanged. See [the identity contract and upgrade
 procedure](docs/authentication.md), including retention and offline-tool boundaries.
+
+## Course storage and research consent (CC-R2 step 1)
+
+Scoped HTTP learner state now serves ordinary course continuity independently of
+research consent. Research events remain consent-gated and content-free. Dialogue
+saving is a separate, default-disabled policy; research consent never enables it.
+See [docs/conversations.md](docs/conversations.md).

@@ -94,6 +94,29 @@ class ConsentRouter:
                 s.commit()
         self._consent_cache[pid] = consent
 
+    def ensure_course_participant(self, pid: str, anon_code: str) -> None:
+        """Course functionality needs an FK row, never implicit research consent.
+
+        A registration or course read must not overwrite an existing consent choice.
+        """
+        if isinstance(self._durable, SqlStore):
+            from sqlalchemy.dialects.postgresql import insert as pg_insert
+            from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+            from .models import Participant
+
+            with self._durable._Session() as session:
+                factory = (
+                    pg_insert
+                    if session.bind is not None and session.bind.dialect.name == "postgresql"
+                    else sqlite_insert
+                )
+                stmt = factory(Participant).values(id=pid, anon_code=anon_code, consent=False)
+                session.execute(stmt.on_conflict_do_nothing(index_elements=[Participant.id]))
+                session.commit()
+        else:
+            self._consent_cache.setdefault(pid, False)
+
     # ── per-request store resolution ─────────────────────────────────────────
 
     def _lookup_consent(self, pid: str) -> bool:

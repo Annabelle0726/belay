@@ -1436,3 +1436,11 @@ credentials are needed. Operators still need to provision the issuer/public key,
 protected authorization file and the host token callback before a pilot. Key overlap
 rotation/JWKS discovery and audited recovery of legacy ownership are follow-ups;
 conversation persistence, consent decoupling, queues, budgets and B1–B4 are excluded.
+
+## CC-R2 step 1 — course/research separation
+
+Baseline `6124598` on `feature/bounded-conversation-restoration`, inheriting
+unmerged authentication `8868234`. Added `tests/test_course_storage.py` (2 cases):
+course continuity across router recreation without research consent, and
+participant initialization preserving explicit consent. Research-event gating,
+identity scopes and existing pure store tests remain required regression gates.
