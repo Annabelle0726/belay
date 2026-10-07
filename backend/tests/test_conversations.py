@@ -103,3 +103,24 @@ def test_failures_and_expired_leases_are_visible(dialogue):
     store.begin(owner, cid, "two", "hash", 1, "retry with new request")
     store.fail(owner, cid, "two")
     assert store.history(owner, cid)["messages"][-1]["status"] == "failed"
+
+
+def test_concurrent_turns_have_one_winner(dialogue):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    store, owner, _ = dialogue
+    cid = store.create(owner, "one")["conversation_id"]
+    barrier = Barrier(2)
+
+    def attempt(request_id):
+        barrier.wait()
+        try:
+            store.begin(owner, cid, request_id, request_id, 0, "hello")
+            return 200
+        except HTTPException as exc:
+            return exc.status_code
+
+    with ThreadPoolExecutor(2) as pool:
+        assert sorted(pool.map(attempt, ["one", "two"])) == [200, 409]
+    assert len(store.history(owner, cid)["messages"]) == 1

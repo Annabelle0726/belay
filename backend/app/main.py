@@ -84,6 +84,10 @@ from .integrations.quad import build_router as _build_quad_router  # noqa: E402
 
 app.include_router(_build_quad_router(_router, _pack, _llm))
 
+from .conversations.router import build_router as _build_dialogue_router
+
+app.include_router(_build_dialogue_router("/api", _router, _pack, _llm))
+
 
 @app.get("/healthz")
 def healthz():
