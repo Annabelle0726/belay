@@ -220,3 +220,18 @@ def test_distress_is_not_persisted_even_when_routing_is_off(http_dialogue):
     page = client.get(url + "/messages", headers=auth()).json()
     assert [m["text"] for m in page["messages"]] == [PLACEHOLDER, PLACEHOLDER]
     assert "distress" not in str(page)
+
+
+def test_body_cap_before_json_and_message_cap_before_sanitizing(http_dialogue):
+    client, store, _, consent, calls, _, _ = http_dialogue
+    cid = create(client).json()["conversation_id"]
+    path = "/api/conversations/" + cid + "/turns"
+    response = client.post(path, headers=auth(), content=b"x" * (store.policy.max_body_bytes + 1))
+    assert response.status_code == 413
+    response = client.post(
+        path,
+        headers=auth(),
+        json={"request_id": "one", "expected_revision": 0, "message": "I want to die" + "x" * 8192},
+    )
+    assert response.status_code == 413
+    assert calls == [] and consent._consent_cache == {}

@@ -16,6 +16,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..auth import Identity, denied
+from .bounds import wire_size
 from .models import Bucket, Conversation, Message, SchemaVersion, Turn
 from .policy import Policy
 
@@ -146,34 +147,51 @@ class ConversationStore:
             )
             return [self.metadata(row) for row in rows]
 
-    def history(self, identity: Identity, cid: str, before: int | None = None) -> dict:
+    def history(self, identity: Identity, cid: str, before: str | None = None) -> dict:
         self._ready()
         with self.sessions() as session:
             row = self._owned(session, identity, cid)
             query = select(Message).where(Message.conversation_id == cid)
             if before is not None:
-                query = query.where(Message.sequence < before)
+                try:
+                    boundary, proof = before.split(".")
+                    sequence = int(boundary)
+                    if sequence < 1 or proof != digest([identity.storage_id, cid, sequence]):
+                        raise ValueError
+                except (ValueError, TypeError):
+                    raise denied() from None
+                query = query.where(Message.sequence < sequence)
             candidates = session.scalars(
                 query.order_by(Message.sequence.desc()).limit(self.policy.page_messages + 1)
             ).all()
-            page = []
-            used = 0
+            page: list[dict] = []
+            meta = self.metadata(row)
             for msg in candidates[: self.policy.page_messages]:
-                if used + msg.byte_count > self.policy.page_bytes:
-                    break
                 turn = session.get(Turn, (cid, msg.request_id))
-                page.append(
-                    {
-                        "sequence": msg.sequence,
-                        "role": msg.role,
-                        "text": msg.text,
-                        "status": turn.status if turn else "failed",
-                    }
+                status = turn.status if turn else "failed"
+                if status == "pending" and row.pending_until <= int(self.clock()):
+                    status = "failed"
+                item = {
+                    "sequence": msg.sequence,
+                    "role": msg.role,
+                    "text": msg.text,
+                    "status": status,
+                }
+                trial = [item, *page]
+                cursor: str | None = (
+                    f"{msg.sequence}.{digest([identity.storage_id, cid, msg.sequence])}"
                 )
-                used += msg.byte_count
-            page.reverse()
-            cursor = page[0]["sequence"] if page and len(page) < len(candidates) else None
-            return {**self.metadata(row), "messages": page, "before": cursor}
+                if (
+                    wire_size({**meta, "messages": trial, "before": cursor})
+                    > self.policy.page_bytes
+                ):
+                    break
+                page = trial
+            cursor = None
+            if page and len(page) < len(candidates):
+                sequence = page[0]["sequence"]
+                cursor = f"{sequence}.{digest([identity.storage_id, cid, sequence])}"
+            return {**meta, "messages": page, "before": cursor}
 
     def context(self, identity: Identity, cid: str) -> list[dict]:
         self._ready()
@@ -235,7 +253,7 @@ class ConversationStore:
             size = len(learner_text.encode())
             if (
                 row.message_count + 2 > self.policy.max_messages
-                or row.byte_count + size + self.policy.max_message_bytes
+                or row.byte_count + size + self.policy.max_message_bytes * 7 + 1024
                 > self.policy.max_stored_bytes
             ):
                 raise HTTPException(409, "conversation storage limit reached; start a new attempt")
@@ -281,7 +299,7 @@ class ConversationStore:
                 raise HTTPException(409, "turn lease is no longer valid")
             row.revision += 1
             row.message_count += 1
-            row.byte_count += len(text.encode())
+
             row.pending_id = None
             turn.status = "completed"
             result = {
@@ -289,6 +307,10 @@ class ConversationStore:
                 "revision": row.revision,
                 "response": {"message": message, "check_question": question},
             }
+            retained_size = len(text.encode()) + wire_size(result)
+            if row.byte_count + retained_size > self.policy.max_stored_bytes:
+                raise HTTPException(409, "conversation storage limit reached")
+            row.byte_count += retained_size
             turn.response = result
             session.add(
                 Message(

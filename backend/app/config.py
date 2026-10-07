@@ -60,10 +60,13 @@ class Settings:
         default_factory=lambda: int(_env("DIALOGUE_PAGE_MESSAGES", "40"))
     )
     dialogue_page_bytes: int = field(
-        default_factory=lambda: int(_env("DIALOGUE_PAGE_BYTES", "32768"))
+        default_factory=lambda: int(_env("DIALOGUE_PAGE_BYTES", "65536"))
     )
     dialogue_context_tokens: int = field(
-        default_factory=lambda: int(_env("DIALOGUE_CONTEXT_TOKENS", "4096"))
+        default_factory=lambda: int(_env("DIALOGUE_CONTEXT_TOKENS", "16384"))
+    )
+    dialogue_model_tokens: int = field(
+        default_factory=lambda: int(_env("DIALOGUE_MODEL_TOKENS", "32768"))
     )
     dialogue_response_tokens: int = field(
         default_factory=lambda: int(_env("DIALOGUE_RESPONSE_TOKENS", "1024"))

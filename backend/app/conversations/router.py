@@ -16,6 +16,7 @@ from ..auth import _bearer, authorize, denied
 from ..config import settings
 from ..integrations.quad.pii import PIIRejected, assert_no_pii
 from ..store.scoped import scoped_store
+from .bounds import BoundedProvider, bounded_route, recent_window
 from .policy import Policy
 from .repository import ConversationStore, digest
 
@@ -61,10 +62,15 @@ def build_router(
         from ..store.db import engine as default_engine
 
         engine = default_engine
-    api = APIRouter(prefix=prefix + "/conversations", dependencies=[Depends(authorize)])
 
     def store():
         return ConversationStore(engine, policy or Policy.from_settings(settings))
+
+    api = APIRouter(
+        prefix=prefix + "/conversations",
+        dependencies=[Depends(authorize)],
+        route_class=bounded_route(lambda: store().policy),
+    )
 
     @api.get("/config")
     def configuration():
@@ -95,7 +101,7 @@ def build_router(
         return store().get(request.state.identity, cid)
 
     @api.get("/{cid}/messages")
-    def history(request: Request, cid: str, before: int | None = None):
+    def history(request: Request, cid: str, before: str | None = None):
         return store().history(request.state.identity, cid, before)
 
     @api.delete("/{cid}", status_code=204)
@@ -115,6 +121,8 @@ def build_router(
             exercise = pack.get_exercise(identity.exercise_id)
         except KeyError:
             raise denied() from None
+        if len(body.message.encode()) > repository.policy.max_message_bytes:
+            raise HTTPException(413, "message limit exceeded")
         screened = private_content(body.message) or private_content(body.source)
         replay = repository.begin(
             identity,
@@ -127,11 +135,9 @@ def build_router(
         if replay is not None:
             return replay
         try:
-            recent = [
-                {"who": "student" if m["role"] == "student" else pack.persona.id, "text": m["text"]}
-                for m in repository.context(identity, cid)
-            ]
-            recent.append({"who": "student", "text": body.message})
+            recent = recent_window(
+                repository.context(identity, cid), body.message, pack.persona.id, repository.policy
+            )
             payload = {
                 "participant_id": identity.learner_id,
                 "exercise": exercise,
@@ -143,8 +149,10 @@ def build_router(
                 "overlay": body.overlay,
                 "recent": recent,
             }
+            provider = llm_factory()
+            bounded = BoundedProvider(provider, repository.policy) if provider is not None else None
             released = await run_in_threadpool(
-                tutor, payload, llm_factory(), scoped_store(consent_router, identity)
+                tutor, payload, bounded, scoped_store(consent_router, identity)
             )
             # Only the final learner-facing response released by the existing gate.
             message = str(released["message"])

@@ -21,8 +21,9 @@ class Policy:
     max_stored_bytes: int = 524288
     max_attempts: int = 5
     page_messages: int = 40
-    page_bytes: int = 32768
-    context_tokens: int = 4096
+    page_bytes: int = 65536
+    context_tokens: int = 16384
+    model_tokens: int = 32768
     response_tokens: int = 1024
     pending_seconds: int = 120
 
@@ -53,10 +54,13 @@ class Policy:
                     "page_bytes",
                     "context_tokens",
                     "response_tokens",
+                    "model_tokens",
                     "pending_seconds",
                 )
             )
-            or self.page_bytes < self.max_message_bytes
-            or self.max_stored_bytes < self.max_message_bytes * 2
+            or self.page_bytes < self.max_message_bytes * 6 + 1024
+            or self.max_stored_bytes < self.max_message_bytes * 8 + 1024
+            or self.context_tokens <= self.response_tokens
+            or self.model_tokens <= self.context_tokens + 256
         ):
             raise HTTPException(503, "dialogue saving policy is not configured")
