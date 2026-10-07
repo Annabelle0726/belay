@@ -11,7 +11,7 @@ import json
 
 from ..auth import Identity, denied
 from .consent import ConsentRouter
-from .repository import Store
+from .repository import InMemoryStore, SqlStore, Store
 
 _METRIC_KEYS = {
     "ok",
@@ -97,10 +97,15 @@ class ScopedStore:
             "exercise_version": self.identity.exercise_version if row["exercise_id"] else None,
         }
         row["note"] = ""
+        if event["event_type"] == "run" and isinstance(self.state_store, (SqlStore, InMemoryStore)):
+            self.state_store.record_course_attempt(row["participant_id"], row["exercise_id"])
         self.store.append_event(row)
 
     def attempts(self, participant_id: str, exercise_id: str) -> int:
-        return self.store.attempts(self._pid(participant_id), self._exercise(exercise_id))
+        pid, exercise = self._pid(participant_id), self._exercise(exercise_id)
+        if isinstance(self.state_store, (SqlStore, InMemoryStore)):
+            return self.state_store.course_attempts(pid, exercise)
+        return self.store.attempts(pid, exercise)
 
     def export_jsonl(self, participant_id: str | None = None) -> str:
         pid = self._pid(participant_id or self.identity.learner_id)

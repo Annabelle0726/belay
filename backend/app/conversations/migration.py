@@ -5,6 +5,7 @@ from sqlalchemy import inspect, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
+from ..store.models import Base
 from .models import DialogueBase, SchemaVersion
 
 
@@ -12,6 +13,7 @@ def migrate(engine) -> None:
     # New tables only: no legacy event import and no guessed ownership backfill.
     # Run during deployment before workers, rather than relying on app create_all.
     with engine.begin() as connection:
+        Base.metadata.create_all(connection)
         for table in DialogueBase.metadata.sorted_tables:
             table.create(connection, checkfirst=True)
             existing = {c["name"] for c in inspect(connection).get_columns(table.name)}

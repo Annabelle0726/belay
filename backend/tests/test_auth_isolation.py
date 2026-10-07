@@ -626,3 +626,23 @@ def test_sidecar_trace_metadata_cannot_carry_free_text(boundary, field):
     )
     assert response.status_code == 422
     assert boundary[1]._consent_cache == {} and boundary[2] == []
+
+
+def test_quad_omitted_consent_preserves_explicit_research_choice(boundary):
+    client, router, _, _, _ = boundary
+    client.post("/api/participant", headers=headers(), json={"anon_code": "gh:1", "consent": True})
+    for path, body in [
+        ("/quad/v1/goals", {"text": "learn"}),
+        ("/quad/v1/reflection", {"text": "I understood"}),
+        ("/quad/v1/overlay", {"overlay": None}),
+        ("/quad/v1/turn", {"exercise_id": "echo-1", "stance": "control"}),
+    ]:
+        assert client.post(path, headers=headers(), json=body).status_code == 200
+        assert router._lookup_consent(Identity("inst-a", "class-a", "gh:1", ()).storage_id) is True
+    assert (
+        client.post(
+            "/quad/v1/goals", headers=headers(), json={"text": "learn", "consent": False}
+        ).status_code
+        == 200
+    )
+    assert router._lookup_consent(Identity("inst-a", "class-a", "gh:1", ()).storage_id) is False

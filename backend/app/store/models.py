@@ -111,3 +111,14 @@ class Event(Base):
     stance: Mapped[str | None] = mapped_column(String(16), nullable=True)  # peer | oracle | control
     payload: Mapped[dict] = mapped_column(JSON)  # full telemetry
     note: Mapped[str] = mapped_column(Text, default="")
+
+
+class CourseAttempt(Base):
+    """Content-free course run count, independent of research event retention."""
+
+    __tablename__ = "course_attempts"
+    participant_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("participants.id"), primary_key=True
+    )
+    exercise_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    count: Mapped[int] = mapped_column(Integer, default=0)
