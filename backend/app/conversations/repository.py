@@ -8,6 +8,7 @@ import json
 import time
 import uuid
 from collections.abc import Callable
+from dataclasses import replace
 
 from fastapi import HTTPException
 from sqlalchemy import delete, func, select, update
@@ -36,8 +37,8 @@ class ConversationStore:
         self.clock = clock
         self.ledger = DeletionLedger(policy.deletion_ledger_file)
 
-    def _ready(self) -> None:
-        self.policy.require()
+    def _ready(self, *, saving: bool = True) -> None:
+        (self.policy if saving else replace(self.policy, enabled=True)).require()
         self.ledger.deleted()
         from sqlalchemy.exc import SQLAlchemyError
 
@@ -371,7 +372,7 @@ class ConversationStore:
         session.execute(delete(Turn).where(Turn.conversation_id == row.id))
 
     def cleanup(self) -> int:
-        self._ready()
+        self._ready(saving=False)
         deleted_ids = self.ledger.deleted()
         with self.sessions() as session:
             candidates = session.scalars(
