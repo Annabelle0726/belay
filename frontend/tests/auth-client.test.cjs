@@ -22,7 +22,7 @@ function setup(origin = 'https://belay.example.invalid') {
   vm.runInContext(fs.readFileSync(path.join(root, 'auth-client.js'), 'utf8'), ctx);
   // Evaluate the API module's functions in a hermetic VM (no import/network side effects).
   const api = fs.readFileSync(path.join(root, 'api-client.js'), 'utf8')
-    .replace('import "./auth-client.js";', '')
+    .replace(/import "\.\/(?:auth-client|conversation-client)\.js";/g, '')
     .replace(/export /g, '');
   vm.runInContext(api, ctx);
   return { window, ctx, calls };

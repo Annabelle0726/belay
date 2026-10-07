@@ -73,7 +73,7 @@ def build_router(
     )
 
     @api.get("/config")
-    def configuration():
+    def configuration(request: Request):
         p = store().policy
         if p.enabled:
             store()._ready()
@@ -84,6 +84,12 @@ def build_router(
             "retention_seconds": p.retention_seconds if p.enabled else 0,
             "retention_clock": "creation",
             "research_consent_required": False,
+            "identity": {
+                "institution_id": request.state.identity.institution_id,
+                "class_id": request.state.identity.class_id,
+                "learner_id": request.state.identity.learner_id,
+            },
+            "assignments": dict(request.state.identity.active_assignments),
         }
 
     @api.post("")

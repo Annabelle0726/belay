@@ -41,10 +41,17 @@
   <button id="run">Run one /quad/v1 turn</button>
 
   <h2 style="font-size:1rem">Response</h2>
+  <pre id="history"></pre>
   <pre id="out">(click the button)</pre>
 
   <script src="auth-client.js"></script>
+<script src="conversation-client.js"></script>
 <script>
+    const dialogue = window.BelayConversations.mount({container:document.getElementById('out').parentElement,
+      base:() => document.getElementById('backend').value.replace(/\/$/, ''), prefix:'/quad/v1', exercise:() => 'echo-1',
+      renderHistory(messages) { document.getElementById('history').textContent = messages.map(m => m.role + ': ' + m.text +
+        (m.status === 'completed' ? '' : ' (' + m.status + ')')).join('\n\n'); }});
+    document.getElementById('backend').addEventListener('change', () => dialogue.refresh());
     document.getElementById('run').addEventListener('click', async () => {
       const out = document.getElementById('out');
       out.textContent = 'running…';
@@ -57,6 +64,8 @@
         event: 'run', mode: 'study'
       };
       try {
+        const saved = await dialogue.send({message:'Help me understand this code.', stance:body.stance, source:body.source});
+        if (saved) { out.textContent = JSON.stringify(saved, null, 2); return; }
         const resp = await fetch(base + '/quad/v1/turn', {
           method: 'POST',
           headers: await window.BelayAuth.headers(base),

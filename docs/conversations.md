@@ -182,3 +182,98 @@ policy/schema/ledger while web saving is OFF. Disabling a feature must not stop
 physical removal of previously saved expired content. The web APIs still refuse
 saving/restoration in this mode. A boundary test verifies cleanup and its rerun;
 the final full regression suite passes with this correction.
+
+## Step 6 — frontend restoration and final validation
+
+The shared conversation client implements optional saving, refresh restoration,
+bounded older pages, explicit new attempts and deletion. It retains only scoped
+attempt pointers/preferences in browser storage. New learner messages go to the
+server-owned history API, with stable request IDs for a lost response. Identity
+changes clear history and prevent submitting a previous learner's message.
+Unavailable history clears its pointer; it is never silently replaced. Failed and
+unfinished turns remain visible. The widget displays live unsaved support responses
+while later restoration shows the privacy-safe placeholder. Demos retain all three
+original CSS style blocks. See frontend/README.md for the host lifecycle event and
+API-module Session factory.
+
+Final results against the final backend implementation:
+
+- Baseline: 541 backend passes, 7 existing skips.
+- Full backend: **588 passed, 7 skipped**, including the disposable PostgreSQL
+  migration/concurrency test. No identity or model service is contacted.
+- PostgreSQL/SQLite configured-store scoping checks: **2 passed** against the
+  temporary PostgreSQL container and temporary SQLite database.
+- Frontend Node tests: **13 passed**; shared script syntax and all demo inline
+  scripts validated. No browser/network service is needed for these tests.
+- `python -m ruff check app tests evals`: passed.
+- `python -m ruff format --check app tests evals`: 115 files formatted.
+- `python -m mypy app tests evals`: passed, 114 files checked (existing untyped-test
+  notes only). Existing Starlette/AnyIO deprecation warning is unchanged.
+- Existing skips: one live model benchmark and six verifier-contract tests whose
+  sibling checkout is absent. The PostgreSQL test was RUN, not counted as a skip.
+- `git diff --check`: passed. No push, PR creation, merge or main/UI-branch edits.
+
+Reproduce from backend using the local virtualenv, and set
+TEST_DIALOGUE_POSTGRES_URL to a disposable PostgreSQL test DSN to run the isolated
+schema check. The test never imports legacy events as dialogue and drops only its
+own UUID schema. The temporary validation container is removed after validation.
+Without that explicit test DSN, the PostgreSQL check is intentionally skipped.
+
+Changed file groups:
+
+- `backend/app/conversations/{models,migration,policy,repository,router,bounds,
+  ledger,maintenance}.py` and package initializer: dialogue contract/storage,
+  migrations, authorized APIs, bounds and lifecycle.
+- `backend/app/{config,main}.py` and `integrations/quad/router.py`: configuration,
+  mounts and explicit research-choice preservation.
+- `backend/app/store/{consent,scoped,repository,models,db}.py`: independent course
+  state/counts, consent routing and SQL parameter privacy.
+- `backend/tests/test_conversation*.py`, `test_course_storage.py`,
+  `test_auth_isolation.py`, `test_quad_sidecar.py`: hermetic regression evidence.
+- `frontend/{conversation-client,api-client}.js`, three demos and two Node test
+  files: minimal authenticated restoration integration.
+- `docs/conversations.md`, PRIVACY.md, ARCHITECTURE.md, VALIDATION.md and
+  frontend/README.md: purpose/ownership/API/deployment and actual validation.
+
+### Remaining decisions and dependencies
+
+Saving must stay disabled until the institution approves optional-saving notice,
+creation-based retention duration, physical cleanup interval, backup lifetime,
+deletion-fence metadata retention, operator ACLs and a supported shared ledger
+filesystem/recovery procedure. This deployment configuration supplies ONE saving
+policy: deployments serving multiple institutions/classes must have approval for
+all served scopes, or use separately configured deployments for differing policies.
+There is no automatic approval, backup manager, ledger compaction, queue or shared
+traffic/token budget. Policy rotation invalidates old attempts; old payloads retain
+their original expiry until cleanup, and may consume the active-attempt quota until
+expiry. Plan rotation/cleanup operationally before changing policy IDs.
+
+The inherited auth branch is still an unmerged dependency; actual EduCloud issuer,
+roster and host lifecycle integration require agreement/testing. CC-R1's usage
+metrics filter and legacy analysis-reader incompatibility remain explicitly open.
+These results do not declare a production course deployment or upstream merge.
+
+### Suggested pull request
+
+Title: `Add bounded conversation restoration with independent retention rules`
+
+Description:
+
+Build on the unmerged authentication/class-isolation dependency to save and resume
+server-owned dialogue per institution, class, learner, assignment version and
+attempt. Keep course progress independent of research participation and make
+conversation saving an independently optional, default-disabled policy.
+
+Add repeatable SQLite/PostgreSQL migrations, transactional turn leases and
+idempotent retries, bounded storage/pages/model context, creation-based expiry and
+independent deletion fences that survive database backup restoration. Save only
+released learner-facing answers; retain neutral placeholders for sensitive
+exchanges. Add minimal authenticated frontend restoration/new-attempt/delete
+controls without changing existing styles.
+
+Validation: 588 backend tests passed, 7 existing tests skipped; 13 frontend tests
+passed; PostgreSQL migration/concurrency and configured-store scoping passed;
+Ruff check/format and mypy passed. Institution retention/backup/ledger approval and
+actual EduCloud host integration remain required before enabling saving. Inherited
+trace-metrics/analysis compatibility findings remain open. No queue or shared
+budget system is included.

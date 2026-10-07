@@ -73,3 +73,40 @@ omitting it uses the server's deployed version and still requires its grant.
 All existing UI structure remains unchanged. See
 [the server contract](../docs/authentication.md) and run
 `node frontend/tests/auth-client.test.cjs` for hermetic credential wiring checks.
+
+## Optional saved dialogue
+
+`conversation-client.js` supplies an authenticated Session for both API surfaces.
+`api-client.js` exports `createConversationSession(exerciseId, onChange)`. The three
+demos mount the same minimal saving/history controls without changing their CSS
+or page layout. The server config response supplies the VERIFIED namespace and
+current granted exercise versions; browser inputs never grant access.
+
+Saving is unchecked until the learner opts in under an enabled institution policy.
+The notice shows policy_id and creation-based retention. When saving is disabled,
+ordinary tutoring uses the existing unsaved API. A new saved attempt is explicit;
+refresh restores its latest bounded page. Older pages, a new attempt and deletion
+are explicit actions. Missing/expired/deleted history clears the stale pointer and
+does not silently create a replacement. Pending/failed turns are labeled. Turning
+saving off stops saving new turns; it does not delete existing history. Deletion
+remains available for an existing pointer even while the saving preference is off.
+
+Browser localStorage holds only the attempt ID, saving preference and occasionally
+a pending creation request ID, namespaced by verified institution/class/learner,
+backend/API prefix and exercise/version. It contains no credentials, source,
+learner/assistant messages or retry body. A turn request and its request_id remain
+in RAM during a lost-response retry. Refresh obtains authoritative server history;
+it never submits invented assistant messages. Sensitive exchanges restore neutral
+placeholders; the current live institution support response can still be displayed.
+
+The host must update its learner/class/institution values and dispatch
+`window.dispatchEvent(new Event("belay-auth-changed"))` on login/logout or scope
+change; discard/recreate embedded sessions when changing hosts. The shared controls
+clear prior history and discard an obsolete session's late response. Each saved
+operation additionally checks the authenticated server namespace. No token belongs
+in URL parameters, browser persistence, logs or exports.
+
+Hermetic checks: `node --test frontend/tests/auth-client.test.cjs
+frontend/tests/conversation-client.test.cjs` (13 passed). These exercise refresh,
+new attempts, lost-response retries, pagination, unavailable/deleted history,
+identity changes and credential headers, plus parse every demo inline script.

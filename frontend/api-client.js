@@ -1,4 +1,5 @@
 import "./auth-client.js";
+import "./conversation-client.js";
 
 /* Minimal API client for the Sol peer-tutor backend.
  *
@@ -65,4 +66,9 @@ export async function exportEvents(participantId) {
   const res = await fetch(`${BASE_URL}/api/session/${encodeURIComponent(participantId)}/events.jsonl`, { headers: await window.BelayAuth.headers(BASE_URL) });
   if (!res.ok) throw new Error(`Export failed: ${res.status}`);
   return res.text();
+}
+
+// Dedicated server-owned dialogue; unsaved solTurn remains available separately.
+export function createConversationSession(exerciseId, onChange) {
+  return new window.BelayConversations.Session({base: BASE_URL, exercise: exerciseId, onChange});
 }
