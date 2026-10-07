@@ -126,7 +126,7 @@ class ConversationStore:
         with self.sessions() as session:
             return self.metadata(self._owned(session, identity, cid))
 
-    def list(self, identity: Identity, exercise_id: str, version: str) -> list[dict]:
+    def attempts(self, identity: Identity, exercise_id: str, version: str) -> list[dict]:
         self._ready()
         if (exercise_id, version) not in identity.active_assignments:
             raise denied()
@@ -174,6 +174,23 @@ class ConversationStore:
             page.reverse()
             cursor = page[0]["sequence"] if page and len(page) < len(candidates) else None
             return {**self.metadata(row), "messages": page, "before": cursor}
+
+    def context(self, identity: Identity, cid: str) -> list[dict]:
+        self._ready()
+        with self.sessions() as session:
+            self._owned(session, identity, cid)
+            rows = session.scalars(
+                select(Message)
+                .join(
+                    Turn,
+                    (Message.conversation_id == Turn.conversation_id)
+                    & (Message.request_id == Turn.request_id),
+                )
+                .where(Message.conversation_id == cid, Turn.status == "completed")
+                .order_by(Message.sequence.desc())
+                .limit(self.policy.max_messages)
+            ).all()
+            return [{"role": m.role, "text": m.text} for m in reversed(rows)]
 
     def begin(
         self,

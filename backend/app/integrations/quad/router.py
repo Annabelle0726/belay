@@ -236,6 +236,9 @@ def build_router(
             raise HTTPException(422, f"PII rejected at boundary: {e}") from e
         return {"ok": True, "protocol": PROTOCOL_VERSION, "received": payload.get("type", "event")}
 
+    from ...conversations.router import build_router as build_dialogue_router
+
+    api.include_router(build_dialogue_router("", consent_router, pack, _llm))
     return api
 
 

@@ -40,3 +40,36 @@ Saving remains disabled by default. No guessed ownership or legacy backfill exis
 
 Step validation: seven hermetic SQLite migration/ownership/retry/failure tests.
 PostgreSQL validation and the public API integration follow in later steps.
+
+## Step 3 — authorized persistence and restoration
+
+Both `/api/conversations` and `/quad/v1/conversations` expose the same protected
+API: config, create/list attempts, metadata, messages, delete and `/{id}/turns`.
+Create takes granted exercise/version, an opaque request_id and explicit `save:true`;
+`save:false` needs no saving policy and does not create a record. Turn takes
+request_id, expected_revision, the NEW learner message, and optional source,
+mode/stance, read-only result and bounded overlay. Invented `recent` history and
+unknown fields are rejected. Source and grading context are not persisted.
+Membership/credential verification runs again after the tutor returns.
+
+Only `message` and `check_question` from the final existing run_turn output are
+saved. Planner/reasoner drafts, self-evaluation, hidden reasoning and components
+are excluded. Pending learner messages have pending/failed status, without a
+fabricated assistant reply. A short transaction reserves a single pending lease;
+no database transaction spans inference. A completed duplicate returns the stored
+response without another model call; changed input or overlapping/stale requests
+return 409. A failed/crashed lease needs refresh and a NEW request ID, not automatic
+model re-execution. Tutor state/research side effects are not an exactly-once
+transaction with inference. Credentials and membership remain required on retries.
+
+PII is rejected at intake using the existing boundary; released output is screened
+again before saving. Existing distress vocabulary also screens saved content even
+when distress routing is disabled. Sensitive exchanges store only the neutral
+`[This exchange was not saved.]` placeholder for each side, with no category.
+An authorized live support response can still be displayed, but is never saved;
+a later retry/restoration returns the placeholder. Saving never writes research
+consent, dialogue events, trace exports or grades. Changing governance/retention
+policy must rotate policy_id, making prior-policy attempts unavailable.
+
+Step validation: 25 storage and both-edge HTTP tests, including concurrent turn
+reservation, plus the existing 167 auth-isolation tests (192 total).

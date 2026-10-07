@@ -29,6 +29,49 @@ class Settings:
     auth_authorization_file: str = field(
         default_factory=lambda: _env("AUTH_AUTHORIZATION_FILE", "")
     )
+    # Dialogue saving is independently opt-in and requires an approved policy.
+    dialogue_enabled: bool = field(default_factory=lambda: _envbool("DIALOGUE_ENABLED", False))
+    dialogue_policy_id: str = field(default_factory=lambda: _env("DIALOGUE_POLICY_ID", ""))
+    dialogue_retention_seconds: int = field(
+        default_factory=lambda: int(_env("DIALOGUE_RETENTION_SECONDS", "0"))
+    )
+    dialogue_backup_max_age_seconds: int = field(
+        default_factory=lambda: int(_env("DIALOGUE_BACKUP_MAX_AGE_SECONDS", "0"))
+    )
+    dialogue_deletion_ledger_file: str = field(
+        default_factory=lambda: _env("DIALOGUE_DELETION_LEDGER_FILE", "")
+    )
+    dialogue_max_body_bytes: int = field(
+        default_factory=lambda: int(_env("DIALOGUE_MAX_BODY_BYTES", "65536"))
+    )
+    dialogue_max_message_bytes: int = field(
+        default_factory=lambda: int(_env("DIALOGUE_MAX_MESSAGE_BYTES", "8192"))
+    )
+    dialogue_max_messages: int = field(
+        default_factory=lambda: int(_env("DIALOGUE_MAX_MESSAGES", "200"))
+    )
+    dialogue_max_stored_bytes: int = field(
+        default_factory=lambda: int(_env("DIALOGUE_MAX_STORED_BYTES", "524288"))
+    )
+    dialogue_max_attempts: int = field(
+        default_factory=lambda: int(_env("DIALOGUE_MAX_ATTEMPTS", "5"))
+    )
+    dialogue_page_messages: int = field(
+        default_factory=lambda: int(_env("DIALOGUE_PAGE_MESSAGES", "40"))
+    )
+    dialogue_page_bytes: int = field(
+        default_factory=lambda: int(_env("DIALOGUE_PAGE_BYTES", "32768"))
+    )
+    dialogue_context_tokens: int = field(
+        default_factory=lambda: int(_env("DIALOGUE_CONTEXT_TOKENS", "4096"))
+    )
+    dialogue_response_tokens: int = field(
+        default_factory=lambda: int(_env("DIALOGUE_RESPONSE_TOKENS", "1024"))
+    )
+    dialogue_pending_seconds: int = field(
+        default_factory=lambda: int(_env("DIALOGUE_PENDING_SECONDS", "120"))
+    )
+
     # --- Model/inference provider seam -------------------------------------
     # PROVIDER selects the inference provider (and is recorded in the §6 telemetry
     # `provider` field). The fast/strong TIER POLICY (which component uses which

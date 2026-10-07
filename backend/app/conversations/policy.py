@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 
 from fastapi import HTTPException
 
@@ -25,6 +25,10 @@ class Policy:
     context_tokens: int = 4096
     response_tokens: int = 1024
     pending_seconds: int = 120
+
+    @classmethod
+    def from_settings(cls, settings) -> Policy:
+        return cls(**{f.name: getattr(settings, "dialogue_" + f.name) for f in fields(cls)})
 
     def require(self) -> None:
         if not self.enabled:
