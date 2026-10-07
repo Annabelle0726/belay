@@ -76,7 +76,7 @@ def build_router(
     def configuration():
         p = store().policy
         if p.enabled:
-            p.require()
+            store()._ready()
         return {
             "enabled": p.enabled,
             "optional": True,

@@ -1444,3 +1444,8 @@ unmerged authentication `8868234`. Added `tests/test_course_storage.py` (2 cases
 course continuity across router recreation without research consent, and
 participant initialization preserving explicit consent. Research-event gating,
 identity scopes and existing pure store tests remain required regression gates.
+
+Conversation restoration tests use temporary SQL databases/keys, stub providers and
+controlled clocks: ownership on both edges, retry/concurrency, payload and context
+bounds, released-output filtering, expiry/deletion and actual SQLite backup recovery.
+See docs/conversations.md for staged results and required PostgreSQL/frontend checks.

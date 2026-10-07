@@ -171,3 +171,10 @@ Scoped HTTP learner state now serves ordinary course continuity independently of
 research consent. Research events remain consent-gated and content-free. Dialogue
 saving is a separate, default-disabled policy; research consent never enables it.
 See [docs/conversations.md](docs/conversations.md).
+
+Saved dialogue is an independently optional course function, disabled until an
+institution-approved policy is configured. It uses dedicated bounded tables and
+creation-based expiry, not research events or research consent. Sensitive exchanges
+retain a neutral placeholder. Deletion fences survive database backup restoration;
+operators must retain the independent content-free ledger and retire backups.
+Deployment commands, limits and unresolved policy choices are in docs/conversations.md.

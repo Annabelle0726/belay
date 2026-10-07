@@ -215,3 +215,8 @@ ScopedStore composes a durable class-learner course-state store and a separately
 consent-routed research-event store. Missing participants are initialized without
 research consent; initialization never overwrites an existing choice. Dedicated
 dialogue storage is the next layer; see [docs/conversations.md](docs/conversations.md).
+
+Dialogue restoration uses dedicated SQL tables, short transaction leases, scoped
+server-owned history and an independent deletion ledger. Both HTTP surfaces share
+the dialogue router; inference still passes through the existing governance gate.
+See docs/conversations.md for migration, retries, limits and recovery deployment.

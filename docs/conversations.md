@@ -111,3 +111,49 @@ status and cursor, not only text. Exact-limit tests cover byte/message counts,
 creation quotas, input caps, recent pairs and the actual provider reservation.
 
 Step validation: 31 conversation tests; Ruff and conversation/config mypy pass.
+
+## Step 5 — retention, deletion and recovery
+
+Durable saving is OFF unless DIALOGUE_ENABLED is explicitly true AND the operator
+provides DIALOGUE_POLICY_ID, DIALOGUE_RETENTION_SECONDS (no production default),
+DIALOGUE_BACKUP_MAX_AGE_SECONDS (no default) and DIALOGUE_DELETION_LEDGER_FILE.
+Saving is optional per attempt; research consent is unrelated. Every attempt has
+an immutable creation-based expiry. Withdrawal, class removal and deployed-version
+change block every read/resume/retry via current authorization immediately.
+
+Deploy with workers stopped:
+
+1. Configure the approved saving/retention/backup policy and limits.
+2. Run `python -m app.conversations.migration` from backend.
+3. Run `python -m app.conversations.maintenance init-ledger` ONCE for a new deployment.
+4. Start workers; config and saving fail closed without the schema and intact ledger.
+5. Schedule `python -m app.conversations.maintenance cleanup` externally at an
+   institution-approved interval. This implementation adds no queue or scheduler.
+
+Delete clears messages and the retry response in the request transaction. Expiry
+hides content immediately; physical purge waits for cleanup. Cleanup is repeatable.
+Minimal SQL tombstones/quota metadata and content-free deletion IDs remain. A late
+model completion cannot append to a deleted/expired attempt. Crash after ledger
+append but before SQL commit still hides the content until cleanup succeeds.
+
+The append-only deletion ledger is authoritative, independent of database backups,
+and contains only conversation IDs. Never replace it with an older database backup
+or silently initialize a missing ledger during recovery. It must live on a durable,
+shared filesystem with atomic append/fsync semantics for all workers, restricted
+operator ACLs and independent recovery/backup arrangements. Missing, malformed or
+partial tails fail closed. Readers have no transcript cache. There is no automatic
+ledger compaction: retain fences at least through retirement of every backup that
+could contain the dialogue. Long-term metadata minimization needs institution
+approval before deployment; SQL tombstones likewise carry no message content.
+
+During recovery, keep workers stopped, retain the current ledger, and run
+`python -m app.conversations.maintenance restore-check --backup-age-seconds N`.
+The operator must supply the true backup age; backups older than the approved cap
+are refused. This check purges restored deleted/expired content before serving.
+Tests restore an actual SQLite backup and verify inaccessible history, blocked
+create retries and physical removal. Backup destruction/retirement is an operator
+obligation; the application does not manufacture approval or manage backups.
+
+Step validation: 35 conversation tests, including expiry at its exact boundary,
+delete during pending inference, repeatable cleanup, missing/corrupt ledger and
+actual backup resurrection prevention; Ruff and conversation mypy pass.
