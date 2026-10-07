@@ -99,3 +99,15 @@ def test_missing_or_corrupt_ledger_fails_closed(dialogue, tmp_path):
     with pytest.raises(HTTPException) as exc:
         store.create(owner, "one")
     assert exc.value.status_code == 503
+
+
+def test_turning_saving_off_does_not_stop_retention_cleanup(dialogue):
+    store, owner, now = dialogue
+    cid = saved(store, owner)
+    disabled = ConversationStore(store.engine, replace(store.policy, enabled=False), store.clock)
+    with pytest.raises(HTTPException) as exc:
+        disabled.history(owner, cid)
+    assert exc.value.status_code == 409
+    now[0] = 1300
+    assert disabled.cleanup() == 1
+    assert disabled.cleanup() == 0

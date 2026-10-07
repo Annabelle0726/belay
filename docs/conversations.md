@@ -174,3 +174,11 @@ SQLite restart and consent-preservation tests passed. Disposable PostgreSQL test
 verified existing records survive repeatable migration and concurrent creation and
 turn reservation have one winner. This correction is committed independently of
 the frontend restoration step.
+
+## Step 5 refinement — cleanup while saving is disabled
+
+Administrative cleanup and recovery checks continue to validate the configured
+policy/schema/ledger while web saving is OFF. Disabling a feature must not stop
+physical removal of previously saved expired content. The web APIs still refuse
+saving/restoration in this mode. A boundary test verifies cleanup and its rerun;
+the final full regression suite passes with this correction.

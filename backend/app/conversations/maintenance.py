@@ -2,6 +2,7 @@
 """Deployment-only ledger initialization, repeatable cleanup and recovery checks."""
 
 import argparse
+from dataclasses import replace
 
 from ..config import settings
 from ..store.db import engine
@@ -15,7 +16,8 @@ def main():
     parser.add_argument("action", choices=["init-ledger", "cleanup", "restore-check"])
     parser.add_argument("--backup-age-seconds", type=int)
     args = parser.parse_args()
-    policy = Policy.from_settings(settings)
+    # Explicit administrative cleanup remains possible while web saving is OFF.
+    policy = replace(Policy.from_settings(settings), enabled=True)
     policy.require()
     if args.action == "init-ledger":
         DeletionLedger(policy.deletion_ledger_file).initialize()
