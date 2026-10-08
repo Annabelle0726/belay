@@ -1502,3 +1502,12 @@ Viewport overrides were reset. No browser console errors were observed.
 Student-facing run output: 28 frontend tests passed, including printed-value/check
 rendering without API JSON, complete tutor context, literal HTML/error text and
 an actionable empty-output hint. Execution failure still does not call the tutor.
+
+Compact workspace follow-up: 28 frontend tests pass, retaining missing-history,
+new/delete, identity and retry checks with the compact toolbar. Ruff check,
+format --check and mypy pass. Browser checks at 1280x720 and 1024x768 confirmed
+page height equals viewport height with real starter-code output and saved
+control replies. At 390x844 the composer is visible before the editor, with no
+horizontal overflow. More reveals the original authorized actions; Glass Box is
+available on demand. No model/identity service was called. Backend behavior did
+not change, so the previous 617-pass backend suite was not repeated.

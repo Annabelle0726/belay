@@ -156,7 +156,7 @@ clear prior history and discard an obsolete session's late response. Each saved
 operation additionally checks the authenticated server namespace. No token belongs
 in URL parameters, browser persistence, logs or exports.
 
-Hermetic checks: `node --test frontend/tests/*.test.cjs` (26 passed). These exercise refresh,
+Hermetic checks: `node --test frontend/tests/*.test.cjs` (28 passed). These exercise refresh,
 new attempts, lost-response retries, pagination, unavailable/deleted history,
 identity changes and credential headers, plus parse every demo inline script.
 
@@ -190,6 +190,15 @@ exercise-check details available on demand. It does not display the JSON API
 envelope; the complete response remains in RAM as authorized tutor context.
 Execution success and exercise-check success are distinct, and output is literal
 text so printed HTML is never executed. Empty output suggests using `print(...)`.
+
+The dev-client uses a compact, viewport-sized desktop workspace at widths >=900px
+and heights >=640px. Code and conversation scroll inside their own panels; the
+question input sits beside the conversation rather than below the editor.
+Controls use 34px heights (32px for conversation actions) and 8–16px gaps.
+Optional saving stays visible, with human-readable creation-based retention;
+refresh/older/delete actions are in a native More disclosure. Connection settings
+and Glass Box are collapsed by default. On narrow screens the conversation and
+composer come first. Other demos retain the original shared-control presentation.
 
 Markdown uses pinned marked 18.0.14 and DOMPurify 3.4.16 from jsDelivr, with
 sanitization and safe external links. If either library is unavailable, model text
