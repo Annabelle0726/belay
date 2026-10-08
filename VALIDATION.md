@@ -1468,3 +1468,13 @@ data-directory contention, both-edge restoration, default-disabled saving,
 missing/corrupt ledger refusal and restart preservation with key rotation.
 Frontend Node tests: 13 passed; Ruff check/format and full mypy passed. No real
 identity or model service is used. See frontend/README.md for the runnable local host.
+
+## UI/restoration preview — local listener ownership
+
+The preview starts at bounded-restoration commit `3a414d6`. Before reserving either
+port, the local launcher now checks IPv4 and IPv6 loopback listeners. This catches
+Windows wildcard/specific-address overlap and prevents a second backend or static
+server from answering a different loopback address on the same chosen port.
+It exits without creating data files when a listener is already present.
+`tests/test_local_dev.py`: 19 hermetic cases passed, including both requested
+ports occupied on IPv4 loopback, IPv4 wildcard and IPv6 wildcard listeners.

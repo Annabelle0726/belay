@@ -28,6 +28,26 @@ SUBJECT = "local-demo-learner"
 LEARNER = "gh:12345"
 
 
+def check_loopback_port(port: int) -> None:
+    """Detect listeners across both address families before choosing IPv4.
+
+    Windows can permit wildcard/specific-address binds on the same port.
+    A successful bind alone therefore does not prove this demo has one server.
+    Port zero explicitly asks the OS to allocate an unused port.
+    """
+    if port == 0:
+        return
+    for family, address in [(socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")]:
+        try:
+            probe = socket.socket(family, socket.SOCK_STREAM)
+        except OSError:
+            continue  # IPv6 may be disabled on this machine.
+        with probe:
+            probe.settimeout(0.2)
+            if probe.connect_ex((address, port)) == 0:
+                raise OSError("local port already has a listener")
+
+
 def lock_directory(data_dir: Path) -> BinaryIO:
     """Prevent simultaneous launchers rotating the same key or touching its DB."""
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -226,6 +246,8 @@ def main(argv: list[str] | None = None) -> None:
     directory_lock = None
     try:
         try:
+            check_loopback_port(args.api_port)
+            check_loopback_port(args.frontend_port)
             api_socket.bind(("127.0.0.1", args.api_port))
             api_socket.listen(128)
             host = DemoHost(f"http://127.0.0.1:{api_socket.getsockname()[1]}")
