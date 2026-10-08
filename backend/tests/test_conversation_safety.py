@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.config import settings
-from app.conversations.router import PLACEHOLDER, build_router
+from app.conversations.router import PLACEHOLDER, build_router, live_signals
 from app.core.registry import get_active_pack
 from app.store import ConsentRouter, InMemoryStore
 from tests.http_auth import configure, token
@@ -16,6 +16,28 @@ from tests.test_conversations import dialogue as dialogue_fixture
 from tests.test_stance import _SOLUTION_MSG, StubLLM
 
 dialogue = dialogue_fixture
+
+
+@pytest.mark.parametrize("content", ["learner@example.com", "I want to die", "x" * 513])
+def test_live_summaries_screen_sensitive_and_oversize_content(content):
+    summary = live_signals({"planner_note": content, "components": {"draft": "hidden"}}, 8192)
+    assert content not in str(summary)
+    assert "hidden" not in str(summary)
+
+
+def test_live_summaries_are_bounded_and_ignore_arbitrary_fields():
+    released = {
+        "message": "released",
+        "planner_note": "A small check",
+        "confidence": 0.75,
+        "memory": {"grasped": ["loops"], "raw": "hidden"},
+        "components": {"draft": "hidden", "timings_ms": {"planner_ms": 12, "raw": "hidden"}},
+    }
+    assert live_signals(released, 1) == {}
+    signals = live_signals(released, 8192)
+    assert signals["planner_note"] == "A small check"
+    assert "hidden" not in str(signals) and "released" not in str(signals)
+    assert signals["components"]["timings_ms"] == {"planner_ms": 12}
 
 
 @pytest.mark.parametrize(
@@ -119,6 +141,7 @@ def test_governance_and_lifecycle_during_actual_http_turn(
                 assert len(messages) == 1 and messages[0]["status"] == "failed"
                 assert "internal exception" not in response.text
             elif scenario in {"pii-output", "distress"}:
+                assert "live_signals" not in response.json()
                 assert messages[-1]["text"] == PLACEHOLDER
                 assert "learner@example.com" not in str(messages)
                 if scenario == "distress":

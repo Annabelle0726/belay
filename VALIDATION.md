@@ -1478,3 +1478,13 @@ server from answering a different loopback address on the same chosen port.
 It exits without creating data files when a listener is already present.
 `tests/test_local_dev.py`: 19 hermetic cases passed, including both requested
 ports occupied on IPv4 loopback, IPv4 wildcard and IPv6 wildcard listeners.
+
+Preview conversation correction: live summaries are returned only on first
+successful delivery, excluded from persistence/replays, bounded and screened.
+Both-edge HTTP tests verify one model invocation and unchanged released dialogue
+under retry; safety tests cover hidden drafts, sensitive summaries and limits.
+Missing-history reauthorization permits explicit recovery without bypassing scope.
+Full backend suite: **617 passed, 8 skipped**; Ruff check/format and mypy passed.
+Skips remain live model evaluation, unconfigured PostgreSQL DSN and six absent
+verifier-contract siblings. Shared conversation-client tests include initialization
+with an unavailable pointer. All checks use offline providers and temporary data.

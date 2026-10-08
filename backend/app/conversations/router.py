@@ -16,7 +16,7 @@ from ..auth import _bearer, authorize, denied
 from ..config import settings
 from ..integrations.quad.pii import PIIRejected, assert_no_pii
 from ..store.scoped import scoped_store
-from .bounds import BoundedProvider, bounded_route, recent_window
+from .bounds import BoundedProvider, bounded_route, recent_window, wire_size
 from .policy import Policy
 from .repository import ConversationStore, digest
 
@@ -53,6 +53,61 @@ def pii_content(text: str) -> bool:
 
 def private_content(text: str) -> bool:
     return pii_content(text) or has_distress_signal(text, extra_terms(settings))
+
+
+def live_signals(released: dict, max_bytes: int) -> dict:
+    """Existing learner-visible summaries, never drafts, persisted traces or replay data."""
+    signals: dict = {
+        key: value
+        for key in (
+            "affective_state",
+            "intervention",
+            "planner_note",
+            "self_critique",
+            "governance",
+        )
+        if isinstance(value := released.get(key), str) and len(value) <= 512
+    }
+    confidence = released.get("confidence")
+    if (
+        isinstance(confidence, (int, float))
+        and not isinstance(confidence, bool)
+        and 0 <= confidence <= 1
+    ):
+        signals["confidence"] = confidence
+    memory = released.get("memory")
+    memory = memory if isinstance(memory, dict) else {}
+    signals["memory"] = {
+        key: [item for item in memory.get(key, []) if isinstance(item, str) and len(item) <= 64][
+            :24
+        ]
+        for key in ("grasped", "shaky")
+        if isinstance(memory.get(key, []), list)
+    }
+    components = released.get("components")
+    components = components if isinstance(components, dict) else {}
+    self_eval = components.get("self_eval")
+    self_eval = self_eval if isinstance(self_eval, dict) else {}
+    timings = components.get("timings_ms")
+    timings = timings if isinstance(timings, dict) else {}
+    signals["components"] = {
+        "self_eval": {
+            key: value
+            for key in ("leak_risk", "goal_alignment")
+            if isinstance(value := self_eval.get(key), str) and len(value) <= 64
+        },
+        "wellbeing_softened": components.get("wellbeing_softened") is True,
+        "timings_ms": {
+            key: value
+            for key, value in timings.items()
+            if key in {"planner_ms", "reasoner_ms", "self_eval_ms", "governance_ms", "memory_ms"}
+            and type(value) in (int, float)
+            and 0 <= value < 1e9
+        },
+    }
+    if wire_size(signals) > max_bytes or private_content(str(signals)):
+        return {}
+    return signals
 
 
 def build_router(
@@ -174,6 +229,12 @@ def build_router(
             result = repository.complete(
                 fresh, cid, body.request_id, {"message": message, "check_question": question}
             )
+            if not screened and message != PLACEHOLDER:
+                # First delivery only. DB completion/replays contain released dialogue alone.
+                result = {
+                    **result,
+                    "live_signals": live_signals(released, repository.policy.max_message_bytes),
+                }
             if screened and not unsafe_output:
                 # Preserve the live support response without storing its content.
                 result = {

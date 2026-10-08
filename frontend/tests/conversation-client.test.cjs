@@ -100,11 +100,14 @@ test('delete removes current saved attempt without silently creating another', a
   await assert.rejects(session.send({message:'new'}),/Choose a saved attempt/);
 });
 
-test('all three demos mount the shared restoration controls without styling changes',()=>{
+test('all three demos mount the shared restoration controls',()=>{
   for (const file of ['widget.html','dev-client.html','embed-demo.html']) {
     const source=fs.readFileSync(path.join(__dirname,'..',file),'utf8');
-    assert.match(source,/src="conversation-client\.js"/); assert.match(source,/BelayConversations\.mount/);
-    assert.match(source,/dialogue\.send/);
+    assert.match(source,/src="conversation-client\.js"/);
+    const external=source.includes('src="dev-client.js"');
+    const client=external?fs.readFileSync(path.join(__dirname,'..','dev-client.js'),'utf8'):source;
+    assert.match(client,/BelayConversations\.mount/); assert.match(client,/dialogue\.send/);
+    if(external) new vm.Script(client);
     const scripts=[...source.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)];
     for (const [,script] of scripts) new vm.Script(script);
   }
@@ -132,4 +135,12 @@ test('a changed authenticated namespace cannot submit the previous learner messa
   await assert.rejects(session.send({message:'previous learner text'}),/Identity changed/);
   assert.equal(env.calls.filter(call=>call.url.endsWith('/turns')).length,0);
   assert.equal(session.messages.length,0);
+});
+
+test('initialization recovers missing history without silently replacing it',async()=>{
+  const env=setup(),first=env.make();await first.initialize();await first.setSaving(true);
+  env.attempts.clear();const next=env.make();await next.initialize();
+  assert.equal(next.authorized,true);assert.equal(next.cid,null);assert.equal(next.messages.length,0);
+  assert.match(next.note,/Choose New attempt/);assert.equal(env.attempts.size,0);
+  await next.newAttempt();assert.equal(env.attempts.size,1);
 });

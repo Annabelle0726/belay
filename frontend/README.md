@@ -158,3 +158,18 @@ Hermetic checks: `node --test frontend/tests/auth-client.test.cjs
 frontend/tests/conversation-client.test.cjs` (13 passed). These exercise refresh,
 new attempts, lost-response retries, pagination, unavailable/deleted history,
 identity changes and credential headers, plus parse every demo inline script.
+
+### Live replies and unavailable history
+
+Saved turns deliver an optional `live_signals` object for the existing Glass Box.
+These bounded, screened summaries are transient: they are not written to dialogue
+storage or browser storage, and are absent from restored history and retry replay.
+Restoring an attempt displays saved replies without inventing historical signals.
+A failed history-network request after a completed turn still supplies its live
+reply to the caller for display; refreshing replaces that transient display with
+the server's authoritative messages.
+
+An unavailable attempt clears the stale pointer and rechecks membership. If the
+current assignment is still authorized, New attempt and turning saving off remain
+usable. Recovery does not create an attempt automatically or extend its retention.
+Expired local-demo attempts remain unavailable under the one-hour test policy.
