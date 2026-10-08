@@ -5,8 +5,8 @@
 `main` at `83bd1a9`. Follow the numbered CC-B prompt structure.
 This document proposes work; it does not claim that controls are implemented.*
 
-Implementation progress is recorded in [controls-implementation.md](../controls-implementation.md),
-with operator instructions in [controls-operations.md](../controls-operations.md).
+Implementation progress is recorded in [controls-implementation.md](../../deployment/controls/controls-implementation.md),
+with operator instructions in [controls-operations.md](../../deployment/controls/controls-operations.md).
 The shared coordinator and execution hooks are implemented; production HTTP jobs
 and real Step 1/2 conversation integration remain pending on this main-based branch.
 
