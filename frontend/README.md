@@ -199,7 +199,7 @@ Optional saving stays visible, with human-readable creation-based retention;
 refresh/older/delete actions are in a native More disclosure. Connection settings
 are collapsed by default; Glass Box and run-check feedback start expanded and can
 be collapsed manually. Run code sits in the Code Editor header. On narrow screens the conversation and
-composer come first. Other demos retain the original shared-control presentation.
+composer come first. The reference widget also uses the compact saving toolbar; embed-demo keeps its original presentation.
 
 Markdown uses pinned marked 18.0.14 and DOMPurify 3.4.16 from jsDelivr, with
 sanitization and safe external links. If either library is unavailable, model text
@@ -220,3 +220,17 @@ for the page session, as in the existing enrollment-URL contract. Do not use the
 synthetic local preview for actual student data. Ports and data directory affect
 which namespace/attempt pointer is restored; preserve the directory for restart
 checks and do not expect a different directory to contain the old history.
+
+Both dev-client and widget expose System / Light / Dark in the header. System is
+the default; explicit choices persist only the `sol-theme` display preference.
+The shared palette makes the header follow the workspace; select chevrons are
+inset 12px from the right edge. Theme selection remains usable when embedded
+browser storage is unavailable. Authentication and dialogue are never stored by
+the theme helper.
+
+The widget puts optional saving above the messages and Send next to the input.
+Session settings and optional goals/reflection are collapsible, and signals use
+content-sized cards. Host `SOL_BACKEND_URL` / `BELAY_AUTH_ORIGIN`,
+`BELAY_LEARNER_ID`, and optional `BELAY_EXERCISE_ID` initialize its display fields;
+the server still verifies every credential and requested identity. The same local
+launcher serves `/widget.html` with the authenticated bootstrap.

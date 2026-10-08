@@ -108,3 +108,22 @@ removing its separate footer row. Run Result check details and Glass Box start
 expanded, with their collapse controls retained. With both open and real control
 output, the 1280x720 page still fits the viewport. Confidence reserves enough
 width for 100% without creating a horizontal signal-panel scrollbar.
+
+## 8. Shared theme and reference-widget polish
+
+The dev-client header follows the workspace palette, rather than keeping a
+fixed navy background. Both demos offer System / Light / Dark with a validated
+display-only preference; system changes apply in System mode and storage-disabled
+hosts remain usable. Exercise and Mode chevrons are inset 12px and Exercise starts
+closer to its label.
+
+The widget uses the shared colors and compact optional-saving controls above the
+messages. Session settings and goals/reflection are collapsible; Send sits beside
+the message field, while signals no longer stretch into a mostly empty column.
+Public host configuration initializes the backend and learner fields so the local
+launcher works on alternate ports. This does not grant identity or class access.
+
+Validation: 31 hermetic frontend tests pass, including three theme preference
+checks. Browser smoke checks cover both palettes, widget saved/unsaved control
+turns and refresh, desktop 1280x720 and mobile 390x844. No identity service or model
+was contacted. Backend code did not change.

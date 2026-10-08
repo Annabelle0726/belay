@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Peer-Tutor reference widget (/quad/v1)</title>
   <link rel="icon" type="image/svg+xml" href="AI-Powered-Spark.svg"/>
+  <link rel="stylesheet" href="workspace.css"/>
+  <script src="theme-client.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked@18.0.14/lib/marked.umd.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.4.16/dist/purify.min.js"></script>
   <!--
@@ -31,71 +33,68 @@
     shapes HOW the tutor helps, never WHAT it withholds.
   -->
   <style>
-    :root { --ink:#1a2233; --muted:#667085; --line:#e3e8ef; --bg:#f7f9fc;
-            --accent:#3056d3; --hold:#9a6700; --soft:#7a3ea8; --ok:#2f7d4f; }
-    * { box-sizing: border-box; }
-    body { font: 14px/1.55 system-ui, sans-serif; color:var(--ink); margin:0;
-           background:var(--bg); }
-    .wrap { max-width: 960px; margin: 1.2rem auto; padding: 0 1rem; }
-    h1 { font-size: 1.15rem; margin:.2rem 0; }
-    h2 { font-size: .92rem; margin:.1rem 0 .6rem; letter-spacing:.01em; }
-    .note { color:var(--muted); font-size:.82rem; }
-    .bar { display:flex; flex-wrap:wrap; gap:.6rem; align-items:end;
-           background:#fff; border:1px solid var(--line); border-radius:10px; padding:.7rem .9rem; }
-    .bar label { font-size:.72rem; color:var(--muted); display:block; margin-bottom:.15rem; }
-    .bar input, .bar select { font:inherit; padding:.35rem .45rem; border:1px solid var(--line);
-           border-radius:7px; }
-    .panes { display:grid; grid-template-columns: 1.5fr 1fr; gap:.9rem; margin-top:.9rem; }
-    .pane { background:#fff; border:1px solid var(--line); border-radius:10px; padding:.9rem; }
-    .col { display:flex; flex-direction:column; gap:.9rem; }
-    /* Responsive viewport height instead of fixed 320px cap */
-    .msgs { display:flex; flex-direction:column; gap:.6rem; min-height:220px; max-height:60vh;
-            overflow:auto; padding:.4rem; }
-    .msg { padding:.5rem .7rem; border-radius:10px; max-width:90%; }
-    .msg.student { align-self:flex-end; background:#eef2ff; }
-    .msg.tutor { align-self:flex-start; background:#f1f5f9; }
-    .msg .who { font-size:.7rem; color:var(--muted); margin-bottom:.15rem; }
-
-    /* Inner bubble formatting for Markdown content, code blocks, and list spacing */
+    :root { --radius-control:8px; }
+    * { box-sizing:border-box; }
+    body { margin:0; font:14px/1.5 system-ui,sans-serif; color:var(--text); background:var(--bg); }
+    .wrap { max-width:1280px; margin:0 auto; padding:16px; }
+    h1 { font-size:1.15rem; margin:0; }
+    h2 { font-size:.9rem; margin:0; }
+    .note { color:var(--muted); font-size:.8rem; }
+    .intro { margin:0 0 12px; }
+    .bar { display:flex; flex-wrap:wrap; gap:10px; align-items:end; }
+    .bar > div { flex:1 1 180px; min-width:0; }
+    label { display:block; color:var(--muted); font-size:.8rem; margin-bottom:4px; }
+    input, select, textarea { font:inherit; color:var(--text); background-color:var(--field-bg); border:1px solid var(--border-strong); border-radius:8px; padding:7px 10px; }
+    .bar input, .bar select, textarea { width:100%; }
+    button { font:inherit; min-height:34px; padding:6px 12px; border:1px solid var(--accent); border-radius:8px; background:var(--accent); color:var(--on-accent); cursor:pointer; }
+    button.ghost { background:var(--surface); color:var(--text); border-color:var(--border-strong); }
+    button:disabled { opacity:.5; cursor:default; }
+    :is(button,input,select,textarea,summary):focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+    button:hover:not(:disabled) { filter:brightness(.95); }
+    .pane, .settings { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; box-shadow:var(--shadow); min-width:0; }
+    .settings summary, .goals summary { cursor:pointer; }
+    .settings[open] summary { margin-bottom:12px; }
+    .panes { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(0,1fr); gap:12px; margin-top:12px; align-items:start; }
+    .col { display:flex; flex-direction:column; gap:12px; min-width:0; }
+    .chat-pane { display:flex; flex-direction:column; gap:10px; border-top:3px solid var(--accent); }
+    .pane-heading { padding-bottom:10px; border-bottom:1px solid var(--border); }
+    .msgs { display:flex; flex-direction:column; gap:10px; height:clamp(180px,35vh,440px); overflow:auto; overscroll-behavior:contain; border:1px solid var(--border); border-radius:8px; padding:10px; }
+    .msgs:empty::before { content:"Ask Sol a question to get started."; color:var(--muted); text-align:center; margin:auto; }
+    .msg { padding:10px 12px; border:1px solid var(--border); border-radius:8px; max-width:90%; overflow-wrap:anywhere; }
+    .msg.student { align-self:flex-end; background:var(--surface-2); }
+    .msg.tutor { align-self:flex-start; max-width:100%; background:var(--code-bg); }
+    .who { font-size:.7rem; color:var(--muted); margin-bottom:4px; }
     .msg p { margin:.25rem 0; }
-    .msg p:first-child { margin-top:0; }
-    .msg p:last-child { margin-bottom:0; }
-    .msg pre { background:#e2e8f0; padding:.6rem; border-radius:6px; overflow-x:auto; margin:.4rem 0; }
-    .msg code { background:#e2e8f0; padding:.1rem .3rem; border-radius:4px; font-family:monospace; font-size:.88em; }
-    .msg pre code { background:transparent; padding:0; }
-    .msg ul, .msg ol { margin:.25rem 0; padding-left:1.2rem; }
-
-    textarea, .row input { width:100%; font:inherit; padding:.45rem; border:1px solid var(--line);
-            border-radius:7px; }
-    button { font:inherit; padding:.45rem .8rem; border:1px solid var(--accent); background:var(--accent);
-             color:#fff; border-radius:7px; cursor:pointer; margin-top:.5rem; }
-    button.ghost { background:#fff; color:var(--accent); }
-    .chip { display:inline-block; font-size:.74rem; padding:.12rem .5rem; border-radius:999px;
-            border:1px solid var(--line); margin:.1rem .25rem .1rem 0; color:var(--muted); }
-    .chip.hold { color:var(--hold); border-color:#f0d9a8; background:#fff8e8; }
-    .chip.soft { color:var(--soft); border-color:#e6cff0; background:#faf2ff; }
-    .chip.ok   { color:var(--ok); border-color:#cfe9d8; background:#f1fbf4; }
-    .sig { margin:.35rem 0; }
-    .sig b { font-weight:600; }
-    .declined { color:var(--hold); font-size:.8rem; margin-top:.3rem; }
+    .msg pre { overflow:auto; padding:10px; background:var(--surface-2); border-radius:6px; }
+    .msg code { color:var(--code-text); background:var(--surface-2); border-radius:4px; padding:1px 3px; }
+    .msg ul, .msg ol { padding-left:1.2rem; }
+    .composer { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:end; }
+    textarea { display:block; resize:vertical; min-height:58px; }
+    .goals-content { display:grid; gap:10px; margin-top:12px; }
+    .goal-action { display:flex; align-items:center; gap:8px; }
+    .signals-pane { max-height:65vh; overflow:auto; }
+    .chip { display:inline-block; font-size:.75rem; padding:3px 8px; border-radius:999px; border:1px solid var(--border); background:var(--surface-2); margin:2px 4px 2px 0; }
+    .chip.hold, .declined { color:var(--warn-text); }
+    .chip.ok { color:var(--accent-teal); }
+    .chip.soft { color:var(--accent); }
+    .sig { margin:10px 0; }
+    .conversation-note { color:var(--muted); }
+    @media(max-width:700px) { .panes { grid-template-columns:minmax(0,1fr); } .wrap { padding:12px; } .pane,.settings { padding:12px; } .msgs { height:35vh; } }
   </style>
 </head>
 <body>
+<header class="site-header">
+  <div class="brand-group"><img src="AI-Powered-Spark.svg" alt="" width="28" height="28"/><h1>Sol</h1><span class="header-description">Peer tutor · Reference widget</span></div>
+  <div class="controls-group"><label class="theme-picker"><span>Theme</span><select data-theme-picker aria-label="Color theme"><option value="auto">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label></div>
+</header>
 <div class="wrap">
-  <h1>Peer-Tutor reference widget</h1>
-  <p class="note">
-    The host supplies an already-authenticated <strong>pseudonymous</strong> id; this
-    widget never authenticates and sends no PII. It renders <strong>signals, not
-    verdicts</strong>, and shows <strong>no grades and no rankings</strong>. Replaceable:
-    a host can drop this in or swap its own shell against the same <code>/quad/v1</code>
-    contract.
-  </p>
-
+  <p class="note intro">Think it through with Sol. Signals describe the tutor’s help, never grades or rankings.</p>
+  <details class="settings"><summary>Session settings</summary>
   <div class="bar">
-    <div><label>sidecar base URL</label><input id="base" value="http://localhost:8000" /></div>
-    <div><label>pseudo_id (from host)</label><input id="pid" value="gh:12345" /></div>
-    <div><label>exercise_id</label><input id="ex" value="ds-foundations" /></div>
-    <div><label>stance</label>
+    <div><label for="base">Backend URL</label><input id="base" value="http://localhost:8000" /></div>
+    <div><label for="pid">Learner alias (from host)</label><input id="pid" value="gh:12345" /></div>
+    <div><label for="ex">Exercise</label><input id="ex" value="ds-foundations" /></div>
+    <div><label for="stance">Tutor stance</label>
       <select id="stance">
         <option value="peer">peer</option>
         <option value="control">control (no model)</option>
@@ -103,7 +102,7 @@
       </select>
     </div>
     <div>
-      <label>scaffolding (one customization knob, opt-in)</label>
+      <label for="knob">Guidance preference (optional)</label>
       <select id="knob">
         <option value="">(default)</option>
         <option value="more">more scaffolding (smaller steps)</option>
@@ -117,27 +116,30 @@
     customizable. <span id="declined" class="declined"></span>
   </p>
 
+  </details>
   <div class="panes">
     <div class="col">
-      <div class="pane">
-        <h2>Chat</h2>
+      <div class="pane chat-pane">
+        <h2 class="pane-heading">Conversation</h2>
+        <div id="conversation-controls"></div>
         <div class="msgs" id="msgs"></div>
-        <textarea id="say" rows="2" placeholder="Ask the tutor, or paste what you tried..."></textarea>
-        <div><button id="send">Send turn</button></div>
+        <div class="composer"><textarea aria-label="Message to Sol" id="say" rows="2" placeholder="Ask the tutor, or paste what you tried..."></textarea>
+        <button id="send">Send</button></div>
       </div>
-      <div class="pane">
-        <h2>Goals &amp; reflection <span class="note">(opt-in, honored within limits, never a command)</span></h2>
-        <textarea id="goal" rows="2" placeholder="A goal in your own words, e.g. 'make me explain my reasoning first'"></textarea>
-        <button id="setgoal" class="ghost">Set goal</button>
-        <span id="goalstate" class="note"></span>
-        <textarea id="refl" rows="2" placeholder="A reflection on how it is going..." style="margin-top:.6rem"></textarea>
-        <button id="setrefl" class="ghost">Record reflection</button>
-        <span id="reflstate" class="note"></span>
-      </div>
+      <details class="pane goals">
+        <summary><strong>Goals &amp; reflection</strong> <span class="note">· Optional</span></summary>
+        <div class="goals-content"><span class="note">Your goals guide the help, within the tutor’s safety limits.</span>
+        <textarea aria-label="Learning goal" id="goal" rows="2" placeholder="A goal in your own words, e.g. 'make me explain my reasoning first'"></textarea>
+        <div class="goal-action"><button id="setgoal" class="ghost">Set goal</button>
+        <span id="goalstate" class="note" role="status"></span></div>
+        <textarea aria-label="Reflection" id="refl" rows="2" placeholder="A reflection on how it is going..." style="margin-top:.6rem"></textarea>
+        <div class="goal-action"><button id="setrefl" class="ghost">Record reflection</button>
+        <span id="reflstate" class="note" role="status"></span></div></div>
+      </details>
     </div>
 
-    <div class="pane">
-      <h2>Trace &amp; signals <span class="note">(mastery framing, not a score)</span></h2>
+    <div class="pane signals-pane">
+      <h2 class="pane-heading">Trace &amp; signals <span class="note">(mastery framing, not a score)</span></h2>
       <div id="signals"><p class="note">Signals from the latest turn appear here.</p></div>
     </div>
   </div>
@@ -148,6 +150,10 @@
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
+// Public host configuration chooses the display fields, never grants permissions.
+if (window.SOL_BACKEND_URL || window.BELAY_AUTH_ORIGIN) $("base").value = window.SOL_BACKEND_URL || window.BELAY_AUTH_ORIGIN;
+if (window.BELAY_LEARNER_ID) $("pid").value = window.BELAY_LEARNER_ID;
+if (window.BELAY_EXERCISE_ID) $("ex").value = window.BELAY_EXERCISE_ID;
 const baseURL = () => $("base").value.replace(/\/$/, "");
 const recent = [];   // dialogue history for the turn loop
 
@@ -216,7 +222,7 @@ function renderSignals(t) {
 }
 
 const dialogue = window.BelayConversations.mount({
-  container: $("msgs").parentElement, base: baseURL, prefix: "/quad/v1", exercise: () => $("ex").value,
+  container: $("conversation-controls"), compact: true, base: baseURL, prefix: "/quad/v1", exercise: () => $("ex").value,
   renderHistory(messages) {
     recent.length = 0;
     $("signals").textContent = "Signals from the latest live turn appear here.";

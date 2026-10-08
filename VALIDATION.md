@@ -1516,3 +1516,11 @@ Follow-up presentation: Run code moves to the editor header; run checks and
 Glass Box now start expanded and remain collapsible. Recheck viewport bounds
 with both disclosures open and real control-mode output.
 At 1280x720, both disclosures were open and the page remained 720px tall.
+
+Shared theme/widget follow-up: 31 hermetic frontend tests pass. Theme tests cover
+system changes, explicit preference restoration/validation, and unavailable
+browser storage. Browser checks verify light/dark headers match card surfaces,
+12px inset select chevrons, saved and unsaved widget control replies and refresh,
+and no horizontal overflow at 390x844. Both desktop pages fit 1280x720 with the
+optional widget settings/goals collapsed. Ruff check/format and mypy pass. Backend
+behavior is unchanged; the previous full backend suite was not repeated.
