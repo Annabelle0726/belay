@@ -174,6 +174,7 @@
     const checks = Array.isArray(pack.checks) ? pack.checks : [];
     if (checks.length) {
       const details = document.createElement("details"), summary = document.createElement("summary");
+      details.open = true;
       summary.textContent = `Check details · ${checks.filter(c => c.ok).length}/${checks.length} passed`;
       details.appendChild(summary);
       checks.forEach((check, index) => {

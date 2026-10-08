@@ -102,3 +102,9 @@ Validation: 28 frontend tests and Ruff check/format/mypy passed. Live control-mo
 checks show readable output and no whole-page vertical scroll at 1280x720 and
 1024x768; 390x844 shows the composer above the editor without horizontal overflow.
 The full backend suite was not repeated for these frontend-only changes.
+
+The next presentation adjustment moves Run code into the Code Editor header,
+removing its separate footer row. Run Result check details and Glass Box start
+expanded, with their collapse controls retained. With both open and real control
+output, the 1280x720 page still fits the viewport. Confidence reserves enough
+width for 100% without creating a horizontal signal-panel scrollbar.

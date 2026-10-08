@@ -596,7 +596,7 @@
             main { height: calc(100dvh - 56px); }
             .col-left { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; gap: 12px; }
             .col-right { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; gap: 12px; }
-            .editor-card { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; }
+            .editor-card { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
             .editor-card textarea { height: 100%; min-height: 100px; resize: none; padding: .75rem; }
             .conversation-card { min-height: 0; }
             .chat-feed { flex: 1; min-height: 0; max-height: none; }
@@ -665,11 +665,11 @@
         </div>
 
         <div class="card stack editor-card">
-            <label class="card-title" for="source">Code Editor</label>
-            <textarea id="source" spellcheck="false"></textarea>
-            <div class="actions">
+            <div class="card-title">
+                <label for="source">Code Editor</label>
                 <button id="run" class="btn-primary">Run code</button>
             </div>
+            <textarea id="source" spellcheck="false"></textarea>
         </div>
 
         <div class="card stack">
@@ -696,7 +696,7 @@
             <span id="status" class="muted" role="status"></span>
         </div>
 
-        <details class="card telemetry">
+        <details class="card telemetry" open>
             <summary class="card-title">Glass Box · Latest response signals</summary>
             <div class="stack">
             <div class="row" style="margin-bottom: 8px;">
@@ -706,7 +706,7 @@
             <div class="row">
                 <span class="label">Confidence</span>
                 <div class="bar"><span id="confbar"></span></div>
-                <span id="conf" class="row-data" style="flex: 0 0 4ch; white-space: nowrap; text-align: right;">—</span>
+                <span id="conf" class="row-data" style="flex: 0 0 3rem; white-space: nowrap; text-align: right;">—</span>
             </div>
             <div class="row">
                 <span class="label">Planner</span>

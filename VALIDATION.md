@@ -1511,3 +1511,8 @@ control replies. At 390x844 the composer is visible before the editor, with no
 horizontal overflow. More reveals the original authorized actions; Glass Box is
 available on demand. No model/identity service was called. Backend behavior did
 not change, so the previous 617-pass backend suite was not repeated.
+
+Follow-up presentation: Run code moves to the editor header; run checks and
+Glass Box now start expanded and remain collapsible. Recheck viewport bounds
+with both disclosures open and real control-mode output.
+At 1280x720, both disclosures were open and the page remained 720px tall.

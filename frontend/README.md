@@ -197,7 +197,8 @@ question input sits beside the conversation rather than below the editor.
 Controls use 34px heights (32px for conversation actions) and 8–16px gaps.
 Optional saving stays visible, with human-readable creation-based retention;
 refresh/older/delete actions are in a native More disclosure. Connection settings
-and Glass Box are collapsed by default. On narrow screens the conversation and
+are collapsed by default; Glass Box and run-check feedback start expanded and can
+be collapsed manually. Run code sits in the Code Editor header. On narrow screens the conversation and
 composer come first. Other demos retain the original shared-control presentation.
 
 Markdown uses pinned marked 18.0.14 and DOMPurify 3.4.16 from jsDelivr, with
