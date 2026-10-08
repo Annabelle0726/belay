@@ -214,6 +214,26 @@ test('a failed run does not ask the tutor; pack-agnostic output remains readable
   assert.match(env.nodes.result.textContent,/Synthetic run failure/);
 });
 
+test('run results show printed values and check feedback without exposing the API envelope',async()=>{
+  const env=await setup({search:'?stance=control'});
+  env.state.runResult={ok:true,goalMet:false,metric:null,pack:{id:'datascience',stdout:'{A: 12}\n',
+    checks:[{ok:false,detail:'Expected one value per category'}]}};
+  await env.nodes.run.fire('click');
+  assert.match(env.nodes.result.textContent,/\{A: 12\}/);
+  assert.match(env.nodes.result.textContent,/Some exercise checks need attention/);
+  assert.match(env.nodes.result.textContent,/Check details · 0\/1 passed/);
+  assert.doesNotMatch(env.nodes.result.textContent,/"pack"|"goalMet"|"metric"/);
+  const turn=env.calls.find(c=>c.url.endsWith('/api/sol/turn'));
+  assert.deepEqual(JSON.parse(turn.options.body).result,env.state.runResult); // Full context still goes to Sol.
+});
+
+test('empty output has a useful hint and runtime output stays literal text',async()=>{
+  const env=await setup();env.state.runResult={ok:false,error:'<script>unsafe()</script>',pack:{stdout:''}};
+  await env.nodes.run.fire('click');
+  assert.match(env.nodes.result.textContent,/No printed output/);
+  assert.equal(env.nodes.result.children.find(e=>e.className==='run-error').innerHTML,'');
+});
+
 test('without Markdown dependencies model text is escaped rather than inserted as executable HTML',async()=>{
   const env=await setup();env.state.reply='<script>unsafe()</script><img src=x onerror=unsafe()>';
   env.nodes.question.value='Test rendering';await env.nodes.ask.fire('click');

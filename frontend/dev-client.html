@@ -366,6 +366,18 @@
             overflow-y: auto;
         }
 
+        .run-result { font-size: .85rem; overflow-wrap: anywhere; }
+        .run-status { margin: 0 0 .5rem; }
+        .run-stdout, .run-error {
+            margin: 0 0 .5rem; padding: .65rem .75rem;
+            background: var(--code-bg); border: 1px solid var(--border);
+            border-radius: var(--radius-control); white-space: pre-wrap;
+            overflow-wrap: anywhere; font: var(--font-code)/1.5 ui-monospace, monospace;
+            max-height: 10rem; overflow-y: auto;
+        }
+        .run-error { color: var(--highlight-red); }
+        .run-result summary { cursor: pointer; color: var(--muted); }
+
         /* ---- Conversation feed ----
            Bubbles are styled here rather than inline in the append path: inline styles
            bypass the token layer (so they cannot follow the theme) and cannot carry a
@@ -625,7 +637,7 @@
 
         <div class="card stack">
             <div class="card-title">Run Result</div>
-            <pre id="result" class="scroll-output muted">—</pre>
+            <div id="result" class="run-result" role="region" aria-label="Run result" aria-live="polite">Run your code to see its output.</div>
         </div>
     </section>
 

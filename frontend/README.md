@@ -185,6 +185,12 @@ the legacy `who/text` contract when saving is off. Run results use the actual
 pack-agnostic envelope; failed execution does not trigger a tutor call.
 Glass Box summaries wrap instead of being silently truncated.
 
+Run Result presents printed program output and a short execution status, with
+exercise-check details available on demand. It does not display the JSON API
+envelope; the complete response remains in RAM as authorized tutor context.
+Execution success and exercise-check success are distinct, and output is literal
+text so printed HTML is never executed. Empty output suggests using `print(...)`.
+
 Markdown uses pinned marked 18.0.14 and DOMPurify 3.4.16 from jsDelivr, with
 sanitization and safe external links. If either library is unavailable, model text
 is escaped as plain text. There is no frontend build/install step.
