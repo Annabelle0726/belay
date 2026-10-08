@@ -130,6 +130,37 @@ Deploy with workers stopped:
 5. Schedule `python -m app.conversations.maintenance cleanup` externally at an
    institution-approved interval. This implementation adds no queue or scheduler.
 
+### CLI configuration and local PowerShell example
+
+`python -m app.conversations.maintenance` does NOT automatically read `.env`.
+Export the policy variables in the same terminal before running the command.
+`uvicorn --env-file .env` loads settings only into that uvicorn process, not into
+other Python commands or the browser. `init-ledger` requires all four policy fields
+even when web saving is off. Missing or invalid fields now produce a CLI error
+listing variable names/constraints, exit code 2, and no HTTP traceback. Initialization
+does not require a database connection; a corrupt existing ledger is never reset.
+
+For LOCAL TESTING ONLY, from `backend`:
+
+```powershell
+$env:BELAY_ENV = 'local'
+$env:DIALOGUE_ENABLED = '0'
+$env:DIALOGUE_POLICY_ID = 'local-test-only'
+$env:DIALOGUE_RETENTION_SECONDS = '3600'
+$env:DIALOGUE_BACKUP_MAX_AGE_SECONDS = '3600'
+$env:DIALOGUE_DELETION_LEDGER_FILE = Join-Path $PWD 'data\local-deletions.jsonl'
+python -m app.conversations.maintenance init-ledger
+```
+
+The one-hour values are disposable local examples, not approved production retention.
+Initialization does not enable saving. To test saving, explicitly set
+`$env:DIALOGUE_ENABLED = '1'`, run the migration and restart the backend from that
+terminal. In production replace the examples with institution-approved policy values.
+Keep the database DSN/cwd consistent between migration and backend startup. These
+dialogue settings do not provide front-end authentication or an identity issuer.
+Seven hermetic subprocess CLI tests cover missing/invalid policy, initialization
+with saving off, reruns preserving deletion fences, corrupt ledgers and cleanup.
+
 Delete clears messages and the retry response in the request transaction. Expiry
 hides content immediately; physical purge waits for cleanup. Cleanup is repeatable.
 Minimal SQL tombstones/quota metadata and content-free deletion IDs remain. A late

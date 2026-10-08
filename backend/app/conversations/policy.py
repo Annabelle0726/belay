@@ -36,31 +36,43 @@ class Policy:
             raise HTTPException(
                 409, "dialogue saving is disabled; ordinary tutoring remains available"
             )
-        if (
-            not self.policy_id
-            or len(self.policy_id) > 128
-            or not self.deletion_ledger_file
-            or self.retention_seconds <= 0
-            or self.backup_max_age_seconds <= 0
-            or any(
-                getattr(self, k) <= 0
-                for k in (
-                    "max_body_bytes",
-                    "max_message_bytes",
-                    "max_messages",
-                    "max_stored_bytes",
-                    "max_attempts",
-                    "page_messages",
-                    "page_bytes",
-                    "context_tokens",
-                    "response_tokens",
-                    "model_tokens",
-                    "pending_seconds",
-                )
-            )
-            or self.page_bytes < self.max_message_bytes * 6 + 1024
-            or self.max_stored_bytes < self.max_message_bytes * 8 + 1024
-            or self.context_tokens <= self.response_tokens
-            or self.model_tokens <= self.context_tokens + 256
-        ):
+        if self.configuration_errors():
             raise HTTPException(503, "dialogue saving policy is not configured")
+
+    def configuration_errors(self) -> list[str]:
+        """Operator diagnostics without disclosing configured values to HTTP clients."""
+        errors = []
+        if not self.policy_id:
+            errors.append("DIALOGUE_POLICY_ID must be set")
+        elif len(self.policy_id) > 128:
+            errors.append("DIALOGUE_POLICY_ID must contain at most 128 characters")
+        if not self.deletion_ledger_file:
+            errors.append("DIALOGUE_DELETION_LEDGER_FILE must be set")
+        for name in (
+            "retention_seconds",
+            "backup_max_age_seconds",
+            "max_body_bytes",
+            "max_message_bytes",
+            "max_messages",
+            "max_stored_bytes",
+            "max_attempts",
+            "page_messages",
+            "page_bytes",
+            "context_tokens",
+            "response_tokens",
+            "model_tokens",
+            "pending_seconds",
+        ):
+            if getattr(self, name) <= 0:
+                errors.append(f"DIALOGUE_{name.upper()} must be a positive integer")
+        if self.page_bytes < self.max_message_bytes * 6 + 1024:
+            errors.append("DIALOGUE_PAGE_BYTES must be >= 6 * DIALOGUE_MAX_MESSAGE_BYTES + 1024")
+        if self.max_stored_bytes < self.max_message_bytes * 8 + 1024:
+            errors.append(
+                "DIALOGUE_MAX_STORED_BYTES must be >= 8 * DIALOGUE_MAX_MESSAGE_BYTES + 1024"
+            )
+        if self.context_tokens <= self.response_tokens:
+            errors.append("DIALOGUE_CONTEXT_TOKENS must be > DIALOGUE_RESPONSE_TOKENS")
+        if self.model_tokens <= self.context_tokens + 256:
+            errors.append("DIALOGUE_MODEL_TOKENS must be > DIALOGUE_CONTEXT_TOKENS + 256")
+        return errors
