@@ -170,3 +170,38 @@ __all__ = [
     "_CallStub",
     "_events",
 ]
+
+
+# Shared controls fixtures use a separate temporary database.
+from sqlalchemy import create_engine
+
+from app.controls.contracts import Limits, Policy, Scope
+from app.controls.ledger import Ledger
+
+
+def controls_policy(**kwargs):
+    values = dict(
+        version="test-v1",
+        price_version="synthetic-v1",
+        currency="USD",
+        input_price=1,
+        output_price=2,
+        deployment=Limits(tokens=1000),
+        institution=Limits(),
+        classroom=Limits(),
+        learner=Limits(),
+    )
+    values.update(kwargs)
+    return Policy(**values)
+
+
+@pytest.fixture
+def ledger(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'controls.db'}")
+    value = Ledger(engine, lambda: 100.0)
+    value.initialize(controls_policy())
+    yield value
+    engine.dispose()
+
+
+CONTROL_SCOPE = Scope("test", "i", "c", "l")

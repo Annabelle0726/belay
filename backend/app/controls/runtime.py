@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any, TypeVar
 
 from ..config import settings
+from .admission import Admission
 from .contracts import Amount, ControlError, Scope
 from .ledger import Ledger
 
@@ -81,13 +82,21 @@ def model_call(
     if row["policy"] != policy.model_dump():
         context.ledger.settle(attempt_id, Amount())
         raise ControlError("policy_changed", 503)
+    admission = Admission(context.ledger)
+    try:
+        slot = admission.acquire_slot(context.scope, context.operation, "model")
+    except BaseException:
+        context.ledger.settle(attempt_id, Amount())
+        raise
     try:
         result = call()
         prompt, completion = usage(result)
     except BaseException:
         # A lost response or interrupted thread is not proof of zero usage.
         context.ledger.settle(attempt_id, None)
+        admission.release_slot(slot, stopped=False)
         raise
+    admission.release_slot(slot, stopped=True)
     if type(prompt) is not int or type(completion) is not int or prompt < 0 or completion < 0:
         context.ledger.settle(attempt_id, None)
     else:
@@ -115,11 +124,19 @@ def runner_call(call: Callable[[], T], wall_seconds: float) -> T:
         Amount(runs=1, wall_ms=math.ceil(wall_seconds * 1000)),
         "runner",
     )
+    admission = Admission(context.ledger)
+    try:
+        slot = admission.acquire_slot(context.scope, context.operation, "runner")
+    except BaseException:
+        context.ledger.settle(attempt_id, Amount())
+        raise
     try:
         result = call()
     except BaseException:
         context.ledger.settle(attempt_id, None)
+        admission.release_slot(slot, stopped=False)
         raise
+    admission.release_slot(slot, stopped=True)
     # Runner completion includes timeout/kill; no optimistic refund on errors.
     measured: Any = getattr(result, "wall_ms", None)
     context.ledger.settle(

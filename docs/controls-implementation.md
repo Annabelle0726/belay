@@ -112,3 +112,26 @@ Validation: 39 targeted execution/provider/telemetry/injection tests passed.
 Ruff check/format and mypy passed. Full SQLite regression: 409 collected, 401
 passed and 8 skipped (including the separately passed PostgreSQL race test).
 Provider responses are stubs; no real model was charged.
+
+## 4. Shared admission service
+
+Added transactional token buckets, scoped queue depth/bytes/wait bounds, scoped
+operation replay/conflicts, class rotation with per-class FIFO, and independent
+job/model/runner concurrency limits. Queued allowance is reserved atomically
+with admission, checked under current policy at dispatch, then released before
+per-attempt reservations. This bounds outstanding queue liability but does not
+promise funding for a whole multi-call turn after dispatch. Unknown external
+calls retain their concurrency slots as well as their budget holds.
+
+The service accepts verified scopes and opaque input/result references only;
+owned polling/cancellation are service methods. HTTP job routes are deliberately
+not exposed on this unauthenticated main baseline. An authenticated adapter and
+permitted short-lived content storage are prerequisites, not inferred from a
+client participant ID. Policy default traffic values are synthetic development
+values, not approved course allowances.
+
+Validation: 24 control tests passed, including real PostgreSQL with two spawned
+processes competing for 10 model slots: 10 accepted, 10 refused. Fairness test:
+A queues 50, B queues 2, first four claims are A0/B0/A1/B1. Queue liability,
+payload bytes, expiry, rate refill, cancellation, replay, scoped polling and
+lost-worker fencing are covered. Full mypy passes.
