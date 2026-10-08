@@ -20,6 +20,10 @@ def _envbool(key: str, default: bool) -> bool:
 
 @dataclass
 class Settings:
+    # Explicit development bypass preserves the main-branch local workflow.
+    # Enforced execution requires trusted operation context; HTTP integration
+    # remains gated on the identity/conversation prerequisites.
+    controls_mode: str = field(default_factory=lambda: _env("CONTROLS_MODE", "development_bypass"))
     # --- Model/inference provider seam -------------------------------------
     # PROVIDER selects the inference provider (and is recorded in the §6 telemetry
     # `provider` field). The fast/strong TIER POLICY (which component uses which

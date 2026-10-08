@@ -34,6 +34,8 @@ import tempfile
 import time
 from dataclasses import dataclass, field
 
+from ...controls.runtime import runner_call
+
 _CHILD = os.path.join(os.path.dirname(__file__), "_child.py")
 
 # Defaults sized for a tutoring grader (numpy/pandas import + a tiny model).
@@ -57,6 +59,28 @@ class RunnerResult:
 
 
 def run_python(
+    program: str,
+    *,
+    files: dict[str, str | bytes] | None = None,
+    artifacts: list[str] | None = None,
+    cpu_seconds: int = DEFAULT_CPU_SECONDS,
+    memory_mb: int | None = DEFAULT_MEMORY_MB,
+    wall_seconds: float = DEFAULT_WALL_SECONDS,
+) -> RunnerResult:
+    return runner_call(
+        lambda: _run_python(
+            program,
+            files=files,
+            artifacts=artifacts,
+            cpu_seconds=cpu_seconds,
+            memory_mb=memory_mb,
+            wall_seconds=wall_seconds,
+        ),
+        wall_seconds,
+    )
+
+
+def _run_python(
     program: str,
     *,
     files: dict[str, str | bytes] | None = None,

@@ -11,6 +11,7 @@ import logging
 from dataclasses import dataclass
 
 from ..config import settings
+from ..controls.contracts import ControlError
 from .llm import LLMClient, get_llm
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,8 @@ class InjectionGuard:
             self._llm = get_llm()
             self._initialized = True
             logger.info("InjectionGuard initialized with LLM client")
+        except ControlError:
+            raise
         except Exception as e:
             logger.error(f"InjectionGuard init failed: {e}")
             self._initialized = False
@@ -112,6 +115,8 @@ Respond with ONLY the JSON object, no other text."""
 
             return flagged, score
 
+        except ControlError:
+            raise
         except Exception as e:
             logger.error(f"LLM classification failed: {e}")
             raise  # Re-raise to be caught by check()'s try/except
@@ -144,6 +149,8 @@ Respond with ONLY the JSON object, no other text."""
                 model_used=settings.model_tiers["fast"],
             )
 
+        except ControlError:
+            raise
         except Exception as e:
             logger.error(f"InjectionGuard inference failed: {e}")
             # Fail open - proceed ungated

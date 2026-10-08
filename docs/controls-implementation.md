@@ -90,3 +90,25 @@ Upstream fetch failed; origin fetch succeeded and the fork main base is unchange
 Scalability trade-off: this first coordinator serializes mutations with one
 transaction lock and computes usage from ledger rows. It is deliberately simple;
 load testing and indexed/materialized balances are needed before high-volume use.
+
+## 3. Execution accounting
+
+OpenAI-compatible and Anthropic SDK retries are disabled. Each actual SDK attempt
+now reserves independently, including format fallback, invalid-JSON repair,
+thinking output and classification. Unknown response usage keeps its hold;
+transport errors are not blindly retried. Telemetry records each attempt rather
+than only the final parseable response. All pack execution already converges on
+`run_python`; its wrapper now accounts for runs and wall milliseconds, including
+grading and governance checks. CPU/memory/wall execution limits remain the existing
+runner's responsibility; no stronger containment claim is made.
+
+`CONTROLS_MODE=development_bypass` preserves local main behavior and is visible in
+both health surfaces. `enforced` requires a trusted operation context and rejects
+missing context before model/runner execution. Production HTTP integration is not
+enabled by this flag alone. Control denial propagates through the injection guard
+instead of permitting a budget failure to skip a configured safety check.
+
+Validation: 39 targeted execution/provider/telemetry/injection tests passed.
+Ruff check/format and mypy passed. Full SQLite regression: 409 collected, 401
+passed and 8 skipped (including the separately passed PostgreSQL race test).
+Provider responses are stubs; no real model was charged.

@@ -30,6 +30,7 @@ from ...agent import get_llm, run_turn
 from ...agent import goals as _goals
 from ...agent import overlay as _overlay
 from ...config import settings
+from ...controls.contracts import ControlError
 from ...core.registry import get_active_pack
 from ...store import ConsentRouter, InMemoryStore, SqlStore
 from .pii import PIIRejected, assert_no_pii
@@ -61,6 +62,7 @@ def build_router(
             "protocol": PROTOCOL_VERSION,
             "pack": pack.id,
             "provider": settings.provider,
+            "controls": settings.controls_mode,
         }
 
     @api.get("/capabilities")
@@ -157,6 +159,8 @@ def build_router(
         store = consent_router.store_for(req.pseudo_id)
         try:
             return run_turn(turn_payload, _llm(), store)
+        except ControlError as e:
+            raise HTTPException(e.status, {"code": e.code}) from e
         except Exception as e:  # surface a clean error
             raise HTTPException(502, f"tutor unavailable: {e}") from e
 
