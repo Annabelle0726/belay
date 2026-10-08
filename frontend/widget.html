@@ -4,6 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Peer-Tutor reference widget (/quad/v1)</title>
+  <link rel="icon" type="image/svg+xml" href="AI-Powered-Spark.svg"/>
+  <script src="https://cdn.jsdelivr.net/npm/marked@18.0.14/lib/marked.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.4.16/dist/purify.min.js"></script>
   <!--
     DEPENDENCY-LIGHT REFERENCE WIDGET (replaceable; demo-proof grade, not pilot UI).
 
@@ -45,12 +48,23 @@
     .panes { display:grid; grid-template-columns: 1.5fr 1fr; gap:.9rem; margin-top:.9rem; }
     .pane { background:#fff; border:1px solid var(--line); border-radius:10px; padding:.9rem; }
     .col { display:flex; flex-direction:column; gap:.9rem; }
-    .msgs { display:flex; flex-direction:column; gap:.5rem; min-height:170px; max-height:320px;
-            overflow:auto; padding:.2rem; }
+    /* Responsive viewport height instead of fixed 320px cap */
+    .msgs { display:flex; flex-direction:column; gap:.6rem; min-height:220px; max-height:60vh;
+            overflow:auto; padding:.4rem; }
     .msg { padding:.5rem .7rem; border-radius:10px; max-width:90%; }
     .msg.student { align-self:flex-end; background:#eef2ff; }
     .msg.tutor { align-self:flex-start; background:#f1f5f9; }
     .msg .who { font-size:.7rem; color:var(--muted); margin-bottom:.15rem; }
+
+    /* Inner bubble formatting for Markdown content, code blocks, and list spacing */
+    .msg p { margin:.25rem 0; }
+    .msg p:first-child { margin-top:0; }
+    .msg p:last-child { margin-bottom:0; }
+    .msg pre { background:#e2e8f0; padding:.6rem; border-radius:6px; overflow-x:auto; margin:.4rem 0; }
+    .msg code { background:#e2e8f0; padding:.1rem .3rem; border-radius:4px; font-family:monospace; font-size:.88em; }
+    .msg pre code { background:transparent; padding:0; }
+    .msg ul, .msg ol { margin:.25rem 0; padding-left:1.2rem; }
+
     textarea, .row input { width:100%; font:inherit; padding:.45rem; border:1px solid var(--line);
             border-radius:7px; }
     button { font:inherit; padding:.45rem .8rem; border:1px solid var(--accent); background:var(--accent);
@@ -64,7 +78,6 @@
     .sig { margin:.35rem 0; }
     .sig b { font-weight:600; }
     .declined { color:var(--hold); font-size:.8rem; margin-top:.3rem; }
-    code { background:#eef1f6; padding:.05rem .3rem; border-radius:5px; }
   </style>
 </head>
 <body>
@@ -141,7 +154,11 @@ const recent = [];   // dialogue history for the turn loop
 function addMsg(who, text) {
   const d = document.createElement("div");
   d.className = "msg " + (who === "student" ? "student" : "tutor");
-  d.innerHTML = '<div class="who">' + who + "</div>" + escapeHtml(text);
+  const html = window.marked && window.DOMPurify
+    ? window.DOMPurify.sanitize(window.marked.parse(String(text || "")), {USE_PROFILES:{html:true}})
+    : escapeHtml(text);
+  d.innerHTML = '<div class="who">' + escapeHtml(who) + "</div>" + html;
+  d.querySelectorAll("a").forEach(a => {a.setAttribute("target", "_blank"); a.setAttribute("rel", "noopener noreferrer");});
   $("msgs").appendChild(d);
   $("msgs").scrollTop = $("msgs").scrollHeight;
 }
@@ -201,6 +218,8 @@ function renderSignals(t) {
 const dialogue = window.BelayConversations.mount({
   container: $("msgs").parentElement, base: baseURL, prefix: "/quad/v1", exercise: () => $("ex").value,
   renderHistory(messages) {
+    recent.length = 0;
+    $("signals").textContent = "Signals from the latest live turn appear here.";
     if (!messages.length) { $("msgs").textContent = ""; return; }
     $("msgs").textContent = "";
     messages.forEach(m => addMsg(m.role === "student" ? "student" : "tutor", m.text +
@@ -225,7 +244,8 @@ $("send").addEventListener("click", async () => {
     }
     if (data.unsaved_exchange) { addMsg("tutor", data.message); if (data.check_question) addMsg("tutor", data.check_question); }
     $("say").value = "";
-    renderSignals(data);
+    if (data.live_signals || data.components) renderSignals(data.live_signals || data);
+    else $("signals").textContent = "Historical replies have no saved live signals.";
   } catch (error) { addMsg("tutor", error.message); }
   finally { $("send").disabled = false; }
 });

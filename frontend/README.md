@@ -7,7 +7,8 @@ glue, not part of the tested framework; the backend is the source of truth.
 |------|---------|
 | `widget.html` | The reference widget (Slice E/F), wired to the `/quad/v1` sidecar. Drop-in embeddable; routes entirely through the backend (no browser-side key). |
 | `embed-demo.html` | A minimal page showing how to embed the widget on a host site. |
-| `dev-client.html` | Zero-dependency page that routes through the backend to verify a deployment. Development demo; the host must supply an authorized learner alias and signed access token. |
+| `dev-client.html` | No-build development page with responsive layout, theme and conversation feed; the host supplies an authorized learner alias and signed access token. |
+| `dev-client.js` | Authenticated run/turn wiring, live signals and saved/unsaved conversation rendering for the development page. |
 | `api-client.js` | A small API client (`runModel`, `solTurn`, `createParticipant`, `exportEvents`, `getCurriculum`) for a custom front-end. |
 
 ## Backend wiring
@@ -118,7 +119,7 @@ until the trusted host explicitly updates the allowed origin. Configure CORS for
 that host. Body aliases must match the authorized learner; registration returns
 that same alias. `exercise_version` can be sent to pin an assignment version;
 omitting it uses the server's deployed version and still requires its grant.
-All existing UI structure remains unchanged. See
+Identity and assignment permissions are enforced by the backend. See
 [the server contract](../docs/authentication.md) and run
 `node frontend/tests/auth-client.test.cjs` for hermetic credential wiring checks.
 
@@ -126,8 +127,9 @@ All existing UI structure remains unchanged. See
 
 `conversation-client.js` supplies an authenticated Session for both API surfaces.
 `api-client.js` exports `createConversationSession(exerciseId, onChange)`. The three
-demos mount the same minimal saving/history controls without changing their CSS
-or page layout. The server config response supplies the VERIFIED namespace and
+demos mount the same saving/history controls. The preview dev-client incorporates
+the UI branch's layout and theme, with these controls inside Conversation Feed.
+The server config response supplies the VERIFIED namespace and
 current granted exercise versions; browser inputs never grant access.
 
 Saving is unchecked until the learner opts in under an enabled institution policy.
@@ -154,8 +156,7 @@ clear prior history and discard an obsolete session's late response. Each saved
 operation additionally checks the authenticated server namespace. No token belongs
 in URL parameters, browser persistence, logs or exports.
 
-Hermetic checks: `node --test frontend/tests/auth-client.test.cjs
-frontend/tests/conversation-client.test.cjs` (13 passed). These exercise refresh,
+Hermetic checks: `node --test frontend/tests/*.test.cjs` (26 passed). These exercise refresh,
 new attempts, lost-response retries, pagination, unavailable/deleted history,
 identity changes and credential headers, plus parse every demo inline script.
 
@@ -173,3 +174,33 @@ An unavailable attempt clears the stale pointer and rechecks membership. If the
 current assignment is still authorized, New attempt and turning saving off remain
 usable. Recovery does not create an attempt automatically or extend its retention.
 Expired local-demo attempts remain unavailable under the one-hour test policy.
+
+### UI integration preview
+
+`codex/ui-conversation-preview` starts from bounded-restoration `3a414d6` and ports
+presentation from UI `0bd2def`: SVG logo, responsive columns, theme, Markdown feed
+and widget typography. It does not import the UI branch's CC-B1 backend ancestry
+or its unauthenticated POSTs. Current typed questions reach the backend, using
+the legacy `who/text` contract when saving is off. Run results use the actual
+pack-agnostic envelope; failed execution does not trigger a tutor call.
+Glass Box summaries wrap instead of being silently truncated.
+
+Markdown uses pinned marked 18.0.14 and DOMPurify 3.4.16 from jsDelivr, with
+sanitization and safe external links. If either library is unavailable, model text
+is escaped as plain text. There is no frontend build/install step.
+
+The same `python -m app.local_dev --save-dialogue` command applies on this branch.
+The initial inspected machine had existing servers on 8000/5173 and 8001/5174;
+the separate preview was launched with unused ports and a separate local directory:
+
+```powershell
+python -m app.local_dev --save-dialogue --api-port 8002 --frontend-port 5175 --data-dir ..\deployment\local\ui-preview
+```
+
+Open the printed `http://127.0.0.1:5175/dev-client.html` for normal peer tutoring.
+`?stance=control` provides a fixed support response without model calls for an
+offline wiring check; it is not a peer-model demonstration. Stance remains fixed
+for the page session, as in the existing enrollment-URL contract. Do not use the
+synthetic local preview for actual student data. Ports and data directory affect
+which namespace/attempt pointer is restored; preserve the directory for restart
+checks and do not expect a different directory to contain the old history.

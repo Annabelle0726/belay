@@ -1488,3 +1488,13 @@ Full backend suite: **617 passed, 8 skipped**; Ruff check/format and mypy passed
 Skips remain live model evaluation, unconfigured PostgreSQL DSN and six absent
 verifier-contract siblings. Shared conversation-client tests include initialization
 with an unavailable pointer. All checks use offline providers and temporary data.
+
+Preview UI: **26 frontend Node tests passed**, covering authenticated typed
+questions, URL-assigned stance, saved/reloaded replies, unavailable-pointer
+recovery, lost replies/history fetches, explicit new/delete controls, scope
+changes, failed runs and escaped Markdown fallback. Live browser smoke checks
+used the isolated local host and control stance (no external identity/model calls):
+saved replies and live signals render together, actual starter-code output remains
+visible, exercise switching clears other history and switching back restores it.
+Desktop 1280x900 is two columns; mobile 390x844 stacks with no horizontal overflow.
+Viewport overrides were reset. No browser console errors were observed.
