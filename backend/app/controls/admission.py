@@ -281,14 +281,22 @@ class Admission:
         return dict(row)
 
     def finish(
-        self, job_id: str, fence: int, result_ref: str | None = None, *, authorized: bool
+        self,
+        job_id: str,
+        fence: int,
+        result_ref: str | None = None,
+        *,
+        authorized: bool,
+        failure_reason: str = "authorization_revoked",
     ) -> None:
         if result_ref:
             opaque(result_ref)
+        if not re.fullmatch(r"[a-z_]{1,64}", failure_reason):
+            raise ValueError("invalid failure code")
         with self.ledger.transaction() as conn:
             row = self._live(conn, job_id, fence)
             state = "completed" if authorized else "failed"
-            reason = None if authorized else "authorization_revoked"
+            reason = None if authorized else failure_reason
             if row["state"] == "cancel_requested":
                 state, reason = "cancelled", None
             conn.execute(
