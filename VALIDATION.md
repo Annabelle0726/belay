@@ -1532,3 +1532,11 @@ operator scripts: `scripts/extract_measures.py` (two Exercise/dict mismatches),
 `scripts/smoke_sql.py` (optional indexing), and `scripts/smoke_inference.py`
 (non-bool return). These scripts have no diff in the UI/theme change and remain
 outside the configured quality-gate scope. They were not repaired in this UI task.
+
+Glass Box history follow-up: signals are first-delivery data and are not persisted
+or replayed with saved dialogue. Same-attempt, same-revision refreshes keep the
+current page's received signals in RAM; new attempts, newer history revisions,
+identity/assignment changes and authorization failure clear them. Restored history
+and replies without signals show an explicit explanation instead of only dashes.
+32 hermetic frontend tests pass, including same-attempt refresh and new-attempt
+clearing. No signal persistence or backend contract changes were introduced.

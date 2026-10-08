@@ -8,6 +8,7 @@
   const stance = ["peer", "oracle", "control"].includes(assignedStance) ? assignedStance : "peer";
   let exercises = {}, dialogue, scope, identity, lastResult = null, busy = false;
   let temporaryMessages = [], recent = [], savedView = false;
+  let historyContext = null, liveContext = null;
 
   function escapeHtml(text) {
     return String(text || "").replace(/[&<>]/g, c => ({"&":"&amp;", "<":"&lt;", ">":"&gt;"}[c]));
@@ -53,7 +54,9 @@
     } else messages.forEach(bubble);
     feed.scrollTop = feed.scrollHeight;
   }
-  function clearTelemetry() {
+  function clearTelemetry(note = "Run code or ask Sol to see signals from a new reply.") {
+    liveContext = null;
+    $("signals-status").textContent = note;
     for (const id of ["affect", "interv", "planner", "selfeval", "gov", "mem", "timings"]) {
       $(id).textContent = "—"; $(id).title = "";
     }
@@ -70,12 +73,23 @@
     }
     if (scope !== session.key || savedView !== session.enabled) clearTransient();
     scope = session.key; savedView = session.enabled; identity = session.config.identity;
-    if (savedView) { clearTelemetry(); renderFeed(messages); }
+    historyContext = JSON.stringify([session.key, session.cid, session.revision]);
+    if (savedView) {
+      if (liveContext !== historyContext) clearTelemetry(messages.length
+        ? "Saved replies restored. Live signals are not saved; ask Sol for fresh signals."
+        : undefined);
+      renderFeed(messages);
+    }
     else renderFeed(temporaryMessages);
   }
   function telemetry(out) {
     out = out.live_signals || out;
-    if (!out.components) { clearTelemetry(); return; }
+    if (!out.components) {
+      clearTelemetry("This reply has no live signals. History and retry responses do not include them; privacy screening can also omit them.");
+      return;
+    }
+    liveContext = historyContext;
+    $("signals-status").textContent = "Signals from the latest live reply in this page session.";
     $("affect").textContent = "affect: " + (out.affective_state || "—");
     $("interv").textContent = "intervention: " + (out.intervention || "—");
     const confidence = typeof out.confidence === "number" ? Math.round(out.confidence * 100) : null;

@@ -127,3 +127,11 @@ Validation: 31 hermetic frontend tests pass, including three theme preference
 checks. Browser smoke checks cover both palettes, widget saved/unsaved control
 turns and refresh, desktop 1280x720 and mobile 390x844. No identity service or model
 was contacted. Backend code did not change.
+
+Glass Box history follow-up: signals are first-delivery data and are not persisted
+or replayed with saved dialogue. Same-attempt, same-revision refreshes keep the
+current page's received signals in RAM; new attempts, newer history revisions,
+identity/assignment changes and authorization failure clear them. Restored history
+and replies without signals show an explicit explanation instead of only dashes.
+32 hermetic frontend tests pass, including same-attempt refresh and new-attempt
+clearing. No signal persistence or backend contract changes were introduced.

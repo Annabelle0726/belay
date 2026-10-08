@@ -234,3 +234,11 @@ content-sized cards. Host `SOL_BACKEND_URL` / `BELAY_AUTH_ORIGIN`,
 `BELAY_LEARNER_ID`, and optional `BELAY_EXERCISE_ID` initialize its display fields;
 the server still verifies every credential and requested identity. The same local
 launcher serves `/widget.html` with the authenticated bootstrap.
+
+Glass Box history follow-up: signals are first-delivery data and are not persisted
+or replayed with saved dialogue. Same-attempt, same-revision refreshes keep the
+current page's received signals in RAM; new attempts, newer history revisions,
+identity/assignment changes and authorization failure clear them. Restored history
+and replies without signals show an explicit explanation instead of only dashes.
+32 hermetic frontend tests pass, including same-attempt refresh and new-attempt
+clearing. No signal persistence or backend contract changes were introduced.

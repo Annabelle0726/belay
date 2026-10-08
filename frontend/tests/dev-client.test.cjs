@@ -31,7 +31,7 @@ async function setup(state={}) {
   state.identity ||= {institution_id:'inst-a',class_id:'class-a',learner_id:'gh:1'};
   const calls=[],nodes={},handlers={};
   for(const id of ['backend','exercise','mode','source','question','status','result','prompt','chat-feed',
-    'conversation-controls','ask','run','affect','interv','planner','selfeval','gov','mem','timings','conf','confbar']) {
+    'conversation-controls','ask','run','affect','interv','planner','selfeval','gov','mem','timings','conf','confbar','signals-status']) {
     nodes[id]=new Element(id==='exercise'?'select':'div');
   }
   nodes.backend.value='https://belay.invalid'; nodes.mode.value='study';
@@ -128,8 +128,21 @@ test('saved bubbles restore after reload without resending client history or dup
   assert.equal(restored.calls.some(c=>c.url.endsWith('/turns')),false);
   assert.equal(restored.nodes.planner.textContent,'—');
   assert.equal(restored.nodes.conf.textContent,'—');
+  assert.match(restored.nodes['signals-status'].textContent,/Saved replies restored/);
   assert.ok(!JSON.stringify([...first.state.entries]).includes('A saved question'));
   assert.ok(!JSON.stringify([...first.state.entries]).includes('short-lived-token'));
+});
+
+test('same-attempt refresh retains live signals in RAM; new attempt clears them',async()=>{
+  const env=await setup(),check=env.controls().check;check.checked=true;await check.fire('change');
+  env.nodes.question.value='Explain grouping';await env.nodes.ask.fire('click');
+  assert.equal(env.nodes.conf.textContent,'70%');
+  await env.controls().button('Refresh history').fire('click');
+  assert.equal(env.nodes.conf.textContent,'70%');
+  assert.match(env.nodes.planner.textContent,/Offer a small check/);
+  await env.controls().button('New conversation').fire('click');
+  assert.equal(env.nodes.conf.textContent,'—');
+  assert.doesNotMatch(env.nodes['signals-status'].textContent,/latest live reply/);
 });
 
 test('missing saved history after reload permits a new explicit attempt or unsaved tutoring',async()=>{
