@@ -73,6 +73,8 @@ test('all three demo POST paths call the shared credential helper', () => {
   for (const file of ['widget.html', 'embed-demo.html', 'dev-client.html']) {
     const html = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
     assert.match(html, /src="auth-client\.js"/);
-    assert.match(html, /headers: await window\.BelayAuth\.headers/);
+    const source = file === 'dev-client.html'
+      ? fs.readFileSync(path.join(__dirname, '..', 'dev-client.js'), 'utf8') : html;
+    assert.match(source, /headers: await window\.BelayAuth\.headers/);
   }
 });
