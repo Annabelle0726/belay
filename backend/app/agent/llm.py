@@ -32,6 +32,8 @@ import time
 from typing import Protocol, runtime_checkable
 
 from ..config import settings
+from ..controls.contracts import ControlError
+from ..controls.runtime import model_call
 from . import telemetry as _tel
 
 
@@ -97,7 +99,30 @@ class OpenAICompatProvider:
     def __init__(self) -> None:
         from openai import OpenAI  # lazy import
 
-        self._client = OpenAI(base_url=settings.openai_base_url, api_key=settings.openai_api_key)
+        self._client = OpenAI(
+            base_url=settings.openai_base_url, api_key=settings.openai_api_key, max_retries=0
+        )
+
+    def _attempt(self, role: str, kwargs: dict):
+        started = time.perf_counter()
+        ptok = ctok = None
+        try:
+            resp = model_call(
+                lambda: self._client.chat.completions.create(**kwargs),
+                json.dumps(kwargs["messages"], ensure_ascii=False),
+                kwargs["max_tokens"],
+                self._usage,
+            )
+            ptok, ctok = self._usage(resp)
+            return resp
+        finally:
+            _tel.record(
+                role,
+                latency_ms=round((time.perf_counter() - started) * 1000, 1),
+                prompt_tokens=ptok,
+                completion_tokens=ctok,
+                cost=_cost(ptok, ctok) if ptok is not None and ctok is not None else None,
+            )
 
     def model_for(self, tier: str) -> str:
         return _model_for(tier)
@@ -124,7 +149,6 @@ class OpenAICompatProvider:
         max_tokens: int = 800,
         reasoning_effort: str | None = None,
     ) -> dict:
-        t0 = time.perf_counter()
         model = self.model_for(tier)
         kwargs: dict = dict(
             model=model,
@@ -143,12 +167,17 @@ class OpenAICompatProvider:
             if effort:
                 kwargs["extra_body"] = {"reasoning_effort": effort}
 
-        # Prefer JSON mode; some endpoints reject it — fall back silently.
+        # Retry only an explicit request-format rejection. A timeout/lost
+        # response is uncertain spending, never a trigger for a blind retry.
         kwargs_json = dict(kwargs, response_format={"type": "json_object"})
         try:
-            resp = self._client.chat.completions.create(**kwargs_json)
-        except Exception:
-            resp = self._client.chat.completions.create(**kwargs)
+            resp = self._attempt(role, kwargs_json)
+        except ControlError:
+            raise
+        except Exception as exc:
+            if getattr(exc, "status_code", None) not in {400, 422}:
+                raise
+            resp = self._attempt(role, kwargs)
 
         text = self._extract_text(resp)
         parsed = parse_json(text)
@@ -165,27 +194,24 @@ class OpenAICompatProvider:
                 },
             ]
             try:
-                resp = self._client.chat.completions.create(
-                    model=model,
-                    messages=retry_msgs,  # type: ignore[arg-type]  # openai's over-specific message param; list[dict[str,str]] is fine at runtime
-                    temperature=0.0,
-                    max_tokens=max_tokens,
+                resp = self._attempt(
+                    role,
+                    dict(
+                        model=model,
+                        messages=retry_msgs,
+                        temperature=0.0,
+                        max_tokens=max_tokens,
+                    ),
                 )
                 parsed = parse_json(self._extract_text(resp))
+            except ControlError:
+                raise
             except Exception:
-                pass
+                raise
 
         if parsed is None:
             raise ValueError(f"{role}: model did not return parseable JSON")
 
-        ptok, ctok = self._usage(resp)
-        _tel.record(
-            role,
-            latency_ms=round((time.perf_counter() - t0) * 1000, 1),
-            prompt_tokens=ptok,
-            completion_tokens=ctok,
-            cost=_cost(ptok, ctok),
-        )
         return parsed
 
 
@@ -199,9 +225,9 @@ class AnthropicProvider:
         from anthropic import Anthropic  # lazy import
 
         self._client = (
-            Anthropic(api_key=settings.anthropic_api_key)
+            Anthropic(api_key=settings.anthropic_api_key, max_retries=0)
             if settings.anthropic_api_key
-            else Anthropic()
+            else Anthropic(max_retries=0)
         )
 
     def model_for(self, tier: str) -> str:
@@ -233,21 +259,41 @@ class AnthropicProvider:
             # requires the default temperature (so we omit temperature here).
             kwargs["max_tokens"] = max(max_tokens, budget + 512)
             kwargs["thinking"] = {"type": "enabled", "budget_tokens": budget}
-        resp = self._client.messages.create(**kwargs)
+
+        def usage(resp):
+            value = getattr(resp, "usage", None)
+            if value is None:
+                return None, None
+            prompt = getattr(value, "input_tokens", None)
+            # Cache tokens are separately reported by Anthropic. Charge them
+            # conservatively at the configured maximum input price.
+            if prompt is not None:
+                prompt += (getattr(value, "cache_creation_input_tokens", 0) or 0) + (
+                    getattr(value, "cache_read_input_tokens", 0) or 0
+                )
+            return prompt, getattr(value, "output_tokens", None)
+
+        ptok = ctok = None
+        try:
+            resp = model_call(
+                lambda: self._client.messages.create(**kwargs),
+                system + user,
+                kwargs["max_tokens"],
+                usage,
+            )
+            ptok, ctok = usage(resp)
+        finally:
+            _tel.record(
+                role,
+                latency_ms=round((time.perf_counter() - t0) * 1000, 1),
+                prompt_tokens=ptok,
+                completion_tokens=ctok,
+                cost=_cost(ptok, ctok) if ptok is not None and ctok is not None else None,
+            )
         text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
         parsed = parse_json(text)
         if parsed is None:
             raise ValueError(f"{role}: model did not return parseable JSON")
-        u = getattr(resp, "usage", None)
-        ptok = getattr(u, "input_tokens", None) if u else None
-        ctok = getattr(u, "output_tokens", None) if u else None
-        _tel.record(
-            role,
-            latency_ms=round((time.perf_counter() - t0) * 1000, 1),
-            prompt_tokens=ptok,
-            completion_tokens=ctok,
-            cost=_cost(ptok, ctok),
-        )
         return parsed
 
 

@@ -38,6 +38,7 @@ from .agent import get_llm, run_turn
 from .agent import goals as goals_mod
 from .agent import overlay as overlay_mod
 from .config import settings
+from .controls.contracts import ControlError
 from .core.registry import get_active_pack
 from .schemas import (
     GoalRequest,
@@ -93,6 +94,7 @@ def healthz():
         "pack": _pack.id,
         "provider": settings.provider,
         "store": settings.store_backend,
+        "controls": settings.controls_mode,
     }
 
 
@@ -145,6 +147,8 @@ def sol_turn(req: SolTurnRequest):
     store = _router.store_for(req.participant_id)
     try:
         return run_turn(payload, _llm(), store)
+    except ControlError as e:
+        raise HTTPException(e.status, {"code": e.code}) from e
     except Exception as e:  # surface a clean error; the front-end shows a graceful note
         raise HTTPException(502, f"tutor unavailable: {e}") from e
 
