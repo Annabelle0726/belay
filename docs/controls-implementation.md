@@ -69,3 +69,24 @@ for visible attempts. Gateway-internal retries need a separately validated bound
 
 Inventory complete. No application behavior changed. Next: shared ledger and
 tests for parent/child races, duplicate settlement, rollover and unknown usage.
+
+## 2. Shared ledger
+
+Implemented separate `control_configuration` and `control_attempts` tables with
+an explicit initialization entry point. Policies live in the shared database,
+so workers cannot silently apply different local limits. Policy updates require
+a new version; currency/period changes require a migration. Reservations retain
+their price/policy snapshot. Integer accounting, four-level atomic checks,
+idempotent settlement, unknown holds across rollover and recorded overruns are
+covered. An overrun blocks new spending until operator investigation (no automatic
+refund or automatic reset). Summary is content-free.
+
+Validation: 8 ledger tests passed, including two spawned processes using real
+PostgreSQL 16 connections against an isolated local container: one 800-token
+reservation accepted, the competing reservation rejected at a 1,000-token cap.
+Ruff and focused mypy passed. No live inference or production database was used.
+Upstream fetch failed; origin fetch succeeded and the fork main base is unchanged.
+
+Scalability trade-off: this first coordinator serializes mutations with one
+transaction lock and computes usage from ledger rows. It is deliberately simple;
+load testing and indexed/materialized balances are needed before high-volume use.
