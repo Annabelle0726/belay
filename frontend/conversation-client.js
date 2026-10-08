@@ -173,21 +173,42 @@
       this.write({enabled:this.enabled}); this.notify("Saved attempt deleted. Choose New attempt to continue saving.");
     }
   }
-  function mount({container, base, exercise, prefix = "/api", renderHistory}) {
-    const row = document.createElement("div"); row.className = "row"; row.style.flexWrap = "wrap";
-    const label = document.createElement("label");
+  function mount({container, base, exercise, prefix = "/api", renderHistory, compact = false}) {
+    const row = document.createElement("div"); row.className = compact ? "conversation-toolbar" : "row";
+    if (!compact) row.style.flexWrap = "wrap";
+    const label = document.createElement("label"); label.className = "save-switch";
     const check = document.createElement("input"); check.type = "checkbox"; check.style.width = "auto"; check.disabled = true;
-    label.appendChild(check); label.appendChild(document.createTextNode(" Save this attempt (optional)"));
-    const note = document.createElement("span"); note.className = "note muted"; note.textContent = "Checking saving policy…";
+    label.appendChild(check); label.appendChild(document.createTextNode(compact ? " Save conversation (optional)" : " Save this attempt (optional)"));
+    const note = document.createElement("span"); note.className = compact ? "conversation-note muted" : "note muted";
+    note.setAttribute("role", "status"); note.textContent = "Checking saving policy…";
     row.appendChild(label); container.appendChild(row); container.appendChild(note);
+    let more, menu;
+    if (compact) {
+      more = document.createElement("details"); more.className = "conversation-more";
+      const summary = document.createElement("summary"); summary.textContent = "More";
+      more.appendChild(summary);
+      menu = document.createElement("div"); menu.className = "conversation-menu";
+      more.appendChild(menu);
+    }
     let session, signature, initialization;
     const buttons = {};
     function display(s) {
       if (s !== session) return;
       check.checked = s.enabled; check.disabled = !s.config?.enabled;
       note.textContent = s.note || "";
-      if (s.config?.enabled) note.textContent += " Policy: " + s.config.policy_id +
-        "; expires " + s.config.retention_seconds + " seconds after creation.";
+      if (s.config?.enabled) {
+        if (compact) {
+          const seconds = s.config.retention_seconds;
+          const amount = seconds % 3600 === 0 ? seconds / 3600 : seconds / 60;
+          const unit = seconds % 3600 === 0 ? "hour" : "minute";
+          const retention = `Saved conversations expire ${amount} ${unit}${amount === 1 ? "" : "s"} after creation.`;
+          const ordinary = ["Saved history restored.", "New saved attempt. History expires from its creation time.",
+            "Saving is optional. Enable it to resume this attempt after refresh."].includes(s.note);
+          note.textContent = ordinary ? retention : (s.note || "") + " " + retention;
+        } else note.textContent += " Policy: " + s.config.policy_id +
+          "; expires " + s.config.retention_seconds + " seconds after creation.";
+      }
+      if (compact) note.textContent = note.textContent.replaceAll("New attempt", "New conversation");
       for (const button of Object.values(buttons)) button.disabled = !s.enabled;
       buttons.older.disabled = !s.enabled || !s.before;
       buttons.delete.disabled = !s.cid;
@@ -212,9 +233,12 @@
     for (const [key, text, method] of [["refresh","Refresh history","restore"], ["older","Load older","older"],
       ["new","New attempt","newAttempt"], ["delete","Delete saved attempt","remove"]]) {
       const button = document.createElement("button"); button.textContent = text; button.className = "ghost";
-      button.disabled = true; buttons[key] = button; row.appendChild(button);
-      button.addEventListener("click", () => action(s => s[method]()));
+      if (compact && key === "new") button.textContent = "New conversation";
+      button.disabled = true; buttons[key] = button;
+      (compact && key !== "new" ? menu : row).appendChild(button);
+      button.addEventListener("click", () => { if (more) more.open = false; return action(s => s[method]()); });
     }
+    if (more) row.appendChild(more);
     check.addEventListener("change", () => action(s => s.setSaving(check.checked)));
     ensure().catch(error => { note.textContent = error.message; });
     window.addEventListener?.("belay-auth-changed", () => { signature = null; action(s => s.initialize()); });

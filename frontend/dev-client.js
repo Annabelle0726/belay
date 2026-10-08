@@ -40,6 +40,7 @@
       element.appendChild(state);
     }
     feed.appendChild(element);
+    feed.scrollTop = feed.scrollHeight;
   }
   function renderFeed(messages) {
     const feed = $("chat-feed");
@@ -60,7 +61,7 @@
   }
   function clearTransient() {
     temporaryMessages = []; recent = []; lastResult = null;
-    $("question").value = ""; $("result").textContent = "—";
+    $("question").value = ""; $("result").textContent = "Run your code to see its output.";
     clearTelemetry();
   }
   function renderHistory(messages, session) {
@@ -128,7 +129,7 @@
       if (!dialogue && Object.keys(exercises).length) {
         dialogue = window.BelayConversations.mount({
           container: $("conversation-controls"), base, exercise: () => $("exercise").value,
-          renderHistory
+          renderHistory, compact:true
         });
       }
       $("status").textContent = "";
@@ -140,6 +141,7 @@
   async function run() {
     if (busy) return false;
     setBusy(true); $("status").textContent = "Running…";
+    lastResult = null; $("result").textContent = "Running your code…";
     try {
       const learner = identity?.learner_id || window.BELAY_LEARNER_ID;
       lastResult = await json("/api/run", {participant_id: learner,
@@ -149,6 +151,7 @@
       return !!lastResult.ok;
     } catch (error) {
       lastResult = null; $("status").textContent = error.message;
+      $("result").textContent = "Could not run your code. " + error.message;
       return false;
     } finally { setBusy(false); }
   }

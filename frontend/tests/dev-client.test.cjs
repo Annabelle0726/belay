@@ -139,7 +139,7 @@ test('missing saved history after reload permits a new explicit attempt or unsav
   const restored=await setup(first.state);
   assert.doesNotMatch(restored.nodes['chat-feed'].textContent,/Expired history/);
   assert.equal(restored.state.attempts.size,0); // No silent replacement.
-  await restored.controls().button('New attempt').fire('click');
+  await restored.controls().button('New conversation').fire('click');
   assert.equal(restored.state.attempts.size,1);
   restored.nodes.question.value='New saved question';await restored.nodes.ask.fire('click');
   assert.equal(restored.nodes['chat-feed'].children.length,2);
@@ -156,7 +156,7 @@ test('an unavailable attempt keeps an unrelated run result in an unchanged autho
   await env.nodes.run.fire('click');
   env.state.attempts.clear();await env.controls().button('Refresh history').fire('click');
   assert.match(env.nodes.result.textContent,/Keep this result/);
-  await env.controls().button('New attempt').fire('click');
+  await env.controls().button('New conversation').fire('click');
   env.nodes.question.value='Continue';await env.nodes.ask.fire('click');
   assert.equal(env.nodes['chat-feed'].children.length,2);
 });
@@ -184,7 +184,7 @@ test('a history network failure after completion keeps the successful live Sol r
 test('new and delete attempt controls clear saved bubbles and preserve optional saving',async()=>{
   const env=await setup(),check=env.controls().check;check.checked=true;await check.fire('change');
   env.nodes.question.value='Old attempt';await env.nodes.ask.fire('click');
-  await env.controls().button('New attempt').fire('click');
+  await env.controls().button('New conversation').fire('click');
   assert.equal(env.state.attempts.size,2);assert.doesNotMatch(env.nodes['chat-feed'].textContent,/Old attempt/);
   await env.controls().button('Delete saved attempt').fire('click');
   assert.equal(env.state.attempts.size,1);assert.equal(check.checked,true);

@@ -84,3 +84,21 @@ signals; allow explicit recovery from unavailable history and prevent overlappin
 local listeners. Validate with 617 backend tests, 26 frontend tests, offline browser
 checks and Ruff/mypy. The authentication/restoration dependencies remain unmerged;
 institutional identity and retention approval are still required for production.
+
+## 7. Student-facing UI follow-up
+
+`1cf3534 fix(frontend): show readable run output instead of API JSON` replaces
+the raw response dump with program stdout, execution/check status and optional
+check details. Literal output remains safe, and full results still reach Sol.
+
+`feat(frontend): compact the tutoring workspace and conversation controls`
+unifies button sizing, padding and gaps; bounds the desktop workspace to the
+viewport with internal panel scrolling; puts the composer by the replies; moves
+secondary history actions into More; and collapses connection/Glass Box details.
+Narrow screens show the conversation first. Optional saving, retention and all
+authentication/isolation operations remain intact.
+
+Validation: 28 frontend tests and Ruff check/format/mypy passed. Live control-mode
+checks show readable output and no whole-page vertical scroll at 1280x720 and
+1024x768; 390x844 shows the composer above the editor without horizontal overflow.
+The full backend suite was not repeated for these frontend-only changes.

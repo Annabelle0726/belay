@@ -17,17 +17,17 @@
             --radius-control: 8px;
             --radius-pill: 999px;
 
-            --pad-card: clamp(16px, 1.5vw + 8px, 24px);
-            --pad-page: clamp(16px, 2vw + 8px, 32px);
-            --gap: clamp(12px, 1vw + 6px, 20px);
-            --pad-control: .6rem .8rem;
+            --pad-card: 16px;
+            --pad-page: 16px;
+            --gap: 10px;
+            --pad-control: .4rem .65rem;
             --pad-pill: .2rem .6rem;
 
             --font-body: clamp(.85rem, .35vw + .75rem, .95rem);
             --font-code: clamp(.8rem, .3vw + .7rem, .9rem);
 
             /* Wider reply column: the tutor's prose is the reading surface here */
-            --right-col: clamp(26rem, 38vw, 42rem);
+            --right-col: minmax(0, .95fr);
             --editor-h: clamp(16rem, 35vh, 32rem);
             /* Conversation pane: tall enough to read several turns, still capped so the
                telemetry below it stays within reach instead of being pushed a page down. */
@@ -224,9 +224,9 @@
 
         main {
             display: grid;
-            grid-template-columns: minmax(0, 1fr) minmax(0, var(--right-col));
-            align-items: start;
-            gap: calc(var(--gap) * 1.5);
+            grid-template-columns: minmax(0, 1fr) var(--right-col);
+            align-items: stretch;
+            gap: 16px;
             padding: var(--pad-page);
             max-width: 1600px;
             margin: 0 auto;
@@ -246,8 +246,6 @@
             gap: calc(var(--gap) * 1.5);
             width: 100%;
             min-width: 0;
-            position: sticky;
-            top: 1.5rem;
         }
 
         .stack {
@@ -260,8 +258,8 @@
         .actions {
             display: flex;
             align-items: center;
-            gap: 12px;
-            margin-top: calc(var(--gap) * 0.5);
+            gap: 8px;
+            margin-top: 0;
         }
 
         .card {
@@ -274,7 +272,7 @@
         }
 
         .card-title {
-            margin: 0 0 10px;
+            margin: 0;
             color: var(--text);
             font-size: .8rem;
             font-weight: 700;
@@ -294,6 +292,8 @@
             border-radius: var(--radius-control);
             padding: var(--pad-control);
             font: inherit;
+            font-size: .8125rem;
+            min-height: 34px;
             transition: all 0.2s;
         }
 
@@ -304,7 +304,33 @@
         button {
             cursor: pointer;
             font-weight: 500;
+            white-space: nowrap;
         }
+        button:disabled { opacity: .5; cursor: default; }
+        .chat-composer { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+        #status { font-size: .75rem; }
+        #status:empty { display: none; }
+        .connection-settings summary { color: var(--muted); font-size: .75rem; cursor: pointer; }
+        .connection-settings .row { margin-top: 8px; }
+        .conversation-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .save-switch { display: inline-flex; align-items: center; gap: 6px; font-size: .75rem; margin-right: auto; }
+        .save-switch input { min-height: 0; margin: 0; accent-color: var(--accent); }
+        .conversation-toolbar button, .conversation-more summary { font-size: .75rem; min-height: 32px; padding: 6px 9px; }
+        .conversation-note { display: block; margin-top: 5px; font-size: .7rem; line-height: 1.4; }
+        .conversation-more { position: relative; }
+        .conversation-more summary { cursor: pointer; border: 1px solid var(--border-strong); border-radius: var(--radius-control); }
+        .conversation-more[open] { z-index: 2; }
+        .conversation-menu {
+            position: absolute; top: calc(100% + 6px); right: 0; min-width: 11rem;
+            padding: 6px; background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius-control); box-shadow: var(--shadow);
+        }
+        .conversation-more button { display: block; width: 100%; margin-top: 4px; text-align: left; }
+        .conversation-more button:first-child { margin-top: 0; }
+        .telemetry summary { cursor: pointer; }
+        .telemetry summary::after { content: "+"; margin-left: auto; }
+        .telemetry[open] summary::after { content: "−"; }
+        .telemetry > .stack { margin-top: 12px; max-height: 32vh; overflow-y: auto; }
 
         button:hover:not(.btn-primary) {
             background: var(--surface-2);
@@ -395,6 +421,7 @@
             max-height: var(--chat-h);
             overflow-y: auto;
             overscroll-behavior: contain;
+            min-height: 8rem;
         }
 
         .chat-empty {
@@ -564,17 +591,28 @@
             color: var(--muted);
         }
 
-        @media (max-width: 65rem) {
+        @media (min-width: 900px) and (min-height: 640px) {
+            .navbar { height: 56px; }
+            main { height: calc(100dvh - 56px); }
+            .col-left { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; gap: 12px; }
+            .col-right { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; gap: 12px; }
+            .editor-card { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; }
+            .editor-card textarea { height: 100%; min-height: 100px; resize: none; padding: .75rem; }
+            .conversation-card { min-height: 0; }
+            .chat-feed { flex: 1; min-height: 0; max-height: none; }
+            .run-result { max-height: 22vh; overflow-y: auto; }
+        }
+        @media (max-width: 899px) {
             main {
                 grid-template-columns: minmax(0, 1fr);
                 gap: var(--gap);
             }
 
             .col-right {
-                position: relative;
-                top: 0;
-                order: 2;
+                order: -1;
             }
+            .chat-feed { max-height: 45dvh; }
+            .navbar .brand-group > span:last-child { display: none; }
 
             :root {
                 --editor-h: clamp(12rem, 35vh, 20rem);
@@ -605,10 +643,6 @@
         <div class="card stack">
             <div class="card-title">Session Controls</div>
             <div class="row">
-                <label class="label" for="backend">Backend URL</label>
-                <input id="backend" value="http://localhost:8000" class="field"/>
-            </div>
-            <div class="row">
                 <label class="label" for="exercise">Exercise</label>
                 <select id="exercise" class="field"></select>
                 <label class="label" for="mode" style="flex: 0 0 auto;">Mode</label>
@@ -621,17 +655,20 @@
                 <!-- Exercise prompt: selectable so it can be copied while working -->
                 <p id="prompt" style="margin: 0; font-size: 0.9em; color: var(--text);"></p>
             </div>
+            <details class="connection-settings">
+                <summary>Connection settings</summary>
+                <div class="row">
+                    <label class="label" for="backend">Backend URL</label>
+                    <input id="backend" value="http://localhost:8000" class="field"/>
+                </div>
+            </details>
         </div>
 
-        <div class="card stack">
+        <div class="card stack editor-card">
             <label class="card-title" for="source">Code Editor</label>
             <textarea id="source" spellcheck="false"></textarea>
             <div class="actions">
-                <button id="run" class="btn-primary">Synthesize &amp; Run</button>
-                <button id="ask">Ask Sol</button>
-                <input id="question" class="field" type="text" placeholder="Ask Sol something specific (optional)…"
-                       autocomplete="off"/>
-                <span id="status" class="muted" style="font-size: 0.85em; font-weight: 500;"></span>
+                <button id="run" class="btn-primary">Run code</button>
             </div>
         </div>
 
@@ -644,7 +681,7 @@
     <!-- Right Column -->
     <section class="col-right">
         <!-- Conversation Stream Panel: displays appended turns instead of overwriting -->
-        <div class="card stack" style="border-top: 3px solid var(--accent);">
+        <div class="card stack conversation-card" style="border-top: 3px solid var(--accent);">
             <div class="card-title">
                 <span>Conversation Feed</span>
             </div>
@@ -652,10 +689,16 @@
             <div id="chat-feed" class="chat-feed">
                 <div id="chat-empty" class="chat-empty">— Conversation history will appear here —</div>
             </div>
+            <div class="chat-composer">
+                <input id="question" class="field" type="text" placeholder="Ask Sol something specific (optional)…" autocomplete="off"/>
+                <button id="ask">Ask Sol</button>
+            </div>
+            <span id="status" class="muted" role="status"></span>
         </div>
 
-        <div class="card stack">
-            <div class="card-title">Telemetry · Glass Box</div>
+        <details class="card telemetry">
+            <summary class="card-title">Glass Box · Latest response signals</summary>
+            <div class="stack">
             <div class="row" style="margin-bottom: 8px;">
                 <span class="pill" id="affect">affect: —</span>
                 <span class="pill" id="interv">intervention: —</span>
@@ -685,7 +728,8 @@
                 <span class="label">Timings</span>
                 <span id="timings" class="row-data muted">—</span>
             </div>
-        </div>
+            </div>
+        </details>
     </section>
 </main>
 
