@@ -1457,3 +1457,14 @@ ran successfully, plus two SQLite/configured-PostgreSQL scoped-store tests. Ruff
 check/format and complete mypy passed. Actual governance output, distress handling,
 revocation/deletion during inference, and cleanup while saving is disabled are
 covered. Full commands, contracts and deployment limits: docs/conversations.md.
+
+Local startup follow-up: 607 backend tests passed, 8 skipped (including the
+unconfigured disposable PostgreSQL DSN), with one existing dependency warning.
+The final `tests/test_local_dev.py` separately passed 14 cases; its last restart
+case was added after full-suite collection. Seven maintenance CLI cases cover
+actionable missing/numeric policy settings, repeatable initialization and cleanup.
+The local-host checks cover real signed credentials, cross-site refusal, port and
+data-directory contention, both-edge restoration, default-disabled saving,
+missing/corrupt ledger refusal and restart preservation with key rotation.
+Frontend Node tests: 13 passed; Ruff check/format and full mypy passed. No real
+identity or model service is used. See frontend/README.md for the runnable local host.

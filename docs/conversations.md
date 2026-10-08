@@ -4,6 +4,13 @@ Implementation branch: `feature/bounded-conversation-restoration`, baseline
 `6124598`, inheriting authentication at `8868234`. Authentication is an unmerged
 dependency; no B1–B4 or UI-refactor branch is merged here.
 
+For a standalone local demo, stop the separate uvicorn/http.server processes and
+run `python -m app.local_dev --save-dialogue` from `backend`. Open the printed
+`http://127.0.0.1:5173/dev-client.html` URL and select optional saving. The launcher
+configures browser credentials, grants, migration and a provisional local ledger
+in an independent ignored data directory. See [frontend instructions](../frontend/README.md).
+It is an explicitly selected synthetic local host, not institution identity setup.
+
 ## Step 1 — separate storage purposes
 
 HTTP learner state (concepts, goals, reflections and overlay) now uses the scoped
@@ -308,3 +315,34 @@ Ruff check/format and mypy passed. Institution retention/backup/ledger approval 
 actual EduCloud host integration remain required before enabling saving. Inherited
 trace-metrics/analysis compatibility findings remain open. No queue or shared
 budget system is included.
+
+## Local startup follow-up — completed steps
+
+1. **Maintenance diagnostics** (`6c13bbd`,
+   `fix(conversations): explain missing maintenance policy configuration`).
+   CLI validation now names missing/invalid policy variables, explains that the
+   CLI does not automatically load `.env`, and exits cleanly instead of exposing
+   a FastAPI traceback. Disabled web saving still permits operator maintenance.
+   Seven hermetic CLI tests and the related lifecycle/bounds/HTTP tests passed.
+2. **Authenticated loopback host**
+   (`feat(dev): add authenticated loopback demo launcher`). `app.local_dev` starts
+   both listeners, injects the host callback before existing demo scripts and
+   supplies real five-minute RS256 credentials. It configures synthetic grants
+   and separate ignored SQL/ledger files; the private key is never written.
+   Default saving remains off; `--save-dialogue` explicitly selects a provisional
+   local policy and still requires the learner's optional checkbox. Startup
+   reserves ports and locks the data directory, preserves existing attempts and
+   deletion fences, rotates signing keys and rejects missing/corrupt ledgers.
+   No existing server process, UI layout or production authentication is changed.
+
+Follow-up validation: full regression **607 passed, 8 skipped**, with one existing
+Starlette/AnyIO deprecation warning. Skips: live model evaluation, unconfigured
+disposable PostgreSQL DSN and six missing verifier-contract sibling tests.
+The PostgreSQL check had passed for the previous milestone; it was not rerun for
+these local-launcher/CLI changes. The final local-host suite separately passed
+**14 tests**, including the additional restart/key-rotation/fence-preservation
+case added after the full regression collected tests. Frontend: **13 passed**.
+Ruff check/format and full mypy passed. Tests use temporary local files, real
+ephemeral signing keys, loopback requests and offline control turns, with external
+identity/model networking forbidden. Normal peer tutoring still needs the
+configured model endpoint; this local issuer does not replace EduCloud integration.
