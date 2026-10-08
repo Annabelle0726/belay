@@ -24,6 +24,7 @@ class Execution:
     ledger: Ledger
     scope: Scope
     operation: str
+    guard: Callable[[], None] | None = None
 
 
 _execution: contextvars.ContextVar[Execution | None] = contextvars.ContextVar(
@@ -32,9 +33,11 @@ _execution: contextvars.ContextVar[Execution | None] = contextvars.ContextVar(
 
 
 @contextmanager
-def operation(ledger: Ledger, scope: Scope, operation_id: str) -> Iterator[None]:
+def operation(
+    ledger: Ledger, scope: Scope, operation_id: str, guard: Callable[[], None] | None = None
+) -> Iterator[None]:
     scope.keys()
-    token = _execution.set(Execution(ledger, scope, operation_id))
+    token = _execution.set(Execution(ledger, scope, operation_id, guard))
     try:
         yield
     finally:
@@ -44,6 +47,8 @@ def operation(ledger: Ledger, scope: Scope, operation_id: str) -> Iterator[None]
 def current() -> Execution | None:
     context = _execution.get()
     if context is not None:
+        if context.guard:
+            context.guard()
         return context
     if settings.controls_mode == "development_bypass":
         return None

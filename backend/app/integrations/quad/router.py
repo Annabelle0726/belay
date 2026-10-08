@@ -31,6 +31,7 @@ from ...agent import goals as _goals
 from ...agent import overlay as _overlay
 from ...config import settings
 from ...controls.contracts import ControlError
+from ...controls.runtime import current as control_context
 from ...core.registry import get_active_pack
 from ...store import ConsentRouter, InMemoryStore, SqlStore
 from .pii import PIIRejected, assert_no_pii
@@ -122,6 +123,10 @@ def build_router(
 
     @api.post("/turn")
     def turn(payload: dict = Body(...)):
+        try:
+            control_context()
+        except ControlError as exc:
+            raise HTTPException(exc.status, {"code": exc.code}) from exc
         # 1. PII boundary on the RAW body (before any parsing/storage).
         try:
             assert_no_pii(payload)

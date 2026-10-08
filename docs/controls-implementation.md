@@ -135,3 +135,23 @@ processes competing for 10 model slots: 10 accepted, 10 refused. Fairness test:
 A queues 50, B queues 2, first four claims are A0/B0/A1/B1. Queue liability,
 payload bytes, expiry, rate refill, cancellation, replay, scoped polling and
 lost-worker fencing are covered. Full mypy passes.
+
+## 5. Recovery seam; real conversation integration deferred
+
+Added a worker adapter contract that rechecks current authorization before
+execution, before each external attempt, on heartbeat and before publication.
+Claims carry fences; stale workers cannot start further attempts or publish.
+Running cancellation prevents subsequent attempts/publication without pretending
+an already running external call has stopped. Completed operation replay does
+not repeat execution. Failures have stable content-free reason codes.
+
+All three existing expensive HTTP paths reject enforced mode without verified
+context before touching tutor/runner state. Curriculum remains readable.
+
+Tests use a synthetic mutable authorizer to prove deletion/revocation, cancellation,
+lease loss, completed replay and coordinator outage. **These are adapter tests,
+not proof of integration with Step 1/2.** The actual auth and conversation branches
+remain unmerged. Pending-turn revisions, durable authorization refresh, result
+storage/TTL cleanup and atomic conversation publication must be connected and
+tested after those prerequisites land. No HTTP job submission/status/result
+routes are advertised or exposed yet. This step is explicitly partial.

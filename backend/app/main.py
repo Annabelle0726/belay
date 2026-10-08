@@ -31,7 +31,7 @@ import uuid
 
 from fastapi import FastAPI, HTTPException
 from starlette.middleware.cors import CORSMiddleware
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from .agent import distress as distress_mod
 from .agent import get_llm, run_turn
@@ -39,6 +39,7 @@ from .agent import goals as goals_mod
 from .agent import overlay as overlay_mod
 from .config import settings
 from .controls.contracts import ControlError
+from .controls.runtime import current as control_context
 from .core.registry import get_active_pack
 from .schemas import (
     GoalRequest,
@@ -54,6 +55,16 @@ from .schemas import (
 from .store import ConsentRouter, InMemoryStore, SqlStore, make_event
 
 app = FastAPI(title="Peer-Tutor Framework", version="0.1.0")
+
+
+@app.exception_handler(ControlError)
+async def control_error(request, exc: ControlError):
+    headers = {"Retry-After": str(exc.retry_after)} if exc.retry_after is not None else {}
+    return JSONResponse(
+        status_code=exc.status, content={"detail": {"code": exc.code}}, headers=headers
+    )
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -105,6 +116,7 @@ def get_curriculum():
 
 @app.post("/api/run", response_model=RunResult)
 def run(req: RunRequest):
+    control_context()
     try:
         ex = _pack.get_exercise(req.exercise_id)
     except KeyError:
@@ -126,6 +138,7 @@ def run(req: RunRequest):
 
 @app.post("/api/sol/turn", response_model=SolTurnResponse)
 def sol_turn(req: SolTurnRequest):
+    control_context()
     try:
         ex = _pack.get_exercise(req.exercise_id)
     except KeyError:
