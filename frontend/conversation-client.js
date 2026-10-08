@@ -22,6 +22,8 @@
           "Saved dialogue request failed (" + res.status + ").");
         error.status = res.status;
         if (res.status === 401 || res.status === 404) {
+          // An absent attempt does not by itself revoke the authenticated session.
+          if (res.status === 401 || path === "/config") this.authorized = false;
           this.messages = []; this.before = null;
           if (res.status === 404 && this.cid) { this.cid = null; this.write({enabled:this.enabled}); }
           this.notify(error.message);
@@ -38,10 +40,16 @@
       catch { this.notify("Browser storage is unavailable; restoration needs this attempt ID: " + (this.cid || "")); }
     }
     async scope() {
+      const wasAuthorized = this.authorized;
       const config = await this.json("/config");
+      this.authorized = true;
       const identity = config.identity;
       const version = config.assignments[this.exercise];
-      if (!version) throw new Error("This exercise version is unavailable.");
+      if (!version) {
+        this.authorized = false; this.messages = [];
+        this.notify("This exercise version is unavailable.");
+        throw new Error("This exercise version is unavailable.");
+      }
       const key = "belay-attempt-v1:" + JSON.stringify([this.base, this.prefix, identity.institution_id,
         identity.class_id, identity.learner_id, this.exercise, version]);
       const changed = key !== this.key;
@@ -54,15 +62,19 @@
       this.cid = this.read().cid || this.cid;
       this.enabled = config.enabled && this.read().enabled === true;
       if (changed) this.notify("Identity or exercise changed; loading authorized history.");
+      else if (!wasAuthorized) this.notify("Authorized session refreshed.");
       return config;
     }
     async initialize() {
       try {
         await this.scope();
-        if (this.enabled) await this.restore(false);
+        if (this.enabled) {
+          try { await this.restore(false); }
+          catch (error) { if (error.status !== 404 || !this.authorized) throw error; }
+        }
         else this.notify(this.config.enabled ? "Saving is optional. Enable it to resume this attempt after refresh." :
           "This conversation is unsaved. Course tutoring remains available.");
-      } catch (error) { this.messages = []; this.notify(error.message); throw error; }
+      } catch (error) { this.authorized = false; this.messages = []; this.notify(error.message); throw error; }
     }
     async setSaving(enabled) {
       await this.scope();
@@ -105,7 +117,12 @@
         this.notify(page.pending ? "A turn is unfinished. Refresh after it completes or its lease expires." : "Saved history restored.");
       } catch (error) {
         this.messages = []; this.before = null; this.pending = null;
-        if (error.status === 404) { this.cid = null; this.write({enabled:true}); }
+        if (error.status === 404) {
+          this.cid = null; this.write({enabled:true});
+          // Recheck membership before allowing recovery from an absent resource.
+          await this.scope();
+          error.message += " Choose New attempt, or turn saving off to continue unsaved.";
+        }
         this.notify(error.message); throw error;
       }
     }
@@ -126,12 +143,21 @@
       if (this.pending && this.pending.signature !== signature) throw new Error("Retry the previous message or refresh before a new one.");
       if (!this.pending) this.pending = {signature, body: {...input, request_id:uuid(), expected_revision:this.revision}};
       try {
-        const result = await this.json("/" + encodeURIComponent(this.cid) + "/turns", "POST", this.pending.body);
+        const attemptId = this.cid;
+        const result = await this.json("/" + encodeURIComponent(attemptId) + "/turns", "POST", this.pending.body);
+        if (this.cid !== attemptId || this.key !== previousKey) throw new Error("Attempt changed; previous reply was discarded.");
         this.pending = null;
         this.revision = result.revision;
-        try { await this.restore(false); } catch { this.notify("Turn completed; refresh to reload saved history."); }
+        let historyUnavailable = false;
+        try { await this.restore(false); }
+        catch (error) {
+          if (!this.authorized || error.status === 404) throw error;
+          historyUnavailable = true;
+          this.notify("Turn completed; refresh to reload saved history.");
+        }
         if (result.unsaved_exchange) this.notify("This exchange was not saved; only neutral placeholders will restore.");
-        return {...result.response, unsaved_exchange: !!result.unsaved_exchange};
+        return {...result.response, live_signals:result.live_signals, history_unavailable:historyUnavailable,
+          unsaved_exchange: !!result.unsaved_exchange};
       } catch (error) {
         if (error.status) this.pending = null;
         if (error.status === 404) { this.cid = null; this.messages = []; this.write({enabled:true}); }
@@ -165,7 +191,7 @@
       for (const button of Object.values(buttons)) button.disabled = !s.enabled;
       buttons.older.disabled = !s.enabled || !s.before;
       buttons.delete.disabled = !s.cid;
-      renderHistory(s.messages);
+      renderHistory(s.messages, s);
     }
     async function ensure() {
       const next = JSON.stringify([base(), exercise(), window.BELAY_INSTITUTION_ID,
@@ -173,9 +199,11 @@
       if (!session || next !== signature) {
         signature = next;
         session = new Session({base:base(), exercise:exercise(), prefix, onChange:display});
-        initialization = session.initialize();
+        initialization = null;
       }
-      await initialization;
+      if (!initialization) initialization = session.initialize();
+      try { await initialization; }
+      catch (error) { initialization = null; throw error; }
       return session;
     }
     async function action(fn) {
@@ -193,7 +221,12 @@
     return {refresh: () => action(s => s.initialize()),
       async send(input) {
         const s = await ensure();
-        if (!s.enabled) return null;
+        if (!s.enabled) {
+          const key = s.key;
+          await s.scope();
+          if (key && key !== s.key) throw new Error("Identity changed; refresh before sending a new message.");
+          return null;
+        }
         const response = await s.send(input);
         if ((await ensure()) !== s) throw new Error("Identity changed; previous reply was discarded.");
         return response;

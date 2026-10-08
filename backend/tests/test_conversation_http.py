@@ -52,7 +52,8 @@ def http_dialogue(dialogue, monkeypatch, tmp_path):
             "message": "Released answer",
             "check_question": "Why?",
             "planner_note": "private",
-            "components": {"draft": "unreleased solution"},
+            "confidence": 0.7,
+            "components": {"draft": "unreleased solution", "self_eval": {"leak_risk": "none"}},
         }
 
     app = FastAPI()
@@ -125,12 +126,24 @@ def test_authorized_save_resume_and_retry(http_dialogue, prefix):
     result = client.post(url + "/turns", headers=auth(), json=body)
     assert result.status_code == 200, result.text
     assert result.json()["response"] == {"message": "Released answer", "check_question": "Why?"}
-    assert client.post(url + "/turns", headers=auth(), json=body).json() == result.json()
+    live = result.json()
+    assert live["live_signals"]["confidence"] == 0.7
+    assert "unreleased" not in str(live)
+    replay = client.post(url + "/turns", headers=auth(), json=body).json()
+    assert replay == {key: value for key, value in live.items() if key != "live_signals"}
     assert len(calls) == 1
     assert calls[0]["recent"] == [{"who": "student", "text": "Explain loops"}]
     history = client.get(url + "/messages", headers=auth()).json()
     assert [m["role"] for m in history["messages"]] == ["student", "assistant"]
     assert "private" not in str(history) and "unreleased" not in str(history)
+    # Reopening the stored result cannot recover transient signal summaries.
+    from sqlalchemy import select
+
+    from app.conversations.models import Turn
+
+    with http_dialogue[1].sessions() as session:
+        stored = session.scalars(select(Turn)).one()
+        assert "private" not in str(stored.response) and "live_signals" not in str(stored.response)
     assert consent._consent_cache and not any(consent._consent_cache.values())
     assert consent.durable._events == []
     body.update(request_id="turn-2", expected_revision=2, message="Another question")

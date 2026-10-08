@@ -346,3 +346,24 @@ Ruff check/format and full mypy passed. Tests use temporary local files, real
 ephemeral signing keys, loopback requests and offline control turns, with external
 identity/model networking forbidden. Normal peer tutoring still needs the
 configured model endpoint; this local issuer does not replace EduCloud integration.
+
+## Preview correction — live output and missing-history recovery
+
+The first successful saved-turn response now includes an optional `live_signals`
+object with the existing learner-visible summaries: affect, intervention,
+calibrated confidence, planner/self-check clauses, governance, concept memory,
+self-evaluation flags and numeric stage timings. A bounded allowlist excludes raw
+drafts, arbitrary components and model analysis. Existing PII/distress screening
+suppresses sensitive summaries; sensitive exchanges receive no live signals.
+This object is added AFTER database completion. It is never stored in messages,
+turn replay data or research events. An idempotent replay returns the same released
+response/revision without replaying these transient signals or running the model.
+Restored history therefore has replies but no historical Glass Box data.
+
+An unavailable saved attempt clears its browser pointer and rechecks current
+membership. Successful reauthorization permits New attempt or disabling saving;
+it does not silently replace history or extend retention. Authentication failures
+still discard the previous namespace. Failed initialization can be retried after
+host recovery. A history-network failure after successful completion no longer
+hides the live reply, and changing attempts discards an obsolete late response.
+No database migration or retention-policy change is needed for this correction.
