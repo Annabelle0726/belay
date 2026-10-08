@@ -390,7 +390,8 @@ def test_widget_targets_sidecar_and_renders_signals_not_grades():
     assert "scaffolding" in html  # the one customization knob
     # Signals, not verdicts: the held-back state is rendered; never a grade/ranking.
     assert "held back" in html.lower()
-    low = html.lower()
+    # HTML formatting can split a phrase across adjacent source lines.
+    low = " ".join(html.lower().split())
     assert "not a grade" in low and "ranking" in low
     # The widget never authenticates (host owns auth).
     assert "never authenticate" in low
