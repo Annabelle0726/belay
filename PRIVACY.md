@@ -143,3 +143,18 @@ Two decisions are deliberately left to the IRB and are marked open in the code:
 - System architecture, including the governance gate and the trace envelope:
   `ARCHITECTURE.md`.
 - The licensing split: `LICENSING.md`.
+# Operational accounting (CC-R3)
+
+Resource controls use separate `control_*` tables and do not depend on research
+consent. They contain hashed hierarchical scope keys, opaque operation/attempt
+references, policy versions, integer usage, states and content-free reason codes.
+They contain no prompts, source code, response text or bearer tokens. Operator
+reconciliation records contain opaque evidence references. No institution-wide
+usage endpoint is exposed to students.
+
+Queue payload/result storage is not implemented in this slice; service methods
+accept only opaque references and require a future authorized expiring store.
+Accounting/tombstone archival and rejection-record retention require an approved
+policy before production rollout. Development accounting is retained indefinitely
+to preserve idempotency and audit history. This is not a new conversation archive.
+See [operator guide](docs/controls-operations.md).

@@ -106,9 +106,16 @@ class OpenAICompatProvider:
     def _attempt(self, role: str, kwargs: dict):
         started = time.perf_counter()
         ptok = ctok = None
+        sent = False
+
+        def send():
+            nonlocal sent
+            sent = True
+            return self._client.chat.completions.create(**kwargs)
+
         try:
             resp = model_call(
-                lambda: self._client.chat.completions.create(**kwargs),
+                send,
                 json.dumps(kwargs["messages"], ensure_ascii=False),
                 kwargs["max_tokens"],
                 self._usage,
@@ -116,13 +123,14 @@ class OpenAICompatProvider:
             ptok, ctok = self._usage(resp)
             return resp
         finally:
-            _tel.record(
-                role,
-                latency_ms=round((time.perf_counter() - started) * 1000, 1),
-                prompt_tokens=ptok,
-                completion_tokens=ctok,
-                cost=_cost(ptok, ctok) if ptok is not None and ctok is not None else None,
-            )
+            if sent:
+                _tel.record(
+                    role,
+                    latency_ms=round((time.perf_counter() - started) * 1000, 1),
+                    prompt_tokens=ptok,
+                    completion_tokens=ctok,
+                    cost=_cost(ptok, ctok) if ptok is not None and ctok is not None else None,
+                )
 
     def model_for(self, tier: str) -> str:
         return _model_for(tier)
@@ -274,22 +282,30 @@ class AnthropicProvider:
             return prompt, getattr(value, "output_tokens", None)
 
         ptok = ctok = None
+        sent = False
+
+        def send():
+            nonlocal sent
+            sent = True
+            return self._client.messages.create(**kwargs)
+
         try:
             resp = model_call(
-                lambda: self._client.messages.create(**kwargs),
+                send,
                 system + user,
                 kwargs["max_tokens"],
                 usage,
             )
             ptok, ctok = usage(resp)
         finally:
-            _tel.record(
-                role,
-                latency_ms=round((time.perf_counter() - t0) * 1000, 1),
-                prompt_tokens=ptok,
-                completion_tokens=ctok,
-                cost=_cost(ptok, ctok) if ptok is not None and ctok is not None else None,
-            )
+            if sent:
+                _tel.record(
+                    role,
+                    latency_ms=round((time.perf_counter() - t0) * 1000, 1),
+                    prompt_tokens=ptok,
+                    completion_tokens=ctok,
+                    cost=_cost(ptok, ctok) if ptok is not None and ctok is not None else None,
+                )
         text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
         parsed = parse_json(text)
         if parsed is None:

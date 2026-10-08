@@ -130,6 +130,7 @@
   </div>
 </div>
 
+<script src="./control-messages.js"></script>
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
@@ -156,6 +157,9 @@ async function post(path, body) {
     body: JSON.stringify(body),
   });
   const data = await r.json().catch(() => ({}));
+  if (!r.ok && data.detail && typeof data.detail === "object" && data.detail.code) {
+    data.detail = globalThis.belayControlMessage(data.detail, r.headers.get("Retry-After"));
+  }
   return { status: r.status, data };
 }
 

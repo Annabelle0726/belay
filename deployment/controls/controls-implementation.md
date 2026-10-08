@@ -2,9 +2,9 @@
 
 ## 1. Inventory and contracts — 2026-10-08
 
-Base: `83bd1a9`, with planning commit `a98aed3`. Fetch of origin succeeded;
+Base: `83bd1a9`, with planning commit `ba55f3f` in the current history. Fetch of origin succeeded;
 `origin/main` still points to that base. Work stays in the original checkout on
-`feature/shared-traffic-budget-controls`. Existing untracked `deployment/` files
+`feature/shared-traffic-budget-controls`. Existing untracked `..` files
 are outside this change.
 
 | Chargeable path | Current measurement / gap | Control insertion point |
@@ -155,3 +155,58 @@ remain unmerged. Pending-turn revisions, durable authorization refresh, result
 storage/TTL cleanup and atomic conversation publication must be connected and
 tested after those prerequisites land. No HTTP job submission/status/result
 routes are advertised or exposed yet. This step is explicitly partial.
+
+## 6. Observable validation and operator workflow
+
+Added an operator-only CLI for initialization, policy changes, queue/resource
+summaries, unresolved attempts, evidence-backed usage settlement, confirmed
+termination and overrun acknowledgement. Financial reconciliation and resource
+termination are distinct operations. Actual overruns remain visible after
+acknowledgement; their recorded charges still count toward the applicable budget.
+Rejections are content-free database records when available and stable-code logs
+when the coordinator is unavailable.
+
+Learner surfaces now explain budget exhaustion, congestion and temporary
+unavailability, including bounded retry timing. A new waiting/running UI is not
+shown before authenticated asynchronous HTTP jobs exist. Synthetic example policy
+and an operator guide document initialization, exact units, rollover, recovery,
+test-only database setup and remaining production prerequisites. CI enables the
+two-process PostgreSQL tests and the frontend message tests.
+
+Review correction: explicit HTTP 400/422 format rejections retain unknown financial
+usage but release concurrency for the separately reserved fallback. Budget denial
+before the SDK is reached does not inflate provider-call telemetry. Runner wall
+reservations include 1 second of timeout/kill overhead; actual overruns are still
+recorded. Worker authorization is rechecked immediately before external dispatch.
+
+### Commit map
+
+| Slice | Commit | Status |
+| --- | --- | --- |
+| 1. Inventory/contracts | `48a111c` | Complete |
+| 2. Shared ledger | `1fdc928` | Complete, real PostgreSQL race verified |
+| 3. Execution accounting | `0645a76` | Complete for visible SDK and core runner paths |
+| 4. Shared admission | `31aff8b` | Service complete; authenticated HTTP adapter pending |
+| 5. Recovery integration | `8f2ea7a` | Worker seam complete; real Step 1/2 integration pending |
+| 6. Observable validation | Commit containing this section | CLI, messages, tests and operator guide |
+
+Remaining production work: merge approved identity/conversation prerequisites;
+implement owned asynchronous HTTP routes and expiring payload/result storage;
+bind worker checks and publication to real conversation revisions/deletion;
+approve allowances/prices/retention; implement archival; validate any gateway's
+hidden attempts. The separate class-sized load milestone and B4 containment work
+are not claimed by these coordinator tests.
+
+### Final validation — 2026-10-08
+
+- SQLite full suite: **423 passed, 9 skipped** (104.90 seconds).
+- PostgreSQL 16 full suite: **425 passed, 7 skipped** (122.56 seconds), including
+  the two independent-process coordinator tests. Both stores used isolated test
+  databases; no existing learner database was modified.
+- 39 new control tests in total. The 7 shared skips are 1 live model evaluation
+  and 6 verifier-contract tests requiring a missing sibling checkout. SQLite's
+  additional 2 skips are the PostgreSQL-only races, passed in the PostgreSQL run.
+- Frontend messages: **2 passed**. Ruff lint/format and mypy: **passed**.
+- One existing Starlette/AnyIO deprecation warning; no test failures.
+- Example policy validated through the operator initialization command. No live
+  model requests, deployment, push, feature-branch merge or new worktree.

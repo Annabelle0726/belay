@@ -1,0 +1,20 @@
+{
+  "version": "synthetic-demo-v1",
+  "price_version": "synthetic-not-provider-pricing-v1",
+  "currency": "USD",
+  "period_seconds": 86400,
+  "input_price": 1,
+  "output_price": 2,
+  "deployment": {"tokens": 1000000, "microunits": 2000000, "runs": 1000, "wall_ms": 30000000},
+  "institution": {"tokens": 500000, "microunits": 1000000, "runs": 500, "wall_ms": 15000000},
+  "classroom": {"tokens": 250000, "microunits": 500000, "runs": 250, "wall_ms": 7500000},
+  "learner": {"tokens": 50000, "microunits": 100000, "runs": 50, "wall_ms": 1500000},
+  "deployment_traffic": {"burst": 60, "rate_seconds": 60, "queue_jobs": 100, "queue_bytes": 1048576, "active_jobs": 10, "model_calls": 10, "runner_calls": 4},
+  "institution_traffic": {"burst": 60, "rate_seconds": 60, "queue_jobs": 100, "queue_bytes": 1048576, "active_jobs": 10, "model_calls": 10, "runner_calls": 4},
+  "classroom_traffic": {"burst": 30, "rate_seconds": 60, "queue_jobs": 50, "queue_bytes": 524288, "active_jobs": 5, "model_calls": 5, "runner_calls": 2},
+  "learner_traffic": {"burst": 4, "rate_seconds": 60, "queue_jobs": 2, "queue_bytes": 131072, "active_jobs": 1, "model_calls": 1, "runner_calls": 1},
+  "payload_bytes": 65536,
+  "queue_wait_seconds": 120,
+  "lease_seconds": 60,
+  "poll_seconds": 2
+}
