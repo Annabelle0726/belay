@@ -1524,3 +1524,11 @@ browser storage. Browser checks verify light/dark headers match card surfaces,
 and no horizontal overflow at 390x844. Both desktop pages fit 1280x720 with the
 optional widget settings/goals collapsed. Ruff check/format and mypy pass. Backend
 behavior is unchanged; the previous full backend suite was not repeated.
+
+Mypy scope clarification: the repository/CI command `mypy` checks the configured
+`app`, `tests`, and `evals` paths and passes (117 source files). The additional
+`mypy .` scan checks 122 files and reports four existing errors in unchanged
+operator scripts: `scripts/extract_measures.py` (two Exercise/dict mismatches),
+`scripts/smoke_sql.py` (optional indexing), and `scripts/smoke_inference.py`
+(non-bool return). These scripts have no diff in the UI/theme change and remain
+outside the configured quality-gate scope. They were not repaired in this UI task.
