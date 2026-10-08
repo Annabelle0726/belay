@@ -89,17 +89,31 @@ def test_all_demos_load_bootstrap_before_auth_and_only_public_configuration(host
     assert "cache: 'no-store'" in js and "credentials: 'omit'" in js
 
 
-def test_busy_port_fails_before_creating_data(tmp_path):
-    with socket.socket() as listener:
-        listener.bind(("127.0.0.1", 0))
+@pytest.mark.parametrize("port_option", ["--api-port", "--frontend-port"])
+@pytest.mark.parametrize("address", ["127.0.0.1", "0.0.0.0", "::"])
+def test_busy_port_fails_before_creating_data(tmp_path, port_option, address):
+    family = socket.AF_INET6 if address == "::" else socket.AF_INET
+    if family == socket.AF_INET6 and not socket.has_ipv6:
+        pytest.skip("IPv6 unavailable")
+    with socket.socket(family, socket.SOCK_STREAM) as listener:
+        if family == socket.AF_INET6:
+            listener.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
+        try:
+            listener.bind((address, 0))
+        except OSError:
+            if family == socket.AF_INET6:
+                pytest.skip("IPv6 loopback unavailable")
+            raise
         listener.listen()
         result = subprocess.run(
             [
                 sys.executable,
                 "-m",
                 "app.local_dev",
-                "--api-port",
+                port_option,
                 str(listener.getsockname()[1]),
+                "--frontend-port" if port_option == "--api-port" else "--api-port",
+                "0",
                 "--data-dir",
                 str(tmp_path / "unused"),
             ],

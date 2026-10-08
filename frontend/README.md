@@ -32,6 +32,11 @@ Open **http://127.0.0.1:5173/dev-client.html**. The Backend field is automatical
 Do not run the previous two server commands alongside it. For different ports,
 pass `--api-port 8001 --frontend-port 5174` and use the printed page URL.
 
+Startup checks both IPv4 and IPv6 loopback listeners: a wildcard or IPv6
+server already using either port is a conflict even if an IPv4 bind would succeed
+on Windows. This does not stop existing processes; close their terminals or
+choose unused ports before starting this demo.
+
 The launcher reads `backend/.env` for model/provider configuration. It supplies
 real RS256 credentials valid for five minutes through a same-origin callback,
 and a synthetic institution/class/learner grant for the installed pack. Private
