@@ -220,3 +220,8 @@ Dialogue restoration uses dedicated SQL tables, short transaction leases, scoped
 server-owned history and an independent deletion ledger. Both HTTP surfaces share
 the dialogue router; inference still passes through the existing governance gate.
 See docs/conversations.md for migration, retries, limits and recovery deployment.
+
+`python -m app.local_dev` explicitly provisions a loopback-only synthetic host,
+short-lived RS256 credentials and independent local SQL/ledger files. The host
+injects the existing browser credential callback without changing demo layouts
+or weakening shared API authorization. See frontend/README.md for local startup.

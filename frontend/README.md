@@ -12,6 +12,49 @@ glue, not part of the tested framework; the backend is the source of truth.
 
 ## Backend wiring
 
+### Authenticated local demo (PowerShell)
+
+`python -m http.server 5173` only serves files. It does not install the host
+credential callback, so opening these demos directly reports **Host authentication
+is not configured for this backend**. `uvicorn --env-file .env` loads environment
+variables into that backend process; it cannot configure the browser.
+
+Stop the old uvicorn and static servers with Ctrl+C in their terminals, then run
+one command from `backend` (with the backend dependencies installed):
+
+```powershell
+Set-Location C:\Projects\EduCloud-Ecosystem\belay\backend
+python -m app.local_dev --save-dialogue
+```
+
+Open **http://127.0.0.1:5173/dev-client.html**. The Backend field is automatically
+**http://127.0.0.1:8000**. The launcher starts both servers; Ctrl+C stops both.
+Do not run the previous two server commands alongside it. For different ports,
+pass `--api-port 8001 --frontend-port 5174` and use the printed page URL.
+
+The launcher reads `backend/.env` for model/provider configuration. It supplies
+real RS256 credentials valid for five minutes through a same-origin callback,
+and a synthetic institution/class/learner grant for the installed pack. Private
+keys and bearer tokens stay in memory; credentials never go in a URL or browser
+storage. It binds only `127.0.0.1` and refuses foreign Host/Origin/fetch-site
+requests. This local issuer is for synthetic development data only; production
+still requires the institution's verified identity and authorization contract.
+
+Local data goes in ignored `deployment/local/`, separate from the configured
+course database and `deployment/auth/`. Startup runs the repeatable migration
+and initializes the local deletion ledger once. Keep this directory to test
+restoration across restarts; a new signing key invalidates old bearer tokens but
+does not change conversation ownership. Missing/corrupt deletion ledgers beside
+an existing local database fail closed. One launcher may use a data directory
+at a time; the lock is released on exit.
+
+`--save-dialogue` explicitly enables a **local-test-only one-hour retention
+policy**. Also select the optional saving checkbox in the page before sending
+a turn. Research consent remains independent. Without this flag saving is off,
+and ordinary authenticated tutoring remains available. No manual `init-ledger`
+command is needed for this launcher. Asking the tutor still uses your configured
+model endpoint; a model availability error is separate from authentication.
+
 `api-client.js` talks to the backend with two calls:
 
 1. Run a submission: `runModel(participantId, exerciseId, src)` posts to `/api/run`,
