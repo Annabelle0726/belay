@@ -1498,3 +1498,7 @@ saved replies and live signals render together, actual starter-code output remai
 visible, exercise switching clears other history and switching back restores it.
 Desktop 1280x900 is two columns; mobile 390x844 stacks with no horizontal overflow.
 Viewport overrides were reset. No browser console errors were observed.
+
+Student-facing run output: 28 frontend tests passed, including printed-value/check
+rendering without API JSON, complete tutor context, literal HTML/error text and
+an actionable empty-output hint. Execution failure still does not call the tutor.

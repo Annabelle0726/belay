@@ -144,14 +144,45 @@
       const learner = identity?.learner_id || window.BELAY_LEARNER_ID;
       lastResult = await json("/api/run", {participant_id: learner,
         exercise_id: $("exercise").value, source: $("source").value});
-      // The pack-agnostic envelope carries domain output under pack.
-      $("result").textContent = JSON.stringify(lastResult, null, 2);
+      renderRunResult(lastResult);
       $("status").textContent = lastResult.ok ? "Run completed." : "Run failed.";
       return !!lastResult.ok;
     } catch (error) {
       lastResult = null; $("status").textContent = error.message;
       return false;
     } finally { setBusy(false); }
+  }
+  function renderRunResult(result) {
+    const target = $("result"), pack = result.pack || {};
+    target.replaceChildren();
+    const status = document.createElement("p"); status.className = "run-status";
+    status.textContent = !result.ok ? "Your code could not finish." :
+      result.goalMet === true ? "Code ran successfully. Exercise checks passed." :
+      result.goalMet === false ? "Code ran. Some exercise checks need attention." : "Code ran successfully.";
+    target.appendChild(status);
+    const output = document.createElement("pre"); output.className = "run-stdout";
+    output.textContent = typeof pack.stdout === "string" && pack.stdout.length ? pack.stdout :
+      "No printed output. Use print(...) to display a result.";
+    target.appendChild(output);
+    if (result.error) {
+      const error = document.createElement("pre"); error.className = "run-error";
+      error.textContent = result.error; target.appendChild(error);
+    }
+    const checks = Array.isArray(pack.checks) ? pack.checks : [];
+    if (checks.length) {
+      const details = document.createElement("details"), summary = document.createElement("summary");
+      summary.textContent = `Check details · ${checks.filter(c => c.ok).length}/${checks.length} passed`;
+      details.appendChild(summary);
+      checks.forEach((check, index) => {
+        const item = document.createElement("p");
+        item.textContent = `Check ${index + 1}: ${check.ok ? "Passed" : "Needs attention"}` +
+          (typeof check.detail === "string" && check.detail ? " — " + check.detail : "");
+        details.appendChild(item);
+      });
+      target.appendChild(details);
+    } else if (typeof pack.summary === "string") {
+      const summary = document.createElement("p"); summary.textContent = pack.summary; target.appendChild(summary);
+    }
   }
   async function ask(event = "chat") {
     if (busy || !dialogue) return;
