@@ -1436,3 +1436,38 @@ credentials are needed. Operators still need to provision the issuer/public key,
 protected authorization file and the host token callback before a pilot. Key overlap
 rotation/JWKS discovery and audited recovery of legacy ownership are follow-ups;
 conversation persistence, consent decoupling, queues, budgets and B1–B4 are excluded.
+
+
+## Authenticated standalone local demo
+
+`backend/scripts/local_demo.py` starts loopback-only frontend/backend servers for
+explicit local development. It supplies a host callback before loading the three
+demos, generates in-memory RSA signing material, and mints five-minute tokens on
+demand. The child backend uses its normal credential and class authorization path,
+`BELAY_ENV=local`, synthetic grants and the memory store. Only public verification
+material is placed in a temporary directory, removed on exit. The launcher reads
+model settings through uvicorn's optional `backend/.env`; it does not edit that
+file, the root `.env` or any operator-owned deployment configuration.
+
+Run from `backend/`: `python -m scripts.local_demo`. Stop the existing servers first
+or use `--frontend-port 5174 --backend-port 8001`. Open the printed `/dev-client.html`
+URL. `--pack _skeleton` with `/embed-demo.html` exercises a control turn without a
+model. Host/Origin/fetch-site checks, a custom request header, no-store responses
+and frame denial protect the local token response. No credentials appear in a URL
+or local host log. Production authentication remains unchanged.
+
+`tests/test_local_demo.py` adds 9 hermetic cases for bootstrap ordering, all demo
+pages, token lifetime and private-key non-persistence, rejected host/origin/bare
+requests, and acceptance/denial through the actual backend auth dependency. No real
+identity service or model is contacted. Run `python -m pytest -o addopts='' -q tests/test_local_demo.py tests/test_auth_isolation.py`, then `ruff check .`,
+`ruff format --check .` and `mypy`. Also run
+`node frontend/tests/auth-client.test.cjs` from the repository root.
+
+Measured for this launcher follow-up: **176 passed** for the 9 new local-demo cases
+plus the 167 identity/isolation cases; frontend **4 passed**; `ruff check .`,
+`ruff format --check .` (106 files), and `mypy` (99 source files) pass. An actual
+launcher smoke on ports 5174/8001 also ran the dev page's bootstrap/client JavaScript:
+the token callback and backend curriculum returned 200 and loaded `ds-foundations`.
+No model request was made; both temporary smoke servers were stopped afterwards.
+The earlier complete backend result remains 541 passed/7 skipped; the local-demo
+follow-up was validated with the related suites above, not another full-suite run.

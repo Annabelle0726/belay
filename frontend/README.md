@@ -73,3 +73,34 @@ omitting it uses the server's deployed version and still requires its grant.
 All existing UI structure remains unchanged. See
 [the server contract](../docs/authentication.md) and run
 `node frontend/tests/auth-client.test.cjs` for hermetic credential wiring checks.
+
+## Standalone local demo
+
+A plain `python -m http.server` cannot supply the host credential callback above.
+For an explicit local-only demo, stop the existing frontend and backend with
+Ctrl+C, then run from `backend/` using the project virtual environment:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.local_demo
+```
+
+Open `http://127.0.0.1:5173/dev-client.html`. This one command starts both servers
+on loopback, generates a temporary RSA key and synthetic class grant, and injects
+the host callback before the client loads. Access tokens are minted on demand for
+five minutes and stay in memory; the private key is never written or served. The
+backend still verifies signatures and membership, uses `BELAY_ENV=local` and an
+ephemeral memory store, and reads the inference settings from `backend/.env` when
+present. Asking the peer tutor still requires your configured model endpoint.
+Existing `.env` files and deployment configuration are not changed.
+
+If the original servers should keep running, choose different ports:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.local_demo --frontend-port 5174 --backend-port 8001
+```
+
+Then open `http://127.0.0.1:5174/dev-client.html`. For the no-model embed demo use
+`--pack _skeleton` and open `/embed-demo.html` (control stance). Ctrl+C stops both
+child/demo servers and removes the temporary public key and grants. The helper is
+only a local host emulator, never a production identity provider. Production and
+normal static hosting continue to require the real host credential callback.

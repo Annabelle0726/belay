@@ -187,3 +187,18 @@ claims alone does not require their presence.
 - Deployment/docs: `.env.example`, `.gitignore`, `docker-compose.yml`,
   `README.md`, `ARCHITECTURE.md`, `PRIVACY.md`, `VALIDATION.md`,
   `frontend/README.md`, `docs/authentication.md`.
+
+## Local host emulator
+
+For standalone development without an institution host, use
+`cd backend` then `python -m scripts.local_demo`. See `frontend/README.md` for
+ports and the `_skeleton` no-model option. The launcher explicitly selects local
+mode for its child backend, grants one synthetic class learner access to the
+selected pack, and keeps all learner state in memory. It does not alter existing
+env/deployment files or add a backend authentication exemption.
+
+The frontend binds only to `127.0.0.1`, validates Host headers, refuses framing,
+and serves a no-store token response only to custom-header same-origin requests.
+Its signing key and five-minute tokens stay in memory. The temporary public key
+and grants are deleted on exit. A plain static `http.server` supplies none of this
+bootstrap, which is why its pages report missing host authentication.
