@@ -50,6 +50,9 @@ class Ledger:
 
     def initialize(self, policy: Policy) -> None:
         """Operator migration; never called automatically by an API worker."""
+        from .admission import jobs
+
+        assert jobs.metadata is metadata
         metadata.create_all(self.engine)
         with self.transaction() as conn:
             existing = conn.execute(select(configuration.c.policy)).scalar_one_or_none()
@@ -124,53 +127,62 @@ class Ledger:
     def reserve(
         self, attempt_id: str, operation: str, scope: Scope, amount: Amount, kind: str
     ) -> dict:
+        with self.transaction() as conn:
+            return self.reserve_in(conn, attempt_id, operation, scope, amount, kind)
+
+    def reserve_in(
+        self,
+        conn: Connection,
+        attempt_id: str,
+        operation: str,
+        scope: Scope,
+        amount: Amount,
+        kind: str,
+    ) -> dict:
         if kind not in {"model", "runner", "queue"} or not all(
             0 < len(s) <= 128 for s in (attempt_id, operation)
         ):
             raise ValueError("invalid attempt metadata")
         keys = list(scope.keys())
-        with self.transaction() as conn:
-            old = (
-                conn.execute(select(attempts).where(attempts.c.id == attempt_id)).mappings().first()
-            )
-            if old:
-                if (old["operation"], old["scopes"], old["reserved"], old["kind"]) != (
-                    operation,
-                    keys,
-                    amount.model_dump(),
-                    kind,
-                ):
-                    raise ControlError("attempt_conflict", 409)
-                return dict(old)  # Replay is a lookup, never permission to execute again.
-            policy = self.policy(conn)
-            now = self.now(conn)
-            period = int(now) // policy.period_seconds
-            breaches = conn.execute(
-                select(attempts.c.scopes).where(attempts.c.state == "overrun")
-            ).scalars()
-            if any(set(keys).intersection(scopes) for scopes in breaches):
-                raise ControlError("unresolved_overrun", 503)
-            for key, limits in zip(keys, policy.limits(), strict=True):
-                usage = self._usage(conn, key, period)
-                for unit, value in amount.model_dump().items():
-                    cap = getattr(limits, unit)
-                    if cap is not None and usage[unit] + value > cap:
-                        raise ControlError("budget_exhausted")
-            row = dict(
-                id=attempt_id,
-                operation=operation,
-                scopes=keys,
-                period=period,
-                period_seconds=policy.period_seconds,
-                policy=policy.model_dump(),
-                kind=kind,
-                reserved=amount.model_dump(),
-                actual=None,
-                state="reserved",
-                created=now,
-            )
-            conn.execute(attempts.insert().values(**row))
-            return row
+        old = conn.execute(select(attempts).where(attempts.c.id == attempt_id)).mappings().first()
+        if old:
+            if (old["operation"], old["scopes"], old["reserved"], old["kind"]) != (
+                operation,
+                keys,
+                amount.model_dump(),
+                kind,
+            ):
+                raise ControlError("attempt_conflict", 409)
+            return dict(old)  # Replay is a lookup, never permission to execute again.
+        policy = self.policy(conn)
+        now = self.now(conn)
+        period = int(now) // policy.period_seconds
+        breaches = conn.execute(
+            select(attempts.c.scopes).where(attempts.c.state == "overrun")
+        ).scalars()
+        if any(set(keys).intersection(scopes) for scopes in breaches):
+            raise ControlError("unresolved_overrun", 503)
+        for key, limits in zip(keys, policy.limits(), strict=True):
+            usage = self._usage(conn, key, period)
+            for unit, value in amount.model_dump().items():
+                cap = getattr(limits, unit)
+                if cap is not None and usage[unit] + value > cap:
+                    raise ControlError("budget_exhausted")
+        row = dict(
+            id=attempt_id,
+            operation=operation,
+            scopes=keys,
+            period=period,
+            period_seconds=policy.period_seconds,
+            policy=policy.model_dump(),
+            kind=kind,
+            reserved=amount.model_dump(),
+            actual=None,
+            state="reserved",
+            created=now,
+        )
+        conn.execute(attempts.insert().values(**row))
+        return row
 
     def settle(self, attempt_id: str, actual: Amount | None) -> None:
         with self.transaction() as conn:

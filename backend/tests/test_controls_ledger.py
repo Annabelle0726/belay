@@ -7,36 +7,10 @@ from concurrent.futures import ProcessPoolExecutor
 import pytest
 from sqlalchemy import create_engine
 
-from app.controls.contracts import Amount, ControlError, Limits, Policy, Scope
+from app.controls.contracts import Amount, ControlError, Limits, Scope
 from app.controls.ledger import Ledger, metadata
-
-
-def policy(**kwargs):
-    values = dict(
-        version="test-v1",
-        price_version="synthetic-v1",
-        currency="USD",
-        input_price=1,
-        output_price=2,
-        deployment=Limits(tokens=1000),
-        institution=Limits(),
-        classroom=Limits(),
-        learner=Limits(),
-    )
-    values.update(kwargs)
-    return Policy(**values)
-
-
-@pytest.fixture
-def ledger(tmp_path):
-    engine = create_engine(f"sqlite:///{tmp_path / 'controls.db'}")
-    value = Ledger(engine, lambda: 100.0)
-    value.initialize(policy())
-    yield value
-    engine.dispose()
-
-
-SCOPE = Scope("test", "i", "c", "l")
+from conftest import CONTROL_SCOPE as SCOPE
+from conftest import controls_policy as policy
 
 
 def test_atomic_parent_child_and_idempotency(ledger):

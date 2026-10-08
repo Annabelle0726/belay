@@ -51,6 +51,17 @@ class Limits(BaseModel):
     wall_ms: int | None = Field(default=None, ge=0, le=10**15)
 
 
+class Traffic(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+    burst: int = Field(default=60, ge=0)
+    rate_seconds: int = Field(default=60, ge=1)
+    queue_jobs: int = Field(default=100, ge=0)
+    queue_bytes: int = Field(default=1048576, ge=0)
+    active_jobs: int = Field(default=10, ge=0)
+    model_calls: int = Field(default=10, ge=0)
+    runner_calls: int = Field(default=4, ge=0)
+
+
 class Policy(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
     version: str = Field(min_length=1, max_length=64)
@@ -65,6 +76,22 @@ class Policy(BaseModel):
     # covering every configured model; no runtime vendor pricing assumption.
     input_price: int = Field(ge=0, le=10**9)
     output_price: int = Field(ge=0, le=10**9)
+    deployment_traffic: Traffic = Field(default_factory=Traffic)
+    institution_traffic: Traffic = Field(default_factory=Traffic)
+    classroom_traffic: Traffic = Field(default_factory=Traffic)
+    learner_traffic: Traffic = Field(default_factory=Traffic)
+    payload_bytes: int = Field(default=65536, ge=1, le=1048576)
+    queue_wait_seconds: int = Field(default=120, ge=1, le=3600)
+    lease_seconds: int = Field(default=60, ge=1, le=3600)
+    poll_seconds: int = Field(default=2, ge=1, le=60)
 
     def limits(self) -> tuple[Limits, ...]:
         return (self.deployment, self.institution, self.classroom, self.learner)
+
+    def traffic(self) -> tuple[Traffic, ...]:
+        return (
+            self.deployment_traffic,
+            self.institution_traffic,
+            self.classroom_traffic,
+            self.learner_traffic,
+        )

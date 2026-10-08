@@ -12,10 +12,8 @@ from app.controls.contracts import ControlError, Limits
 from app.controls.ledger import attempts
 from app.controls.runtime import operation
 from app.core import runner
-from tests.test_controls_ledger import SCOPE, policy
-from tests.test_controls_ledger import ledger as _ledger_fixture
-
-ledger = _ledger_fixture
+from conftest import CONTROL_SCOPE as SCOPE
+from conftest import controls_policy as policy
 
 
 def response(text='{"ok": true}', usage=True):
