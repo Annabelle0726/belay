@@ -94,12 +94,21 @@ def model_call(
         context.ledger.settle(attempt_id, Amount())
         raise
     try:
+        if context.guard:
+            context.guard()
+    except BaseException:
+        admission.release_slot(slot, stopped=True)
+        context.ledger.settle(attempt_id, Amount())
+        raise
+    try:
         result = call()
         prompt, completion = usage(result)
-    except BaseException:
+    except BaseException as exc:
         # A lost response or interrupted thread is not proof of zero usage.
         context.ledger.settle(attempt_id, None)
-        admission.release_slot(slot, stopped=False)
+        # An explicit format rejection completed the request, although its
+        # billable usage may still be unknown. It can safely free concurrency.
+        admission.release_slot(slot, stopped=getattr(exc, "status_code", None) in {400, 422})
         raise
     admission.release_slot(slot, stopped=True)
     if type(prompt) is not int or type(completion) is not int or prompt < 0 or completion < 0:
@@ -126,13 +135,22 @@ def runner_call(call: Callable[[], T], wall_seconds: float) -> T:
         attempt_id,
         context.operation,
         context.scope,
-        Amount(runs=1, wall_ms=math.ceil(wall_seconds * 1000)),
+        # Include a small accounting allowance for timeout/kill overhead;
+        # actual excess is still recorded and stops further spending.
+        Amount(runs=1, wall_ms=math.ceil(wall_seconds * 1000) + 1000),
         "runner",
     )
     admission = Admission(context.ledger)
     try:
         slot = admission.acquire_slot(context.scope, context.operation, "runner")
     except BaseException:
+        context.ledger.settle(attempt_id, Amount())
+        raise
+    try:
+        if context.guard:
+            context.guard()
+    except BaseException:
+        admission.release_slot(slot, stopped=True)
         context.ledger.settle(attempt_id, Amount())
         raise
     try:

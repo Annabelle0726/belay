@@ -188,3 +188,18 @@ Source: `backend/app/main.py`, `backend/app/integrations/quad/` (`router.py`, `p
 - Licensing split and per-file SPDX: `LICENSING.md`.
 - Build-phase narrative, test inventory, and the canonical runbook: `VALIDATION.md`.
 - Forward work: `ROADMAP.md`.
+# Shared traffic and budget controls (CC-R3)
+
+`app.controls` contains a PostgreSQL/SQLite coordinator independent of research
+and saved dialogue. It reserves integer budgets across deployment, institution,
+class and learner scopes before each provider/runner attempt. Shared admission
+adds token buckets, bounded jobs, class rotation, separate concurrency resources
+and worker fences. Unknown external work retains both liability and concurrency.
+
+The existing main-based HTTP surfaces have no trusted identity adapter yet.
+`CONTROLS_MODE=development_bypass` preserves local operation and is shown by health
+routes; `enforced` rejects expensive routes without a verified execution context.
+The queue/worker services are tested behind synthetic adapters, not advertised as
+production HTTP job APIs. Auth and conversation integration are prerequisite work.
+See [implementation status](docs/controls-implementation.md) and
+[operator guide](docs/controls-operations.md) for guarantees and limitations.

@@ -80,6 +80,7 @@
   </section>
 </main>
 
+<script src="./control-messages.js"></script>
 <script type="module">
 const $ = (id) => document.getElementById(id);
 const PID = "p_dev";  // for a real session, POST /api/participant first
@@ -88,7 +89,10 @@ let EXERCISES = {};
 function base() { return $("backend").value.replace(/\/$/, ""); }
 async function jpost(path, body) {
   const r = await fetch(base() + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  if (!r.ok) throw new Error(path + " -> " + r.status);
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(globalThis.belayControlMessage(data.detail, r.headers.get("Retry-After")));
+  }
   return r.json();
 }
 

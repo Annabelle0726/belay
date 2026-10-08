@@ -8,7 +8,7 @@ from app.agent import telemetry
 from app.agent.injection_guard import InjectionGuard
 from app.agent.llm import AnthropicProvider, OpenAICompatProvider
 from app.config import settings
-from app.controls.contracts import ControlError, Limits
+from app.controls.contracts import ControlError, Limits, Traffic
 from app.controls.ledger import attempts
 from app.controls.runtime import operation
 from app.core import runner
@@ -147,3 +147,32 @@ def test_sdk_retry_disabled():
     from app.agent.llm import OpenAICompatProvider
 
     assert OpenAICompatProvider()._client.max_retries == 0
+
+
+def test_format_fallback_can_run_with_one_slot_and_both_attempts_accounted(ledger):
+    ledger.update_policy(
+        policy(
+            version="v2", deployment=Limits(tokens=100000), learner_traffic=Traffic(model_calls=1)
+        )
+    )
+
+    class FormatRejected(Exception):
+        status_code = 400
+
+    value, calls = provider([FormatRejected(), response()])
+    with operation(ledger, SCOPE, "op"):
+        assert invoke(value) == {"ok": True}
+    assert len(calls) == 2
+    assert ledger.summary()["states"] == {"reserved": 0, "unknown": 1, "settled": 1, "overrun": 0}
+
+
+def test_budget_denial_is_not_reported_as_a_provider_call(ledger):
+    value, calls = provider([response()])
+    meter = telemetry.UsageMeter()
+    token = telemetry.set_meter(meter)
+    try:
+        with operation(ledger, SCOPE, "op"), pytest.raises(ControlError):
+            invoke(value)
+    finally:
+        telemetry.reset_meter(token)
+    assert meter.by_component() == {} and calls == []

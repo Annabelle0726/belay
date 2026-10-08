@@ -54,6 +54,8 @@ jobs:
         working-directory: backend
         env:
           DATABASE_URL: postgresql+psycopg://qi:qi@localhost:5432/qimvp
+          # Ephemeral service only: controls tests recreate their own tables.
+          CONTROL_TEST_DATABASE_URL: postgresql+psycopg://qi:qi@localhost:5432/qimvp
         run: python -m pytest -q
 
   # Slice H quality gate: lint + format-check + type-check, ONCE (not per db leg).
@@ -85,3 +87,10 @@ jobs:
       - name: mypy (type-check)
         working-directory: backend
         run: mypy
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Learner control messages
+        run: node --test frontend/tests/control-messages.test.cjs

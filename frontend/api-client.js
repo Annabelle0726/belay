@@ -6,6 +6,8 @@
  * Both return the same shapes the UI consumes (the backend keeps the run() result
  * contract and Sol's JSON contract), so the UI is unchanged.
  */
+import "./control-messages.js";
+
 const BASE_URL =
   (typeof window !== "undefined" && window.SOL_BACKEND_URL) || "http://localhost:8000";
 
@@ -14,7 +16,10 @@ async function _json(path, opts) {
     headers: { "Content-Type": "application/json" },
     ...opts,
   });
-  if (!res.ok) throw new Error(`${path} -> ${res.status}`);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(globalThis.belayControlMessage(data.detail, res.headers.get("Retry-After")));
+  }
   return res.json();
 }
 

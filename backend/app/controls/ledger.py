@@ -8,7 +8,9 @@ SQLite BEGIN IMMEDIATE is a local-only implementation of the same contract.
 
 from __future__ import annotations
 
+import logging
 import time
+import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 
@@ -19,6 +21,23 @@ from sqlalchemy.exc import SQLAlchemyError
 from .contracts import UNITS, Amount, ControlError, Policy, Scope
 
 metadata = MetaData()
+logger = logging.getLogger(__name__)
+rejections = Table(
+    "control_rejections",
+    metadata,
+    Column("id", String(32), primary_key=True),
+    Column("code", String(64), nullable=False),
+    Column("created", Float, nullable=False),
+)
+reconciliations = Table(
+    "control_reconciliations",
+    metadata,
+    Column("id", String(32), primary_key=True),
+    Column("target", String(128), nullable=False),
+    Column("action", String(32), nullable=False),
+    Column("evidence", String(64), nullable=False),
+    Column("created", Float, nullable=False),
+)
 configuration = Table(
     "control_configuration",
     metadata,
@@ -89,7 +108,22 @@ class Ledger:
                     conn.rollback()
                     raise
         except SQLAlchemyError as exc:
+            logger.warning("resource_control_rejected code=coordinator_unavailable")
             raise ControlError("coordinator_unavailable", 503) from exc
+        except ControlError as exc:
+            # This transaction has rolled back; persist only the content-free
+            # rejection code in a separate transaction. Never mask the denial.
+            logger.warning("resource_control_rejected code=%s", exc.code)
+            try:
+                with self.engine.begin() as conn:
+                    conn.execute(
+                        rejections.insert().values(
+                            id=uuid.uuid4().hex, code=exc.code, created=time.time()
+                        )
+                    )
+            except SQLAlchemyError:
+                pass
+            raise
 
     def now(self, conn: Connection) -> float:
         if self.clock:
@@ -157,8 +191,13 @@ class Ledger:
         policy = self.policy(conn)
         now = self.now(conn)
         period = int(now) // policy.period_seconds
+        acknowledged = select(reconciliations.c.target).where(
+            reconciliations.c.action == "acknowledge_overrun"
+        )
         breaches = conn.execute(
-            select(attempts.c.scopes).where(attempts.c.state == "overrun")
+            select(attempts.c.scopes).where(
+                attempts.c.state == "overrun", attempts.c.id.not_in(acknowledged)
+            )
         ).scalars()
         if any(set(keys).intersection(scopes) for scopes in breaches):
             raise ControlError("unresolved_overrun", 503)
@@ -205,10 +244,12 @@ class Ledger:
         with self.transaction() as conn:
             policy = self.policy(conn)
             rows = list(conn.execute(select(attempts)).mappings())
+            codes = list(conn.execute(select(rejections.c.code)).scalars())
             return {
                 "policy_version": policy.version,
                 "currency": policy.currency,
                 "attempts": len(rows),
+                "rejections": {code: codes.count(code) for code in sorted(set(codes))},
                 "states": {
                     s: sum(r["state"] == s for r in rows)
                     for s in ("reserved", "unknown", "settled", "overrun")

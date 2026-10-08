@@ -5,6 +5,11 @@
 `main` at `83bd1a9`. Follow the numbered CC-B prompt structure.
 This document proposes work; it does not claim that controls are implemented.*
 
+Implementation progress is recorded in [controls-implementation.md](../controls-implementation.md),
+with operator instructions in [controls-operations.md](../controls-operations.md).
+The shared coordinator and execution hooks are implemented; production HTTP jobs
+and real Step 1/2 conversation integration remain pending on this main-based branch.
+
 Belay should remain usable when many students ask for help together.
 One class must not occupy all available workers, adding servers must not
 multiply allowances, and expensive work needs authorization before it starts.
