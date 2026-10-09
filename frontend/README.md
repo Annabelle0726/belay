@@ -138,3 +138,14 @@ Then open `http://127.0.0.1:5174/dev-client.html`. For the no-model embed demo u
 child/demo servers and removes the temporary public key and grants. The helper is
 only a local host emulator, never a production identity provider. Production and
 normal static hosting continue to require the real host credential callback.
+
+## Controlled unsaved Ask (CC-R3 Stage B)
+
+Ask uses `/api/sol/jobs` or `/quad/v1/jobs` and requires server opt-in plus the
+existing origin-bound host credential helper. `ask-jobs.js` stores only a scoped
+opaque request pointer in localStorage before admission. Reload or Check request
+status queries the same operation; an unknown/missing result never resends a POST.
+Temporary server retention is shown in the page. Clearing browser storage loses
+the recovery pointer; it is not cancellation. Unsaved Ask does not create an R2
+saved conversation. Run remains the existing separately controlled endpoint.
+The API client exports `recoverSolTurn(exerciseId)` for host bootstrapping.

@@ -78,16 +78,20 @@
       <div class="row"><span class="k" style="width:90px">timings</span><span id="timings" class="muted"></span></div>
     </div>
   </section>
+<p id="retention" class="note"></p>
+<button id="recover">Check request status</button>
 </main>
 
 <script src="./control-messages.js"></script>
 <script src="./request-lifecycle.js"></script>
+<script src="./ask-jobs.js"></script>
 <script src="auth-client.js"></script>
 <script type="module">
 const $ = (id) => document.getElementById(id);
-const PID = window.BELAY_LEARNER_ID;  // host supplies the authorized pseudonymous alias
+let PID = window.BELAY_LEARNER_ID;  // host supplies the authorized pseudonymous alias
 let EXERCISES = {};
 const turnGate = globalThis.belayTurnGate();
+const askJobs = globalThis.belayAskJobs();
 const contextKey = () => JSON.stringify([base(), PID, $("exercise").value, $("mode").value]);
 function refreshControls() {
   $("ask").disabled = $("run").disabled = turnGate.blocked(contextKey());
@@ -118,6 +122,7 @@ async function loadCurriculum() {
     const o = document.createElement("option"); o.value = ex.id; o.textContent = ex.title; sel.appendChild(o);
   }));
   pick();
+  await recoverAsk();
 }
 function pick() {
   invalidateContext();
@@ -125,6 +130,44 @@ function pick() {
   $("prompt").textContent = ex.prompt;
   $("source").value = ex.starter;
 }
+
+function renderTurn(out) {
+    $("solmsg").textContent = out.message;
+    $("solq").textContent = out.check_question ? "↳ " + out.check_question : "";
+    $("affect").textContent = out.affective_state;
+    $("interv").textContent = out.intervention;
+    const c = Math.round((out.confidence || 0) * 100);
+    $("confbar").style.width = c + "%"; $("conf").textContent = c + "%";
+    $("planner").textContent = out.planner_note;
+    const se = out.components?.self_eval || {};
+    $("selfeval").textContent = `${out.self_critique}  ·  leak_risk=${se.leak_risk}`;
+    $("gov").textContent = out.components?.governance?.prose || out.governance;
+    $("mem").textContent = `grasped: ${(out.memory?.grasped || []).join(", ") || "—"}  ·  shaky: ${(out.memory?.shaky || []).join(", ") || "—"}`;
+    const t = out.components?.timings_ms || {};
+    $("timings").textContent = Object.entries(t).map(([k, v]) => `${k}=${v}`).join("  ");
+}
+function showJobState(state, config) {
+  $("retention").textContent = config.notice + ` Results are retained for ${config.result_seconds} seconds.`;
+  if (["queued", "running"].includes(state)) $("status").textContent = state === "queued" ? "Your request is queued…" : "The tutor is working…";
+}
+async function recoverAsk() {
+  const token = turnGate.beginRecovery(contextKey());
+  if (!token) return;
+  $("recover").disabled = true; refreshControls();
+  let unknown = false;
+  try {
+    const out = await askJobs.recover(base(), "/api/sol/jobs", $("exercise").value, (state, config) => { if (turnGate.current(token, contextKey())) showJobState(state, config); });
+    if (!turnGate.current(token, contextKey())) return;
+    if (out) { renderTurn(out); askJobs.acknowledge(out); $("status").textContent = "Recovered the answer to your previous request."; }
+    else $("status").textContent = "";
+  } catch (error) {
+    unknown = Boolean(error.uncertain);
+    if (turnGate.current(token, contextKey())) $("status").textContent = error.message;
+  } finally {
+    turnGate.finish(token, unknown); $("recover").disabled = false; refreshControls();
+  }
+}
+$("recover").addEventListener("click", recoverAsk);
 
 let lastResult = null;
 async function ask(event, runFirst = false) {
@@ -146,25 +189,14 @@ async function ask(event, runFirst = false) {
       if (!result.ok) { $("status").textContent = "Run failed. Please review the run result."; return; }
     }
     $("status").textContent = "Sol is thinking…";
-    const out = await jpost("/api/sol/turn", {
+    const out = await askJobs.ask(base(), "/api/sol/jobs", {
       participant_id: PID, exercise_id: exerciseId,
       event: event || "chat", mode, stance: "peer",
       source, result: lastResult, recent: [],
-    });
+    }, (state, config) => { if (turnGate.current(token, contextKey())) showJobState(state, config); });
     if (!turnGate.current(token, contextKey())) return;
-    $("solmsg").textContent = out.message;
-    $("solq").textContent = out.check_question ? "↳ " + out.check_question : "";
-    $("affect").textContent = out.affective_state;
-    $("interv").textContent = out.intervention;
-    const c = Math.round((out.confidence || 0) * 100);
-    $("confbar").style.width = c + "%"; $("conf").textContent = c + "%";
-    $("planner").textContent = out.planner_note;
-    const se = out.components?.self_eval || {};
-    $("selfeval").textContent = `${out.self_critique}  ·  leak_risk=${se.leak_risk}`;
-    $("gov").textContent = out.components?.governance?.prose || out.governance;
-    $("mem").textContent = `grasped: ${(out.memory?.grasped || []).join(", ") || "—"}  ·  shaky: ${(out.memory?.shaky || []).join(", ") || "—"}`;
-    const t = out.components?.timings_ms || {};
-    $("timings").textContent = Object.entries(t).map(([k, v]) => `${k}=${v}`).join("  ");
+    renderTurn(out);
+    askJobs.acknowledge(out);
     $("status").textContent = "";
   } catch (e) {
     unknown = Boolean(e.uncertain);

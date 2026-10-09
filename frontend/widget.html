@@ -110,7 +110,8 @@
         <h2>Chat</h2>
         <div class="msgs" id="msgs"></div>
         <textarea id="say" rows="2" placeholder="Ask the tutor, or paste what you tried..."></textarea>
-        <div><button id="send">Send turn</button></div>
+        <div><button id="send">Send turn</button> <button id="recover">Check request status</button></div>
+        <p id="retention" class="note"></p>
         <p id="turnstatus" class="note" role="status" aria-live="polite"></p>
       </div>
       <div class="pane">
@@ -133,6 +134,7 @@
 
 <script src="./control-messages.js"></script>
 <script src="./request-lifecycle.js"></script>
+<script src="./ask-jobs.js"></script>
 <script src="auth-client.js"></script>
 <script>
 "use strict";
@@ -140,8 +142,10 @@ const $ = (id) => document.getElementById(id);
 const baseURL = () => $("base").value.replace(/\/$/, "");
 const recent = [];   // dialogue history for the turn loop
 const turnGate = globalThis.belayTurnGate();
+const askJobs = globalThis.belayAskJobs();
 const contextKey = () => JSON.stringify([baseURL(), $("pid").value, $("ex").value, $("stance").value]);
-const refreshSend = () => { $("send").disabled = turnGate.blocked(contextKey()); };
+let recoveryBusy = false;
+const refreshSend = () => { $("send").disabled = turnGate.blocked(contextKey()); $("recover").disabled = recoveryBusy; };
 
 function addMsg(who, text) {
   const d = document.createElement("div");
@@ -202,6 +206,32 @@ function renderSignals(t) {
   $("signals").innerHTML = parts.join("");
 }
 
+function showJobState(state, config) {
+  $("retention").textContent = config.notice + ` Results are retained for ${config.result_seconds} seconds.`;
+  if (["queued", "running"].includes(state)) $("turnstatus").textContent = state === "queued" ? "Your request is queued…" : "The tutor is working…";
+}
+async function recoverAsk() {
+  const token = turnGate.beginRecovery(contextKey());
+  if (!token) return;
+  recoveryBusy = true; refreshSend();
+  let unknown = false;
+  try {
+    const data = await askJobs.recover(baseURL(), "/quad/v1/jobs", $("ex").value, (state, config) => { if (turnGate.current(token, contextKey())) showJobState(state, config); });
+    if (!turnGate.current(token, contextKey())) return;
+    if (data) {
+      $("msgs").replaceChildren(); recent.length = 0;
+      addMsg("tutor", data.message); renderSignals(data); askJobs.acknowledge(data);
+      $("turnstatus").textContent = "Recovered the answer to your previous request.";
+    } else $("turnstatus").textContent = "";
+  } catch (error) {
+    unknown = Boolean(error.uncertain);
+    if (turnGate.current(token, contextKey())) $("turnstatus").textContent = error.message;
+  } finally {
+    turnGate.finish(token, unknown); recoveryBusy = false; refreshSend();
+  }
+}
+$("recover").addEventListener("click", recoverAsk);
+
 $("send").addEventListener("click", async () => {
   const token = turnGate.begin(contextKey());
   if (!token) return;
@@ -218,7 +248,7 @@ $("send").addEventListener("click", async () => {
   if (ov) body.overlay = ov;     // the customization knob rides on the turn
   let unknown = false;
   try {
-    const { data } = await post("/quad/v1/turn", body);
+    const data = await askJobs.ask(baseURL(), "/quad/v1/jobs", body, (state, config) => { if (turnGate.current(token, contextKey())) showJobState(state, config); });
     if (!turnGate.current(token, contextKey())) return;
     addMsg("tutor", data.message);
     if (data.check_question) addMsg("tutor", data.check_question);
@@ -226,6 +256,7 @@ $("send").addEventListener("click", async () => {
     recent.push({ who: "tutor", text: data.message });
     if ($("say").value.trim() === text) $("say").value = "";
     renderSignals(data);
+    askJobs.acknowledge(data);
     const decl = ((data.components || {}).overlay_declined) || [];
     $("declined").textContent = decl.length ? ("A preference was declined by the floor check: " + decl.join(", ")) : "";
     $("turnstatus").textContent = "";
@@ -280,6 +311,7 @@ $("knob").addEventListener("change", async () => {
     $("declined").textContent = decl.length ? ("A preference was declined by the floor check: " + decl.join(", ")) : "";
   } catch (error) { $("declined").textContent = error.message; }
 });
+recoverAsk();
 </script>
 </body>
 </html>

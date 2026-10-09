@@ -32,9 +32,12 @@ globalThis.belayRequestJSON = async function (url, options = {}, { timeoutMs = 9
       const denied = ["verified_execution_required", "invalid_controls_mode", "controls_not_initialized"];
       const uncertain = (response.status >= 500 && !denied.includes(code)) ||
         ["execution_unknown", "worker_lost", "execution_deadline"].includes(code);
-      throw globalThis.belayRequestError(code || "request_failed", uncertain,
+      const error = globalThis.belayRequestError(code || "request_failed", uncertain,
         globalThis.belayControlMessage({ code: uncertain ? "execution_unknown" : code },
           uncertain ? null : response.headers.get("Retry-After")));
+      const retry = Number(response.headers.get("Retry-After"));
+      error.retryAfter = Number.isInteger(retry) && retry > 0 && retry <= 3600 ? retry : null;
+      throw error;
     }
     let data;
     try { data = await response.json(); }
@@ -67,10 +70,16 @@ globalThis.belayTurnGate = function () {
       active = { key, generation };
       return active;
     },
+    beginRecovery(key) {
+      if (active) return null;
+      active = { key, generation };
+      return active;
+    },
     current(token, key) { return active === token && generation === token.generation && token.key === key; },
     invalidate() { generation += 1; },
     finish(token, unknown = false) {
       if (unknown) uncertain.add(token.key);
+      else uncertain.delete(token.key);
       if (active === token) active = null;
     },
     blocked(key) { return Boolean(active) || uncertain.has(key); },

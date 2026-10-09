@@ -8,7 +8,7 @@ const read = (name) => fs.readFileSync(path.join(__dirname, "..", name), "utf8")
 const reply = (data, status = 200) => ({ ok: status < 300, status, headers: new Headers(), json: async () => data });
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
-async function page(name, fetchTurn, timeoutMs) {
+async function page(name, fetchTurn, timeoutMs, sharedStorage, recoveredAnswer) {
   const nodes = {};
   function node() {
     return {
@@ -25,13 +25,30 @@ async function page(name, fetchTurn, timeoutMs) {
   const context = vm.createContext({
     document: { getElementById: (id) => nodes[id], createElement: node },
     window: { BELAY_LEARNER_ID: "gh:12345", BelayAuth: { headers: async () => ({ "Content-Type": "application/json", Authorization: "Bearer signed-test" }) } },
+    latestAnswer: recoveredAnswer,
+    localStorage: sharedStorage || (() => { const values = new Map(); return { getItem: (k) => values.get(k) || null, setItem: (k, v) => values.set(k, v), removeItem: (k) => values.delete(k) }; })(),
+    crypto: require("node:crypto").webcrypto,
     setTimeout, clearTimeout, AbortController, console,
-    fetch: (url, options) => url.endsWith("/api/curriculum")
-      ? Promise.resolve(reply({ modules: [{ exercises: [{ id: "ds-foundations", title: "test", prompt: "test", starter: "pass" }] }] }))
-      : fetchTurn(url, options),
+    fetch: async (url, options) => {
+      if (url.endsWith("/api/curriculum")) return reply({ modules: [{ exercises: [{ id: "ds-foundations", title: "test", prompt: "test", starter: "pass" }] }] });
+      if (url.endsWith("/jobs/config")) return reply({ recovery_scope: "a".repeat(64), learner_id: "gh:12345", assignments: {"ds-foundations":"v1", "ex":"v1"}, poll_seconds: 1, result_seconds: 300, notice: "Temporary encrypted recovery." });
+      if (url.includes("/jobs/by-request/")) return reply({ id: "b".repeat(64), state: "completed", result: context.latestAnswer });
+      const response = await fetchTurn(url, options);
+      if (url.endsWith("/jobs") && response.ok) {
+        let data;
+        try { data = await response.json(); } catch { return response; }
+        if (data && typeof data.message === "string") {
+          context.latestAnswer = data;
+          return reply({ id: "b".repeat(64), state: "queued" }, 202);
+        }
+        return reply(data);
+      }
+      return response;
+    },
   });
   vm.runInContext(read("control-messages.js"), context);
   vm.runInContext(read("request-lifecycle.js"), context);
+  vm.runInContext(read("ask-jobs.js"), context);
   if (timeoutMs) {
     const request = context.belayRequestJSON;
     context.belayRequestJSON = (url, options, config) => request(url, options, { ...config, timeoutMs });
@@ -78,6 +95,7 @@ for (const name of ["widget.html", "dev-client.html"]) {
     const id = widget ? "ex" : "exercise";
     ui.nodes[id].value = "other"; ui.change(id);
     ui.nodes[id].value = "ds-foundations"; ui.change(id);
+    await flush();
     resolve(reply({ message: "STALE", memory: {} }));
     await pending;
     assert.equal(calls, 1);
@@ -153,6 +171,24 @@ test("dev run failure cannot trigger a model turn or reuse an earlier run result
 test("API client uses the same validated transport for turns", async () => {
   const ui = await page("widget.html", async () => reply({}));
   // Exercise the module body in this isolated VM; imports were loaded above.
-  vm.runInContext(read("api-client.js").replace(/^import .*;$/gm, "").replace(/^export /gm, ""), ui.context);
-  await assert.rejects(ui.context.solTurn({ participantId: "p", exerciseId: "ex" }), { code: "invalid_response", uncertain: true });
+  vm.runInContext("{ " + read("api-client.js").replace(/^import .*;$/gm, "").replace(/^export /gm, "") + "; globalThis.testSolTurn = solTurn; }", ui.context);
+  await assert.rejects(ui.context.testSolTurn({ participantId: "p", exerciseId: "ex" }), { code: "invalid_response", uncertain: true });
 });
+
+
+for (const name of ["widget.html", "dev-client.html"]) {
+  test(`${name}: reload recovers a lost POST with the stored pointer and no second POST`, async () => {
+    const values = new Map();
+    const store = {getItem: (k) => values.get(k) || null, setItem:(k,v) => values.set(k,v), removeItem:(k) => values.delete(k)};
+    let posts = 0;
+    const first = await page(name, async () => {posts++; throw TypeError("lost after admission");}, undefined, store);
+    await first.click(name === "widget.html" ? "send" : "ask");
+    assert.equal(posts,1);
+    const second = await page(name, async () => {posts++; throw Error("must not resubmit");}, undefined, store, {message:"RECOVERED"});
+    assert.equal(posts,1);
+    if (name === "widget.html") assert.match(second.nodes.msgs.children[0].innerHTML,/RECOVERED/);
+    else assert.equal(second.nodes.solmsg.textContent,"RECOVERED");
+    assert.match(second.nodes[name === "widget.html" ? "turnstatus" : "status"].textContent,/Recovered/);
+    assert.equal(second.nodes[name === "widget.html" ? "send" : "ask"].disabled,false);
+  });
+}
