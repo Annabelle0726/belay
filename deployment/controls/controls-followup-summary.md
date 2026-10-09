@@ -79,3 +79,24 @@ one opt-in live-model benchmark and six unavailable sibling verifier-contract
 cases. Ruff lint/format passed; mypy passed (110 source files). HTTP tests replace
 tutor/runner calls with stubs and exercise actual routes/CORS. They prove error
 wiring, not trusted identity, admission, result storage or authenticated recovery.
+
+## Round B0 — verify integration prerequisites (2026-10-09)
+
+Previous round commit: `d02bdde`.
+
+Inspected the actual Step 1 identity branch (`266c23e`) and Step 2 conversation
+branch (`3a414d6`) without checkout, copying, merging or execution. Recorded the
+smallest unsaved-Ask integration sequence and acceptance evidence in
+`controls-http-integration-plan.md`.
+
+Finding: Stage B can reuse Step 1's verified `Identity`/authorization contract,
+but the current base has none of it. The inspected identity object also lacks an
+original-subject-bound grant reference/live worker recheck. Trusted HTTP ownership
+and token-free reauthorization must be resolved before wiring a real worker.
+Owned TTL input/result storage and atomic result publication remain unimplemented.
+Step 2's entire conversation branch is unnecessary for the first unsaved slice.
+
+Status: **Stage A implemented and committed; Stage B/C/D not complete.** This
+readiness round adds documentation only, not authentication or an end-to-end
+capability claim. No user cancellation feature was added. Existing unrelated
+workspace documentation/local setup changes remain outside these commits.
