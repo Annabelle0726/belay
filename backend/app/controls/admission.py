@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import re
 import uuid
+from contextlib import nullcontext
 
 from sqlalchemy import JSON, Column, Float, Integer, String, Table, func, select
 from sqlalchemy.engine import Connection
@@ -112,6 +113,8 @@ class Admission:
         payload_ref: str,
         payload_bytes: int,
         allowance: Amount,
+        *,
+        connection: Connection | None = None,
     ) -> dict:
         opaque(fingerprint)
         opaque(payload_ref)
@@ -119,7 +122,9 @@ class Admission:
             raise ValueError("invalid operation ID")
         keys = list(scope.keys())
         job_id = hashlib.sha256((keys[-1] + ":" + operation_id).encode()).hexdigest()
-        with self.ledger.transaction() as conn:
+        with (
+            nullcontext(connection) if connection is not None else self.ledger.transaction()
+        ) as conn:
             policy = self.ledger.policy(conn)
             now = self.ledger.now(conn)
             self._expire(conn, now)
@@ -308,12 +313,15 @@ class Admission:
         *,
         authorized: bool,
         failure_reason: str = "authorization_revoked",
+        connection: Connection | None = None,
     ) -> None:
         if result_ref:
             opaque(result_ref)
         if not re.fullmatch(r"[a-z_]{1,64}", failure_reason):
             raise ValueError("invalid failure code")
-        with self.ledger.transaction() as conn:
+        with (
+            nullcontext(connection) if connection is not None else self.ledger.transaction()
+        ) as conn:
             row = self._live(conn, job_id, fence)
             if authorized and row["state"] != "cancel_requested" and not result_ref:
                 raise ControlError("invalid_result_ref", 502)

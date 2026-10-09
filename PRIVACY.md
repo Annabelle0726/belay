@@ -179,3 +179,17 @@ the existing tutoring behavior. Consent still controls durable versus ephemeral
 state; registration cannot change anyone else's consent. The grades firewall and
 governance/distress floors are unchanged. See [the identity contract and upgrade
 procedure](docs/authentication.md), including retention and offline-tool boundaries.
+
+### Unsaved Ask operational recovery (CC-R3 Stage B)
+
+When explicitly enabled, Ask uses short-lived encrypted operational input and
+results in the shared controls coordinator. This is not saved dialogue or research
+consent: research routing remains unchanged. No bearer token or raw login subject
+is retained. Input lasts at most queue wait plus execution limit; result retention
+is `result_seconds` (300 seconds locally, maximum 3600). Operators must approve
+and disclose production retention, restrict database/key access, run
+`python -m app.controls.cli cleanup-content` at least every minute, and exclude
+these temporary tables from long-lived backups/exports. Encryption is not permission
+to retain content indefinitely. Expiry blocks access even before physical cleanup.
+PII and verbatim distress are not retained; content-free accounting/dedup records
+survive independently. No R2 saved-conversation strategy is changed.

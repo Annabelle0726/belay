@@ -70,8 +70,9 @@ class Ledger:
     def initialize(self, policy: Policy) -> None:
         """Operator migration; never called automatically by an API worker."""
         from .admission import jobs
+        from .data import bindings, data
 
-        assert jobs.metadata is metadata
+        assert jobs.metadata is bindings.metadata is data.metadata is metadata
         metadata.create_all(self.engine)
         with self.transaction() as conn:
             existing = conn.execute(select(configuration.c.policy)).scalar_one_or_none()
@@ -87,6 +88,9 @@ class Ledger:
         their deadline null so expiration fences them as unknown, without
         releasing liability or making them eligible for automatic replay.
         """
+        from .data import bindings, data
+
+        metadata.create_all(self.engine, tables=[bindings, data])
         with self.transaction() as conn:
             columns = {column["name"] for column in inspect(conn).get_columns("control_jobs")}
             if "deadline" not in columns:
