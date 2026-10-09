@@ -119,3 +119,24 @@ Timeout retains holds/unknown concurrency; missing usage still delivers valid
 answers with retained holds. Crash before publication stays unknown; loss after
 commit retains the result. Queue expiry and deterministic control/support pass.
 No paid request or worker deployment occurred. Browser recovery remains B5.
+
+## B5 — browser recovery of the same operation
+
+Widget, dev Ask and API client now use the authenticated jobs contract. A scoped
+opaque request pointer is written before POST; no prompt, answer or credential is
+placed in browser storage. Unknown/lost operations are recovered only with GET.
+Refresh and the new Check request status action retrieve the original job. Queued,
+running, known failure, unknown and expired result remain distinct; overall wait
+is bounded and polling honors Retry-After. No cancel button was added.
+
+A usable result is acknowledged only after the current page displays it. Stale
+responses cannot clear a pending operation or overwrite current display. Unsafe
+POST delivery/missing lookup never generates a replacement paid request. Known
+pre-admission refusals allow a later intentional Ask. The API callback delivers
+a validated result before acknowledging it. Existing Run remains separate: the
+Stage B slice enables Ask only, not a new runner job endpoint.
+
+Validation: **35 offline Node tests passed**, including both actual page reloads,
+old-response fencing, pointer-before-send, credential/content exclusion, storage
+failure, same-scope different-subject recovery key, expired results and no unknown
+automatic resubmission. Combined backend/PostgreSQL acceptance follows.

@@ -17,6 +17,11 @@ globalThis.belayControlMessage = function (detail, retryAfter) {
     request_timeout: "Waiting timed out. The request may still be running. Please contact your course support team before submitting again.",
     request_lost: "The connection was lost. The request may still be running. Please contact your course support team before submitting again.",
     invalid_response: "A valid answer was not received. The request may have run. Please contact your course support team before submitting again.",
+    result_expired: "This request finished, but its temporary answer has expired. A new request requires an intentional submission.",
+    recovery_unavailable: "Request recovery storage is unavailable. Enable browser storage and check status before submitting again.",
+    content_not_storable: "This request cannot be temporarily stored for recovery. Please remove personal information or contact course support.",
+    jobs_disabled: "Ask is not enabled on this server. Please contact your course support team.",
+    jobs_not_configured: "Ask recovery is not configured. Please contact your course support team.",
   };
   let message = messages[code] || "The request could not be completed. Please contact your course support team.";
   const seconds = Number(retryAfter);

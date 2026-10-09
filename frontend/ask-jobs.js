@@ -1,0 +1,111 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+// Stable logical request pointers only: never prompts, answers or credentials.
+// Unknown delivery is recovered with GET, never automatically with another POST.
+globalThis.belayAskJobs = function ({ storage = globalThis.localStorage,
+  uuid = () => globalThis.crypto.randomUUID(), wait = (ms) => new Promise((r) => setTimeout(r, ms)),
+  timeoutMs = 90000 } = {}) {
+  const receipts = new WeakMap();
+  const error = (code, uncertain = false) => globalThis.belayRequestError(code, uncertain);
+  async function request(base, path, options = {}, validate, remaining = timeoutMs) {
+    return globalThis.belayRequestJSON(base + path, {
+      ...options, headers: await window.BelayAuth.headers(base),
+    }, { validate, timeoutMs: Math.max(1, remaining) });
+  }
+  async function prepare(base, prefix, exercise) {
+    const config = await request(base, prefix + "/config", {}, (c) => c &&
+      /^[0-9a-f]{64}$/.test(c.recovery_scope) && typeof c.learner_id === "string" &&
+      c.assignments && typeof c.assignments[exercise] === "string" &&
+      Number.isInteger(c.poll_seconds) && c.poll_seconds >= 1 && c.poll_seconds <= 60 &&
+      Number.isInteger(c.result_seconds) && typeof c.notice === "string");
+    const key = "belay.ask.v1:" + JSON.stringify([base, prefix, config.recovery_scope, exercise, config.assignments[exercise]]);
+    return { base, prefix, key, config };
+  }
+  function read(key) {
+    let raw;
+    try { raw = storage.getItem(key); }
+    catch { throw error("recovery_unavailable"); }
+    if (!raw) return null;
+    try {
+      const p = JSON.parse(raw);
+      if (!/^[A-Za-z0-9_-]{16,128}$/.test(p.request_id) || typeof p.pending !== "boolean") throw Error();
+      return p;
+    } catch { throw error("execution_unknown", true); }
+  }
+  function write(key, pointer) {
+    try {
+      if (pointer) storage.setItem(key, JSON.stringify(pointer));
+      else storage.removeItem(key);
+    } catch { throw error("recovery_unavailable", true); }
+  }
+  const states = new Set(["queued", "running", "cancel_requested", "completed", "failed", "cancelled", "unknown", "result_expired"]);
+  const validJob = (j) => j && /^[0-9a-f]{64}$/.test(j.id) && states.has(j.state);
+  async function watch(context, pointer, onStatus) {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      if (Date.now() >= deadline) throw error("request_timeout", true);
+      let job;
+      try {
+        job = await request(context.base, context.prefix + "/by-request/" + encodeURIComponent(pointer.request_id),
+          {}, validJob, deadline - Date.now());
+      } catch (e) {
+        if (e.code === "poll_limited") {
+          await wait(Math.min(deadline - Date.now(), (e.retryAfter || context.config.poll_seconds) * 1000));
+          continue;
+        }
+        // A missing operation after a lost POST can be a race with admission.
+        // It never proves that a second paid request would be safe.
+        throw error(e.code === "job_unavailable" ? "execution_unknown" : e.code, true);
+      }
+      if (onStatus) onStatus(job.state, context.config);
+      if (job.state === "completed") {
+        if (!globalThis.belayValidateTurn(job.result)) throw error("invalid_response", true);
+        receipts.set(job.result, {key: context.key, pointer});
+        return job.result;
+      }
+      if (["failed", "cancelled", "result_expired"].includes(job.state)) {
+        write(context.key, { request_id: pointer.request_id, pending: false });
+        throw error(job.reason || job.state);
+      }
+      if (["unknown", "cancel_requested"].includes(job.state)) throw error("execution_unknown", true);
+      await wait(Math.min(Math.max(0, deadline - Date.now()), context.config.poll_seconds * 1000));
+    }
+  }
+  return {
+    prepare,
+    acknowledge(turn) {
+      const receipt = receipts.get(turn);
+      if (!receipt) throw error("invalid_response", true);
+      const current = read(receipt.key);
+      if (current?.request_id === receipt.pointer.request_id) {
+        write(receipt.key, {request_id: receipt.pointer.request_id, pending:false});
+      }
+    },
+    async ask(base, prefix, body, onStatus) {
+      const context = await prepare(base, prefix, body.exercise_id);
+      if (onStatus) onStatus("preparing", context.config);
+      let pointer = read(context.key);
+      if (pointer?.pending) return watch(context, pointer, onStatus);
+      pointer = { request_id: uuid(), pending: true };
+      write(context.key, pointer); // Commit pointer BEFORE the only POST.
+      const payload = { ...body, participant_id: context.config.learner_id,
+        exercise_version: context.config.assignments[body.exercise_id], request_id: pointer.request_id };
+      delete payload.pseudo_id;
+      delete payload.consent; // Registration/consent remains its own authenticated action.
+      try {
+        await request(base, prefix, { method: "POST", body: JSON.stringify(payload) }, validJob);
+      } catch (e) {
+        if (!e.uncertain && ["rate_limited", "queue_full", "payload_too_large", "content_not_storable"].includes(e.code)) {
+          write(context.key, null); // Confirmed pre-admission denial, no automatic resend.
+        }
+        throw e;
+      }
+      return watch(context, pointer, onStatus);
+    },
+    async recover(base, prefix, exercise, onStatus) {
+      const context = await prepare(base, prefix, exercise);
+      if (onStatus) onStatus("preparing", context.config);
+      const pointer = read(context.key);
+      return pointer ? watch(context, pointer, onStatus) : null;
+    },
+  };
+};
