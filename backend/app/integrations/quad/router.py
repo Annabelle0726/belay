@@ -31,6 +31,7 @@ from ...agent import goals as _goals
 from ...agent import overlay as _overlay
 from ...config import settings
 from ...controls.contracts import ControlError
+from ...controls.http import control_http_error
 from ...controls.runtime import current as control_context
 from ...core.registry import get_active_pack
 from ...store import ConsentRouter, InMemoryStore, SqlStore
@@ -126,7 +127,7 @@ def build_router(
         try:
             control_context()
         except ControlError as exc:
-            raise HTTPException(exc.status, {"code": exc.code}) from exc
+            raise control_http_error(exc) from exc
         # 1. PII boundary on the RAW body (before any parsing/storage).
         try:
             assert_no_pii(payload)
@@ -165,9 +166,9 @@ def build_router(
         try:
             return run_turn(turn_payload, _llm(), store)
         except ControlError as e:
-            raise HTTPException(e.status, {"code": e.code}) from e
+            raise control_http_error(e) from e
         except Exception as e:  # surface a clean error
-            raise HTTPException(502, f"tutor unavailable: {e}") from e
+            raise HTTPException(502, {"code": "execution_unknown"}) from e
 
     @api.post("/goals")
     def goals(payload: dict = Body(...)):
