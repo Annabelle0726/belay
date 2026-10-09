@@ -18,13 +18,15 @@ implements it here.
 
 Privacy is a structural property, not a policy bolted on afterward.
 
-- **Pseudonymous identifiers only.** Identity is a pseudonymous host id (for example
-  `gh:12345`), namespaced by provider; that id is the participant anon-code. There is no
-  name, email, SIS id, or other personal identifier in the identity model.
+- **Pseudonymous identifiers only.** A verified opaque subject resolves to an
+  institution-issued institution/class/learner authorization context. The learner
+  alias keeps the `gh:12345` format; physical participant and anon-code keys are
+  class-specific digests. There is no name, email, SIS id or other personal
+  identifier in the identity model. Credentials and subjects are never persisted.
   Source: `README.md` (Privacy by architecture), `CONTRIBUTING.md` ("Privacy is enforced
   in code, not by policy"), `backend/app/store/models.py` (participants table: "anonymized
   identity + consent flag. No PII by design"), `backend/app/integrations/quad/router.py`.
-- **PII is rejected at the boundary.** The Quad sidecar refuses any payload carrying PII
+- **PII is rejected at the boundary.** Both authenticated HTTP surfaces refuse any payload carrying PII
   (name, SIS/student id, email, ssn, phone field keys anywhere; plaintext email patterns;
   non-pseudonymous ids) with a 422 before it reaches the tutor.
   Source: `backend/app/integrations/quad/pii.py` (`pii_reason`, `assert_no_pii`,
@@ -143,3 +145,22 @@ Two decisions are deliberately left to the IRB and are marked open in the code:
 - System architecture, including the governance gate and the trace envelope:
   `ARCHITECTURE.md`.
 - The licensing split: `LICENSING.md`.
+
+## Production identity boundary
+
+`backend/app/auth.py` verifies signature, issuer, audience and time claims, then
+resolves only operator-owned membership and assignment grants. Every learner
+read/write, registration, event ingress, export and code execution route uses that
+context. Another learner or class is uniformly unavailable (404), regardless of
+whether records exist. Missing credentials are 401; missing auth configuration
+is 503. Explicit local/test modes still require signed credentials.
+
+`backend/app/store/scoped.py` namespaces class state and assignment-version events.
+Legacy records without trusted scope are excluded; no automatic ownership backfill
+or broad default access exists. HTTP trace payloads retain allowlisted numeric and
+boolean metrics plus the authorized version, removing raw source, stdout, notes
+and free-text intake from events/exports. Private scoped goals/reflections retain
+the existing tutoring behavior. Consent still controls durable versus ephemeral
+state; registration cannot change anyone else's consent. The grades firewall and
+governance/distress floors are unchanged. See [the identity contract and upgrade
+procedure](docs/authentication.md), including retention and offline-tool boundaries.

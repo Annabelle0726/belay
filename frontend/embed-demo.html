@@ -43,7 +43,8 @@
   <h2 style="font-size:1rem">Response</h2>
   <pre id="out">(click the button)</pre>
 
-  <script>
+  <script src="auth-client.js"></script>
+<script>
     document.getElementById('run').addEventListener('click', async () => {
       const out = document.getElementById('out');
       out.textContent = 'running…';
@@ -58,7 +59,7 @@
       try {
         const resp = await fetch(base + '/quad/v1/turn', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: await window.BelayAuth.headers(base),
           body: JSON.stringify(body)
         });
         const data = await resp.json();
