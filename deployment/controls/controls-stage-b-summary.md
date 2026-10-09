@@ -54,3 +54,28 @@ revocation and assignment/deployment-version changes fail closed.
 Validation: five new signed-identity grant cases pass; existing identity and
 HTTP error suites pass together. Ruff lint/format pass. This supplies authority
 only: no HTTP queue or actual worker adapter yet.
+
+## B2 — owned temporary execution data and atomic publication
+
+Added encrypted input/pending-result/result tables in the existing coordinator,
+separate from research traces. Ownership is the original grant + scope + exercise
+version. Input expiry is admission time + queue wait + execution bound. Result
+TTL is policy `result_seconds` (local default 300, bounded to 3600); production
+retention approval remains an operator prerequisite. Failed/unknown terminal
+inputs and pending output are removed; completed results expire independently.
+Content-free dedup tombstones/accounting survive cleanup. Operator command
+`cleanup-content` owns physical cleanup when idle; reads always enforce expiry.
+
+Admission/input insertion and result publication/completion share one coordinator
+transaction. No orphan data after rejected/conflicting admission, no completed
+job without its validated owned result, no automatic rerun after a pre-publication
+crash. Existing backend cancellation/reconciliation mechanisms remain intact.
+
+Operational storage checks PII even in source and refuses unsafe content. The
+existing enabled distress short circuit keeps only its content-free routing flag;
+verbatim distress is discarded before encryption. Detector vocabulary is unchanged.
+
+Validation: execution-data + distress suites **18 passed**; admission/external
+metering regression **27 passed, 2 skipped** before the two additional data cases.
+New cases cover rollback, expiry, duplicates, revocation and pending-result crash.
+Ruff passes. HTTP/worker/client wiring follows; this is not yet an end-to-end Ask.

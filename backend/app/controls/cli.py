@@ -24,6 +24,7 @@ def main(argv: list[str] | None = None) -> int:
             "upgrade-schema",
             "update-policy",
             "summary",
+            "cleanup-content",
             "unresolved",
             "settle-attempt",
             "confirm-stopped",
@@ -53,6 +54,11 @@ def main(argv: list[str] | None = None) -> int:
             policy = Policy.model_validate_json(args.policy.read_text(encoding="utf-8"))
             (ledger.initialize if args.command == "init" else ledger.update_policy)(policy)
             output = {"policy_version": policy.version}
+        elif args.command == "cleanup-content":
+            from .data import cleanup_in
+
+            with ledger.transaction() as conn:
+                output = {"deleted_content_rows": cleanup_in(ledger, conn)}
         elif args.command == "summary":
             output = snapshot(ledger)
         elif args.command == "unresolved":
