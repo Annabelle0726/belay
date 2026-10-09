@@ -44,3 +44,6 @@ build/
 .claude/*
 !.claude/commands/
 _git_locks_to_delete/
+
+# Operator-owned identity configuration (public key and private grant mapping).
+/deployment/auth/

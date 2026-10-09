@@ -24,6 +24,15 @@ class Settings:
     # Enforced execution requires trusted operation context; HTTP integration
     # remains gated on the identity/conversation prerequisites.
     controls_mode: str = field(default_factory=lambda: _env("CONTROLS_MODE", "development_bypass"))
+    # Production is fail-closed; local/test must be explicitly selected and still
+    # require signed credentials and an operator-controlled authorization file.
+    belay_env: str = field(default_factory=lambda: _env("BELAY_ENV", "production"))
+    auth_issuer: str = field(default_factory=lambda: _env("AUTH_ISSUER", ""))
+    auth_audience: str = field(default_factory=lambda: _env("AUTH_AUDIENCE", ""))
+    auth_public_key_file: str = field(default_factory=lambda: _env("AUTH_PUBLIC_KEY_FILE", ""))
+    auth_authorization_file: str = field(
+        default_factory=lambda: _env("AUTH_AUTHORIZATION_FILE", "")
+    )
     # --- Model/inference provider seam -------------------------------------
     # PROVIDER selects the inference provider (and is recorded in the §6 telemetry
     # `provider` field). The fast/strong TIER POLICY (which component uses which

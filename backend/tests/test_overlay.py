@@ -20,7 +20,6 @@ bounded customization overlay. The load-bearing claims:
 from __future__ import annotations
 
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 from app.agent import goals as goals_mod
 from app.agent import overlay as ov
@@ -30,6 +29,7 @@ from app.core.registry import get_active_pack
 from app.integrations.quad import build_router
 from app.packs.datascience.solutions import SOLUTIONS
 from app.store import ConsentRouter, InMemoryStore
+from tests.http_auth import authenticated_client
 
 _EX = get_active_pack().get_exercise("ds-foundations")
 _PERSONA = get_active_pack().persona
@@ -335,7 +335,7 @@ def _sidecar():
 
     app = FastAPI()
     app.include_router(build_router(cr, get_active_pack(), _no_llm))
-    return TestClient(app)
+    return authenticated_client(app, "gh:7")
 
 
 def test_sidecar_overlay_route_sets_and_pii_checked():

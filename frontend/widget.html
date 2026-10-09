@@ -133,6 +133,7 @@
 
 <script src="./control-messages.js"></script>
 <script src="./request-lifecycle.js"></script>
+<script src="auth-client.js"></script>
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
@@ -158,7 +159,7 @@ function overlayFromKnob() {
 }
 async function post(path, body) {
   const data = await globalThis.belayRequestJSON(baseURL() + path, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: await window.BelayAuth.headers(baseURL()),
     body: JSON.stringify(body),
   }, { validate: path === "/quad/v1/turn" ? globalThis.belayValidateTurn : undefined });
   return { status: 200, data };
