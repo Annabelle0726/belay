@@ -1,7 +1,8 @@
 # Front-end
 
 Reference front-ends for the Sol peer-tutor backend. They are demos and pilot
-glue, not part of the tested framework; the backend is the source of truth.
+glue; the backend is the source of truth. Request lifecycle behavior is covered
+by offline transport and page-script tests, not authenticated browser acceptance.
 
 | File | Purpose |
 |------|---------|
@@ -9,6 +10,39 @@ glue, not part of the tested framework; the backend is the source of truth.
 | `embed-demo.html` | A minimal page showing how to embed the widget on a host site. |
 | `dev-client.html` | Zero-dependency page that routes through the backend to verify a deployment. Marked DEV ONLY: uses a hardcoded `PID = "p_dev"` without consent registration, so it is not suitable for a pilot session. |
 | `api-client.js` | A small API client (`runModel`, `solTurn`, `createParticipant`, `exportEvents`, `getCurriculum`) for a custom front-end. |
+| `request-lifecycle.js` | Shared bounded JSON transport, turn validation, and page-local duplicate/stale-response protection. |
+
+## Failure and waiting behavior
+
+The reference pages and API client bound JSON requests to 90 seconds, including
+reading the response body, with no automatic retries. The browser may stop
+waiting while server/provider work continues; this is not a cancellation feature.
+Malformed JSON, empty messages and unusable display metadata cannot become a
+successful tutor answer. An ambiguous network/timeout/5xx failure explains that
+execution may still be running and directs the learner to course support.
+
+The pages block repeat clicks while work is pending and after an uncertain outcome
+in that page's current learner/exercise context. Context changes fence late
+responses, including switching away and back. A failed run never starts an Ask
+with stale run data. The widget preserves unsent text on failure and does not put
+error/empty tutor messages in dialogue history. No learner cancellation button
+is added.
+
+These are local guards, **not HTTP idempotency or durable recovery**. A refresh,
+another tab or another device is not protected by the page-local gate. Do not
+reload/resubmit to resolve an unknown outcome; the authenticated job/status API
+is the next prerequisite for recovering the same operation. The API client
+reports `error.code` and `error.uncertain`; custom hosts must implement their own
+display/in-flight guard and must not automatically retry uncertain POSTs.
+
+Run the offline tests from the repository root (no backend/model endpoint):
+
+```text
+node --test frontend/tests/control-messages.test.cjs frontend/tests/request-lifecycle.test.cjs frontend/tests/turn-pages.test.cjs
+```
+
+The page tests execute the actual inline page scripts with a minimal DOM harness
+and mocked transport. Real browser/authenticated HTTP acceptance remains pending.
 
 ## Backend wiring
 

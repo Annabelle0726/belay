@@ -92,5 +92,5 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Learner control messages
-        run: node --test frontend/tests/control-messages.test.cjs
+      - name: Learner request lifecycle and control messages
+        run: node --test frontend/tests/control-messages.test.cjs frontend/tests/request-lifecycle.test.cjs frontend/tests/turn-pages.test.cjs
