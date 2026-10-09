@@ -34,6 +34,15 @@ Three properties distinguish it:
   pointed at a local Ollama or vLLM endpoint, so the tutor can run entirely on
   institutional compute with no external API in the data path.
 
+## Authentication required
+
+All learner/resource API routes now require a short-lived signed bearer plus
+operator-owned institution/class/learner and assignment-version grants. The
+production default refuses protected requests with missing configuration (503).
+Local/test modes must be explicitly selected and also require credentials.
+Set up the [identity contract and authorization file](docs/authentication.md)
+before following the quickstart. Health checks remain public.
+
 ## Quickstart
 
 The fastest path is the container, which is SQLite-default and points at a local

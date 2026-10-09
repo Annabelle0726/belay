@@ -24,6 +24,7 @@ async function page(name, fetchTurn, timeoutMs) {
     .forEach(([id, value]) => { if (nodes[id]) nodes[id].value = value; });
   const context = vm.createContext({
     document: { getElementById: (id) => nodes[id], createElement: node },
+    window: { BELAY_LEARNER_ID: "gh:12345", BelayAuth: { headers: async () => ({ "Content-Type": "application/json", Authorization: "Bearer signed-test" }) } },
     setTimeout, clearTimeout, AbortController, console,
     fetch: (url, options) => url.endsWith("/api/curriculum")
       ? Promise.resolve(reply({ modules: [{ exercises: [{ id: "ds-foundations", title: "test", prompt: "test", starter: "pass" }] }] }))

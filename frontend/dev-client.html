@@ -82,9 +82,10 @@
 
 <script src="./control-messages.js"></script>
 <script src="./request-lifecycle.js"></script>
+<script src="auth-client.js"></script>
 <script type="module">
 const $ = (id) => document.getElementById(id);
-const PID = "p_dev";  // for a real session, POST /api/participant first
+const PID = window.BELAY_LEARNER_ID;  // host supplies the authorized pseudonymous alias
 let EXERCISES = {};
 const turnGate = globalThis.belayTurnGate();
 const contextKey = () => JSON.stringify([base(), PID, $("exercise").value, $("mode").value]);
@@ -102,14 +103,14 @@ function invalidateContext() {
 function base() { return $("backend").value.replace(/\/$/, ""); }
 async function jpost(path, body) {
   return globalThis.belayRequestJSON(base() + path,
-    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
+    { method: "POST", headers: await window.BelayAuth.headers(base()), body: JSON.stringify(body) },
     { validate: path === "/api/sol/turn" ? globalThis.belayValidateTurn
       : (data) => data && typeof data.ok === "boolean" && (!data.ok ||
         (Array.isArray(data.dist) && data.dist.every((d) => d && typeof d.bits === "string" && typeof d.p === "number"))) });
 }
 
 async function loadCurriculum() {
-  const r = await fetch(base() + "/api/curriculum");
+  const r = await fetch(base() + "/api/curriculum", { headers: await window.BelayAuth.headers(base()) });
   const data = await r.json();
   const sel = $("exercise"); sel.innerHTML = "";
   data.modules.forEach((m) => m.exercises.forEach((ex) => {
