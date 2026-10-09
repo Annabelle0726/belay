@@ -79,3 +79,22 @@ Validation: execution-data + distress suites **18 passed**; admission/external
 metering regression **27 passed, 2 skipped** before the two additional data cases.
 New cases cover rollback, expiry, duplicates, revocation and pending-result crash.
 Ruff passes. HTTP/worker/client wiring follows; this is not yet an end-to-end Ask.
+
+## B3 — authenticated HTTP admission and recovery
+
+Added `/api/sol/jobs` and `/quad/v1/jobs`: POST stable request ID plus immutable
+Ask fields/exercise version; GET config, `by-request/{request_id}` and `{job_id}`.
+Both edges use the same verified R1 identity, original-grant ownership, coordinator
+and admission service. Job status carries the protected result only after atomic
+publication. Responses are no-store; POST is bounded before JSON parsing.
+Repeated same ID/input returns the existing operation; changed input conflicts.
+
+Explicit enablement requires enforced controls, stable deployment ID, coordinator
+URL and a separately protected Fernet key file. HTTP never initializes schema or
+fallbacks to synchronous paid execution. Existing synchronous expensive routes
+remain blocked without trusted context in enforced mode.
+
+Validation: signed HTTP admission, recovery, same-scope different-subject denial,
+forged/revoked identity, conflict and oversized body cases plus data/error suites
+**18 passed**. Ruff passes; workers/client still need wiring. No token/model/network
+used in tests. Retention/cleanup operator steps are documented in PRIVACY.

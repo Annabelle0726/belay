@@ -246,6 +246,9 @@ def build_router(
             raise HTTPException(422, f"PII rejected at boundary: {e}") from e
         return {"ok": True, "protocol": PROTOCOL_VERSION, "received": payload.get("type", "event")}
 
+    from ...controls.jobs_http import build_jobs_router
+
+    api.include_router(build_jobs_router("/jobs", pack))
     return api
 
 

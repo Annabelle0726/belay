@@ -24,6 +24,12 @@ class Settings:
     # Enforced execution requires trusted operation context; HTTP integration
     # remains gated on the identity/conversation prerequisites.
     controls_mode: str = field(default_factory=lambda: _env("CONTROLS_MODE", "development_bypass"))
+    controls_jobs_enabled: bool = field(
+        default_factory=lambda: _envbool("CONTROLS_JOBS_ENABLED", False)
+    )
+    controls_database_url: str = field(default_factory=lambda: _env("CONTROLS_DATABASE_URL", ""))
+    controls_deployment_id: str = field(default_factory=lambda: _env("CONTROLS_DEPLOYMENT_ID", ""))
+    controls_data_key_file: str = field(default_factory=lambda: _env("CONTROLS_DATA_KEY_FILE", ""))
     # Production is fail-closed; local/test must be explicitly selected and still
     # require signed credentials and an operator-controlled authorization file.
     belay_env: str = field(default_factory=lambda: _env("BELAY_ENV", "production"))
