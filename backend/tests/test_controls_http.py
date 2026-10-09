@@ -107,4 +107,3 @@ def test_embedded_quad_router_keeps_retry_headers_without_main_handler(monkeypat
     with authenticated_client(app) as client:
         response = client.post("/quad/v1/turn", json={})
     assert response.status_code == 503 and response.headers["Retry-After"] == "2"
-
