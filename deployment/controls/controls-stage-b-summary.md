@@ -41,3 +41,16 @@ or test-order-dependent import state. Frontend authentication and lifecycle
 fixtures were combined: **27 passed**. Identity/admission/execution coverage
 passed apart from those corrected HTTP fixtures; the corrected HTTP suite is
 **6 passed**. Ruff and mypy pass. Full combined regression follows the slice.
+
+## B1 — original-principal execution grant
+
+R3/main synchronization: `a621963`. Added an opaque issuer/audience/subject/scope
+reference to verified Identity and immutable exercise/version execution grants.
+Worker reauthorization reloads the same operator authorization configuration;
+no token or raw subject is stored in the grant. A different subject sharing the
+learner scope cannot keep the original task authorized. Key/config errors,
+revocation and assignment/deployment-version changes fail closed.
+
+Validation: five new signed-identity grant cases pass; existing identity and
+HTTP error suites pass together. Ruff lint/format pass. This supplies authority
+only: no HTTP queue or actual worker adapter yet.
