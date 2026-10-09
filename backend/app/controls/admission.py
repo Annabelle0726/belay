@@ -33,6 +33,7 @@ jobs = Table(
     Column("created", Float, nullable=False),
     Column("expires", Float, nullable=False),
     Column("lease", Float),
+    Column("deadline", Float),
     Column("fence", Integer, nullable=False),
     Column("last_poll", Float),
     Column("sequence", Integer, nullable=False),
@@ -89,6 +90,14 @@ class Admission:
                     .where(jobs.c.id == row["id"])
                     .values(state="failed", reason="queue_expired", payload_ref=None)
                 )
+        conn.execute(
+            jobs.update()
+            .where(
+                jobs.c.state.in_(["running", "cancel_requested"]),
+                (jobs.c.deadline <= now) | jobs.c.deadline.is_(None),
+            )
+            .values(state="unknown", reason="execution_deadline", payload_ref=None)
+        )
         conn.execute(
             jobs.update()
             .where(jobs.c.state.in_(["running", "cancel_requested"]), jobs.c.lease <= now)
@@ -163,6 +172,7 @@ class Admission:
                 created=now,
                 expires=now + policy.queue_wait_seconds,
                 lease=None,
+                deadline=None,
                 fence=0,
                 last_poll=None,
                 sequence=(conn.execute(select(func.max(jobs.c.sequence))).scalar() or 0) + 1,
@@ -211,7 +221,10 @@ class Admission:
                 # Funding is checked again before every external attempt. Dispatch
                 # does not promise that an entire multi-attempt turn will finish.
                 changes = dict(
-                    state="running", fence=job["fence"] + 1, lease=now + policy.lease_seconds
+                    state="running",
+                    fence=job["fence"] + 1,
+                    lease=now + min(policy.lease_seconds, policy.execution_seconds),
+                    deadline=now + policy.execution_seconds,
                 )
                 conn.execute(jobs.update().where(jobs.c.id == job["id"]).values(**changes))
                 seq = max(served.values(), default=0) + 1
@@ -266,7 +279,12 @@ class Admission:
             conn.execute(
                 jobs.update()
                 .where(jobs.c.id == job_id)
-                .values(lease=self.ledger.now(conn) + self.ledger.policy(conn).lease_seconds)
+                .values(
+                    lease=min(
+                        row["deadline"],
+                        self.ledger.now(conn) + self.ledger.policy(conn).lease_seconds,
+                    )
+                )
             )
 
     def _live(self, conn: Connection, job_id: str, fence: int) -> dict:
@@ -276,6 +294,8 @@ class Admission:
             or row["fence"] != fence
             or row["state"] not in {"running", "cancel_requested"}
             or row["lease"] <= self.ledger.now(conn)
+            or row["deadline"] is None
+            or row["deadline"] <= self.ledger.now(conn)
         ):
             raise ControlError("stale_worker", 409)
         return dict(row)
@@ -295,10 +315,30 @@ class Admission:
             raise ValueError("invalid failure code")
         with self.ledger.transaction() as conn:
             row = self._live(conn, job_id, fence)
+            if authorized and row["state"] != "cancel_requested" and not result_ref:
+                raise ControlError("invalid_result_ref", 502)
             state = "completed" if authorized else "failed"
             reason = None if authorized else failure_reason
             if row["state"] == "cancel_requested":
                 state, reason = "cancelled", None
+            if state != "completed":
+                # A failure/cancellation is not proof that an external request
+                # stopped. Missing usage after a received response is different:
+                # its slot is released and a usable result may still complete.
+                uncertain = conn.execute(
+                    select(slots.c.id).where(
+                        slots.c.operation == job_id, slots.c.state.in_(["active", "unknown"])
+                    )
+                ).first()
+                pending = conn.execute(
+                    select(attempts.c.id).where(
+                        attempts.c.operation == job_id,
+                        attempts.c.kind != "queue",
+                        attempts.c.state == "reserved",
+                    )
+                ).first()
+                if uncertain or pending:
+                    state, reason = "unknown", "execution_unknown"
             conn.execute(
                 jobs.update()
                 .where(jobs.c.id == job_id)

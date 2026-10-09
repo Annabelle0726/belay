@@ -6,6 +6,7 @@ from concurrent.futures import ProcessPoolExecutor
 
 import pytest
 from sqlalchemy import create_engine
+from sqlalchemy import inspect as inspect_db
 
 from app.controls.admission import Admission
 from app.controls.contracts import Amount, ControlError, Limits, Scope, Traffic
@@ -128,6 +129,57 @@ def test_running_cancel_and_revocation_never_publish(ledger):
     assert service.status(SCOPE, job2["id"])["result_ref"] is None
 
 
+@pytest.mark.parametrize("result", [None, ""])
+def test_completion_requires_result_reference(ledger, result):
+    service = Admission(ledger)
+    job = submit(service)
+    claim = service.claim()
+    with pytest.raises(ControlError, match="invalid_result_ref"):
+        service.finish(job["id"], claim["fence"], result, authorized=True)
+    assert service.status(SCOPE, job["id"])["state"] == "running"
+
+
+def test_heartbeats_and_policy_changes_cannot_extend_execution(ledger):
+    ledger.update_policy(policy(version="v2", execution_seconds=120))
+    service = Admission(ledger)
+    job = submit(service)
+    claim = service.claim()
+    for now in (150.0, 200.0):
+        ledger.clock = lambda now=now: now
+        service.heartbeat(job["id"], claim["fence"])
+    ledger.update_policy(policy(version="v3", execution_seconds=3600))
+    ledger.clock = lambda: 220.0
+    with pytest.raises(ControlError, match="stale_worker"):
+        service.heartbeat(job["id"], claim["fence"])
+    state = service.status(SCOPE, job["id"])
+    assert state["state"] == "unknown" and state["reason"] == "execution_deadline"
+
+
+def test_explicit_schema_upgrade_fences_legacy_active_jobs(ledger):
+    service = Admission(ledger)
+    job = submit(service)
+    service.claim()
+    with ledger.engine.begin() as conn:
+        conn.exec_driver_sql("ALTER TABLE control_jobs DROP COLUMN deadline")
+    ledger.upgrade_schema()
+    ledger.upgrade_schema()  # Operator replay is safe.
+    assert "deadline" in {c["name"] for c in inspect_db(ledger.engine).get_columns("control_jobs")}
+    state = service.status(SCOPE, job["id"])
+    assert state["state"] == "unknown"
+    assert service.claim() is None
+
+
+def test_cancellation_does_not_claim_uncertain_external_work_stopped(ledger):
+    service = Admission(ledger)
+    job = submit(service)
+    claim = service.claim()
+    slot = service.acquire_slot(SCOPE, job["id"], "model")
+    service.release_slot(slot, stopped=False)
+    service.cancel(SCOPE, job["id"])
+    service.finish(job["id"], claim["fence"], authorized=False)
+    assert service.status(SCOPE, job["id"])["state"] == "unknown"
+
+
 def _slot_race(url, number):
     engine = create_engine(url)
     try:
@@ -136,6 +188,31 @@ def _slot_race(url, number):
         return "accepted"
     except ControlError as exc:
         return exc.code
+    finally:
+        engine.dispose()
+
+
+def test_postgres_legacy_schema_upgrade_preserves_liability():
+    url = os.environ.get("CONTROL_TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("requires isolated CONTROL_TEST_DATABASE_URL PostgreSQL database")
+    engine = create_engine(url)
+    try:
+        metadata.drop_all(engine)
+        ledger = Ledger(engine, lambda: 100.0)
+        ledger.initialize(policy())
+        service = Admission(ledger)
+        job = submit(service)
+        service.claim()
+        ledger.reserve("legacy-attempt", job["id"], SCOPE, Amount(tokens=800), "model")
+        service.acquire_slot(SCOPE, job["id"], "model")
+        with ledger.transaction() as conn:
+            conn.exec_driver_sql("ALTER TABLE control_jobs DROP COLUMN deadline")
+        ledger.upgrade_schema()
+        ledger.upgrade_schema()
+        assert service.status(SCOPE, job["id"])["state"] == "unknown"
+        assert ledger.summary()["reserved"]["tokens"] == 800
+        assert service.claim() is None
     finally:
         engine.dispose()
 
