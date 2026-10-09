@@ -7,8 +7,10 @@ This document proposes work; it does not claim that controls are implemented.*
 
 Implementation progress is recorded in [controls-implementation.md](../../deployment/controls/controls-implementation.md),
 with operator instructions in [controls-operations.md](../../deployment/controls/controls-operations.md).
-The shared coordinator and execution hooks are implemented; production HTTP jobs
-and real Step 1/2 conversation integration remain pending on this main-based branch.
+The shared coordinator and Stage B authenticated unsaved Ask HTTP/worker/recovery
+slice are implemented locally and opt-in after complete R1 integration into local
+main. See [Stage B summaries](../../deployment/controls/controls-stage-b-summary.md).
+Saved-conversation integration remains Stage C; production rollout is not claimed.
 
 Belay should remain usable when many students ask for help together.
 One class must not occupy all available workers, adding servers must not

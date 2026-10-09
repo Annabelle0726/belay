@@ -175,7 +175,14 @@ def test_no_grade_write_route_exists():
     """The sidecar exposes exactly health/capabilities/turn/goals/reflection/overlay/
     events — none of which write a grade (the tutor never writes grades)."""
     api = build_router(ConsentRouter(InMemoryStore()), get_active_pack(), lambda: None)
-    paths = {(r.path, tuple(sorted(set(r.methods) - {"HEAD", "OPTIONS"}))) for r in api.routes}
+    from fastapi import FastAPI
+
+    app = FastAPI()
+    app.include_router(api)
+    paths = {
+        (path, tuple(sorted(method.upper() for method in methods)))
+        for path, methods in app.openapi()["paths"].items()
+    }
     assert paths == {
         ("/quad/v1/health", ("GET",)),
         ("/quad/v1/capabilities", ("GET",)),
@@ -184,6 +191,10 @@ def test_no_grade_write_route_exists():
         ("/quad/v1/reflection", ("POST",)),
         ("/quad/v1/overlay", ("POST",)),
         ("/quad/v1/events", ("POST",)),
+        ("/quad/v1/jobs", ("POST",)),
+        ("/quad/v1/jobs/config", ("GET",)),
+        ("/quad/v1/jobs/by-request/{request_id}", ("GET",)),
+        ("/quad/v1/jobs/{job_id}", ("GET",)),
     }
 
 

@@ -23,7 +23,7 @@ function client(store, fetchJob, options = {}) {
     },
   });
   for (const name of ["control-messages.js", "request-lifecycle.js", "ask-jobs.js"]) vm.runInContext(fs.readFileSync(path.join(__dirname, "..", name), "utf8"), context);
-  return {calls, jobs: context.belayAskJobs({storage:store, uuid:() => `logical_request_${String(++ids).padStart(5,"0")}`, wait:async () => {}, ...options})};
+  return {calls, context, jobs: context.belayAskJobs({storage:store, uuid:() => `logical_request_${String(++ids).padStart(5,"0")}`, wait:async () => {}, ...options})};
 }
 
 test("lost admission response reloads the same request with GET and never stores text/token", async () => {
@@ -103,4 +103,38 @@ test("changed original subject scopes recovery pointer without querying old job"
     {config:{...config,recovery_scope:"c".repeat(64)}});
   assert.equal(await other.jobs.recover("https://test","/jobs","echo-1"),null);
   assert.equal(other.calls.length,1);
+});
+
+
+test("stalled credential refresh is bounded and late credentials never send a POST", async () => {
+  const value = client(storage(), async () => {throw Error("must not send");}, {timeoutMs:5});
+  let resume;
+  value.context.window.BelayAuth.headers = () => new Promise((resolve) => {resume=resolve;});
+  await assert.rejects(value.jobs.ask("https://test","/jobs",body), {code:"request_timeout",uncertain:true});
+  resume({Authorization:"Bearer late"});
+  await new Promise((r) => setImmediate(r));
+  assert.equal(value.calls.length,0);
+});
+
+test("unrendered completed response stays recoverable and cannot create a fresh paid turn", async () => {
+  let posts=0;
+  const store=storage();
+  const value=client(store,async (url,opts) => {
+    if (opts.method === "POST") {posts++; return reply({id:completed.id,state:"queued"});}
+    return reply(completed);
+  });
+  await value.jobs.ask("https://test","/jobs",body); // Simulate a stale UI discarding the answer.
+  assert.equal(JSON.parse([...store.values.values()][0]).pending,true);
+  const rendered=await value.jobs.ask("https://test","/jobs",{...body,source:"different"});
+  assert.equal(posts,1);
+  value.jobs.acknowledge(rendered);
+  assert.equal(JSON.parse([...store.values.values()][0]).pending,false);
+});
+
+
+test("third-party browser storage getter failure cannot break initialization or send", async () => {
+  const value = client(undefined, async () => {throw Error("must not send");});
+  Object.defineProperty(value.context,"localStorage",{get:() => {throw Error("blocked third-party storage");}});
+  await assert.rejects(value.jobs.ask("https://test","/jobs",body),{code:"recovery_unavailable"});
+  assert.equal(value.calls.length,1);
 });

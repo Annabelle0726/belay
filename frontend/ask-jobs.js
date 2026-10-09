@@ -1,15 +1,26 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 // Stable logical request pointers only: never prompts, answers or credentials.
 // Unknown delivery is recovered with GET, never automatically with another POST.
-globalThis.belayAskJobs = function ({ storage = globalThis.localStorage,
+globalThis.belayAskJobs = function ({ storage,
   uuid = () => globalThis.crypto.randomUUID(), wait = (ms) => new Promise((r) => setTimeout(r, ms)),
   timeoutMs = 90000 } = {}) {
   const receipts = new WeakMap();
-  const error = (code, uncertain = false) => globalThis.belayRequestError(code, uncertain);
+  const error = (code, uncertain = false) => globalThis.belayRequestError(code, uncertain,
+    uncertain ? globalThis.belayControlMessage({code: ["request_timeout", "request_lost", "invalid_response"].includes(code) ? code : "execution_unknown"}) : undefined);
   async function request(base, path, options = {}, validate, remaining = timeoutMs) {
-    return globalThis.belayRequestJSON(base + path, {
-      ...options, headers: await window.BelayAuth.headers(base),
-    }, { validate, timeoutMs: Math.max(1, remaining) });
+    const end = Date.now() + Math.max(1, remaining);
+    let expired = false, timer;
+    const authorized = async () => {
+      const headers = await window.BelayAuth.headers(base);
+      if (expired || Date.now() >= end) throw error("request_timeout", true);
+      return globalThis.belayRequestJSON(base + path, { ...options, headers },
+        {validate, timeoutMs: Math.max(1, end - Date.now())});
+    };
+    const deadline = new Promise((resolve, reject) => {
+      timer = setTimeout(() => {expired = true; reject(error("request_timeout", true));}, Math.max(1, remaining));
+    });
+    try { return await Promise.race([authorized(), deadline]); }
+    finally { expired = true; clearTimeout(timer); }
   }
   async function prepare(base, prefix, exercise) {
     const config = await request(base, prefix + "/config", {}, (c) => c &&
@@ -22,7 +33,10 @@ globalThis.belayAskJobs = function ({ storage = globalThis.localStorage,
   }
   function read(key) {
     let raw;
-    try { raw = storage.getItem(key); }
+    try {
+      if (!storage) storage = globalThis.localStorage;
+      raw = storage.getItem(key);
+    }
     catch { throw error("recovery_unavailable"); }
     if (!raw) return null;
     try {

@@ -202,3 +202,15 @@ and serves a no-store token response only to custom-header same-origin requests.
 Its signing key and five-minute tokens stay in memory. The temporary public key
 and grants are deleted on exit. A plain static `http.server` supplies none of this
 bootstrap, which is why its pages report missing host authentication.
+
+## Queued unsaved Ask authority (CC-R3 Stage B)
+
+Verified Identity now carries `grant_ref`, an opaque issuer/audience/original-subject/
+scope reference. `execution_grant(identity)` snapshots the authorized assignment
+version. `recheck_grant(grant)` rereads the same operator configuration without a
+bearer token; another subject with the same learner scope is never substituted.
+Worker dispatch, each external attempt, result staging/publication and protected
+lookup use this live check. Malformed configuration and version/revocation changes
+fail closed. References are identifiers, not credentials or new login sessions.
+Only pseudonymous scope/version and opaque reference are retained; no raw login
+subject, JWT or token-refresh credential enters queued data/accounting.

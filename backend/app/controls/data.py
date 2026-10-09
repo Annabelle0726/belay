@@ -16,7 +16,7 @@ from sqlalchemy import Column, Float, Integer, String, Table, Text, select
 from sqlalchemy.engine import Connection
 
 from ..agent.context import _latest_student_message
-from ..agent.distress import extra_terms, has_distress_signal
+from ..agent.distress import extra_terms, frame_from_settings, has_distress_signal
 from ..auth import ExecutionGrant, Identity, execution_grant, recheck_grant
 from ..config import settings
 from ..integrations.quad.pii import PIIRejected, assert_no_pii
@@ -81,7 +81,12 @@ class ExecutionData:
         return grant
 
     def _put(self, conn: Connection, job_id: str, kind: str, body: dict, expires: float) -> str:
-        raw = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+        try:
+            raw = json.dumps(
+                body, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+            ).encode()
+        except (ValueError, TypeError):
+            raise ControlError("invalid_execution_data", 422) from None
         policy = self.ledger.policy(conn)
         if len(raw) > policy.payload_bytes:
             raise ControlError("payload_too_large", 413)
@@ -107,9 +112,16 @@ class ExecutionData:
             .first()
         )
         if row is None or row["expires"] <= self.ledger.now(conn):
-            raise ControlError("result_expired" if kind == "result" else "input_expired", 410)
+            raise ControlError(
+                "result_expired" if kind in {"result", "pending"} else "input_expired", 410
+            )
         try:
-            return dict(json.loads(self.cipher.decrypt(row["body"].encode())))
+            value = dict(json.loads(self.cipher.decrypt(row["body"].encode())))
+            if kind == "result" and value.pop("_support_result", False):
+                # Institution-configured support resources are rendered live, not
+                # persisted as learner content. No distressing utterance is retained.
+                value["message"] = frame_from_settings(settings)
+            return value
         except (InvalidToken, ValueError, TypeError):
             raise ControlError("execution_data_unavailable", 503) from None
 
@@ -170,12 +182,15 @@ class ExecutionData:
 
     def stage(self, job: dict, response: dict) -> str:
         value = SolTurnResponse.model_validate(response).model_dump()
-        require_storable(value)
         if not value["message"].strip():
             raise ControlError("invalid_result", 502)
         with self.ledger.transaction() as conn:
             self.admission._live(conn, job["id"], job["fence"])
             recheck_grant(self._grant(conn, job["id"]))
+            payload = self._get(conn, job["id"], job["payload_ref"], "input")
+            if payload.get("_support"):
+                value = {**value, "_support_result": True, "message": "Support response available."}
+            require_storable(value)
             return self._put(
                 conn,
                 job["id"],

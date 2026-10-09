@@ -1,9 +1,10 @@
 # Shared controls: development and operator guide
 
-Status: ledger, admission service, execution hooks and worker adapter are
-implemented. Authenticated HTTP jobs and real conversation integration are **not
-available on this main-based branch**. Do not enable a production class rollout
-on the strength of the coordinator tests alone. See `controls-implementation.md`.
+Status: Stage B unsaved Ask is implemented and opt-in: original-principal live
+reauthorization, owned temporary data, authenticated HTTP jobs, real worker adapter
+and browser recovery. See `controls-stage-b-summary.md` for offline acceptance.
+Saved-conversation integration remains Stage C. Tests do not enable a production
+class rollout; operator policy, identity hosting and retention remain prerequisites.
 
 ## Policy and storage
 
@@ -29,7 +30,7 @@ idempotent for identical policy and does not silently replace an existing policy
 Back up before schema changes; API workers never auto-upgrade table layouts.
 Existing coordinators from the pre-deadline implementation require the explicit
 `upgrade-schema` command before using this worker version. It adds a nullable
-`deadline` column without changing policy or accounting. Legacy active jobs have
+`deadline` column and the temporary execution-data tables without changing accounting. Legacy active jobs have
 no reliable deadline and become `unknown` on inspection/dispatch; investigate
 them rather than replaying them. Queued jobs receive a deadline when claimed.
 
@@ -88,16 +89,17 @@ A failed worker with an active/unknown external slot remains `unknown` with
 of the same operation returns that job and never automatically executes it again.
 An answer received without usage may complete with its budget hold still unknown;
 response uncertainty and financial uncertainty are separate. Completion requires
-a nonempty opaque result reference. Integration must additionally validate actual
-result ownership, content and expiry in its TTL store; that store is not present
-on this branch.
+a nonempty opaque result reference. The actual Ask adapter additionally validates
+owned, usable, unexpired output and atomically publishes it with completion in
+the same coordinator transaction.
 
 Content-free operation tombstones, attempts and reconciliation records are kept
 indefinitely in this development slice to preserve replay protection and audit.
 Production retention/archival and bounded rejection-log retention need an approved
 policy and follow-up implementation before rollout. The ledger never stores
-prompts, code, response text or bearer tokens. Payload/result references require
-a separately authorized TTL store; this branch does not create that store.
+prompts, code, response text or bearer tokens. Separate encrypted `control_data`
+rows temporarily hold operational input/results under the rules below; they are
+never research/export rows.
 
 ## Reproducible coordinator demonstration
 
@@ -114,8 +116,10 @@ With `CONTROL_TEST_DATABASE_URL` set, two spawned processes with independent
 connections verify a combined cap of 10 model slots and a 1,000-token budget
 against competing 800-token requests. Deterministic tests show A0/B0/A1/B1 class
 rotation while A has 50 queued jobs and B has 2. Without PostgreSQL configured,
-the two process tests explicitly skip. These are coordinator workers, not two
-fully authenticated API servers. CI runs them in its ephemeral PostgreSQL job.
+the process tests explicitly skip. `tests/test_jobs_postgres.py` additionally
+uses two independently authenticated HTTP processes and two real worker adapters
+with an SDK stub: one stable logical request produces three accounted model
+attempts and one published result. No paid endpoint is contacted.
 
 ## Integration checklist for Step 1/2
 
@@ -125,19 +129,22 @@ without persisting bearer tokens. Queue lifetime must be separate from an active
 conversation turn: acquire the conversation revision/lease at dispatch. Check
 deletion, expiry and ownership at dispatch and publication, and make conversation
 publication atomic with its revision rules. Use an owned expiring input/result
-store with cancellation/deletion cleanup. The worker's adapter is intentionally
-an interface until these contracts are available on the base.
+store with deletion/revision publication rules. Stage B already supplies the
+unsaved Ask adapter; Stage C must add these saved-conversation rules rather than
+copying or inventing a second conversation system.
 
 `CONTROLS_MODE=development_bypass` is the existing local workflow, explicitly
 shown by both health routes. `enforced` blocks expensive HTTP requests without
 trusted context; it is not an authentication replacement. A trusted operation
 context always enforces accounting, even in a development test. Read-only
-curriculum remains available when enforced execution is unavailable.
+curriculum remains available to authenticated authorized callers when enforced
+execution is unavailable.
 
 ## Incident recovery procedure
 
 Assign an operator and an opaque incident reference. Do not ask the learner to
-refresh/resubmit an uncertain Ask. A browser timeout or broken connection is not
+resubmit an uncertain Ask. Refresh/Check request status now performs protected GET
+recovery of the same operation, without posting another billable request. A browser timeout or broken connection is not
 evidence of provider termination, even if its local HTTP connection was aborted.
 
 1. Inspect `summary` and `unresolved` using the selected coordinator credentials.
@@ -178,3 +185,60 @@ survives route exception handling and is exposed to cross-origin clients. Generi
 tutor exceptions return `execution_unknown`, without raw provider diagnostics.
 This improves error wiring; it does not install authenticated admission or turn
 the current synchronous endpoint into a recoverable job API.
+
+
+## Stage B opt-in and operational retention
+
+These are operator instructions, not actions performed by this implementation.
+Before enabling, initialize a fresh isolated coordinator with an approved policy,
+or run `upgrade-schema` for an existing coordinator. Use PostgreSQL across hosts.
+Configure the same stable `CONTROLS_DEPLOYMENT_ID`, `CONTROLS_DATABASE_URL` and
+protected `CONTROLS_DATA_KEY_FILE` on all API/worker processes. The key file holds
+a Fernet key generated with `cryptography.fernet.Fernet.generate_key()`, readable
+only by the service account. Do not commit/log keys or tokens. Keep the key stable
+through active/data retention periods; rotation needs coordinated drain/migration.
+Set `CONTROLS_MODE=enforced` and `CONTROLS_JOBS_ENABLED=true` only after setup.
+No schema initialization or provider worker is started by an HTTP request.
+
+Supervise `python -m app.controls.jobs_worker`; `--once` claims at most one job.
+The worker uses the same operator authorization file as HTTP, re-read before
+execution, external attempts and publication. It never stores bearer tokens or
+accepts another principal as a substitute for the original subject. The actual
+provider/runner attempts retain existing reserve/settle/unknown behavior.
+
+Input expires at admission + queue_wait_seconds + execution_seconds, independently
+of a later policy change. Results expire at staging + result_seconds (local demo
+300 seconds, range 1–3600). Pending output must still be valid at atomic publication.
+Terminal input/pending content is deleted on cleanup; unknown accounting is retained.
+Schedule `python -m app.controls.cli cleanup-content` at least every minute even
+when no worker or HTTP traffic is present. Expired content is inaccessible before
+physical cleanup. Exclude `control_data` from long-lived snapshots/research exports;
+content-free bindings/jobs remain dedup/authorization tombstones. Production
+retention/archival for tombstones and rejection logs remains separate follow-up.
+
+Both HTTP edges use the same normalized unsaved Ask schema:
+
+- POST `/api/sol/jobs` or `/quad/v1/jobs`: `request_id` (16–128 opaque-safe chars),
+  `exercise_id`, authorized `exercise_version`, `participant_id` and Sol turn fields.
+  Client claims never create authority; server derives scope from R1 identity.
+- GET `.../config`: authorized assignment versions, recovery scope, poll interval,
+  retention and disclosure. GET `.../by-request/{request_id}` or `.../{job_id}`:
+  original-principal protected state/result. Poll no faster than poll_seconds;
+  respect Retry-After. Results are no-store and become `result_expired` after TTL.
+- Same ID/input returns the existing task; changed input conflicts. Unknown jobs
+  are never auto-claimed/retried. Clear terminal failures only after inspection;
+  financial reconciliation and proof of termination remain separate commands.
+
+The widget/dev Ask/client use this contract and preserve only a scoped opaque
+pointer in browser storage. An unrendered/unknown result keeps that pointer pending.
+No credentials, prompts or answers enter browser recovery storage. A fresh deliberate
+Ask is possible after a displayed completed result or known terminal outcome. Clearing
+storage loses the pointer and does not stop backend work. No learner cancel UI exists.
+`/api/run` remains separate and fails closed without trusted operation context in
+enforced mode; Stage B is the unsaved Ask slice, not queued runner integration.
+
+Operational storage rejects PII even in source (stricter than source execution).
+An enabled distress short circuit retains only content-free support routing; its
+institution-configured response is rendered live at result lookup. No distressing
+utterance, contact configuration, category or token is retained. The core detector,
+support routing policy, research consent and R2 saved-dialogue strategy are unchanged.

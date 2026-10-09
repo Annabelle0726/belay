@@ -1,5 +1,8 @@
 # CC-R3 follow-up implementation summaries
 
+These are Stage A records. Subsequent user-authorized local R1 integration and
+Stage B implementation are recorded in [controls-stage-b-summary.md](controls-stage-b-summary.md).
+
 Baseline: `a48b7b1`, `feature/shared-traffic-budget-controls`, original checkout.
 Product decision: no learner-initiated Ask cancellation control. Existing backend
 cancellation, fencing and evidence-backed recovery remain in place. No deployment,

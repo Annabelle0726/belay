@@ -223,3 +223,16 @@ The queue/worker services are tested behind synthetic adapters, not advertised a
 production HTTP job APIs. Auth and conversation integration are prerequisite work.
 See [implementation status](deployment/controls/controls-implementation.md) and
 [operator guide](deployment/controls/controls-operations.md) for guarantees and limitations.
+
+### Controlled unsaved Ask (CC-R3 Stage B)
+
+Both HTTP edges share `controls.jobs_http`, the existing Admission/Ledger and
+`controls.data`. Verified R1 identity yields an original-subject grant and stable
+scope. Admission and encrypted temporary input commit together. An explicit
+`controls.jobs_worker.AskAdapter` runs the existing tutor loop under the fenced
+controls runtime, with live grant/TTL checks before external attempts and publication.
+Owned result publication and completed state commit in one coordinator transaction.
+The browser persists only an opaque scoped request pointer, recovers with GET and
+acknowledges a displayed result; unknown work is never automatically rerun. This
+adds no R2 conversation repository or learner cancellation UI. See operator/
+retention instructions in `deployment/controls/controls-operations.md`.

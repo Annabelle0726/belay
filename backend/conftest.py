@@ -9,8 +9,20 @@ Provides:
 """
 
 import json
+import os
+import tempfile
 
 import pytest
+
+# Establish isolation BEFORE importing app.config/store (which construct the
+# default engine at import time). Explicit test PostgreSQL URLs remain supported.
+# Never let a targeted pytest invocation drop the application's ./qimvp.db tables.
+_isolated_database = None
+if not os.environ.get("DATABASE_URL"):
+    _isolated_database = tempfile.TemporaryDirectory(prefix="belay-pytest-")
+    os.environ["DATABASE_URL"] = (
+        "sqlite:///" + _isolated_database.name.replace("\\", "/") + "/test.sqlite3"
+    )
 
 from app.core.registry import get_active_pack
 from app.store import Store
@@ -37,6 +49,8 @@ def setup_test_db():
     yield
 
     db_module.engine.dispose()
+    if _isolated_database is not None:
+        _isolated_database.cleanup()
 
 
 @pytest.fixture(autouse=True)
@@ -218,6 +232,7 @@ def _http_behavior_credentials(request, monkeypatch, tmp_path):
         "test_distress",
         "test_deploy",
         "test_controls_http",
+        "test_controls_worker",
     }:
         return
     from tests.http_auth import configure

@@ -85,3 +85,41 @@ def test_unconfigured_jobs_fail_closed(monkeypatch):
     monkeypatch.setattr(settings, "controls_mode", "development_bypass")
     with pytest.raises(ControlError, match="invalid_controls_mode"):
         jobs_http.execution_store()
+
+
+def test_configured_http_worker(grant_boundary, ledger, monkeypatch, tmp_path):  # noqa: F811
+    from app.controls.jobs_worker import AskAdapter
+    from app.controls.worker import run_one
+    from app.store import ConsentRouter, InMemoryStore
+
+    key_file = tmp_path / "operational.key"
+    key_file.write_bytes(Fernet.generate_key())
+    for name, value in dict(
+        controls_jobs_enabled=True,
+        controls_mode="enforced",
+        controls_database_url=str(ledger.engine.url),
+        controls_deployment_id="test",
+        controls_data_key_file=str(key_file),
+    ).items():
+        monkeypatch.setattr(settings, name, value)
+    monkeypatch.setenv("TUTOR_PACK", "_skeleton")
+    app = FastAPI()
+    app.include_router(jobs_http.build_jobs_router("/api/sol/jobs", SkeletonPack()))
+    client = TestClient(app, headers={"Authorization": "Bearer " + token("original")})
+    store = jobs_http.execution_store()
+    try:
+        admitted = client.post("/api/sol/jobs", json=BODY)
+        assert admitted.status_code == 202
+        adapter = AskAdapter(
+            store,
+            ConsentRouter(InMemoryStore()),
+            SkeletonPack(),
+            lambda: pytest.fail("control must not construct a provider"),
+        )
+        assert run_one(store.admission, adapter)
+        answer = client.get("/api/sol/jobs/" + admitted.json()["id"])
+        assert answer.status_code == 200 and answer.json()["state"] == "completed"
+        assert answer.json()["result"]["message"].strip()
+    finally:
+        store.ledger.engine.dispose()
+        jobs_http._configured_store.cache_clear()

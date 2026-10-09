@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Fenced worker seam. Auth/conversation adapters must be supplied by integration.
+"""Fenced worker seam; jobs_worker supplies the real unsaved Ask adapter.
+
+Saved-conversation revision/deletion adapters remain Stage C.
 
 No raw credential is stored. check() must consult current membership, assignment
 version, conversation deletion/revision and input TTL, rather than replaying an

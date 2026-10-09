@@ -191,3 +191,48 @@ def test_queue_expiry_is_known_failure_not_execution(worker):
     result = client.get("/api/sol/jobs/" + job_id).json()
     assert result["state"] == "failed" and result["reason"] == "queue_expired"
     assert calls == []
+
+
+@pytest.mark.parametrize("during_call", [False, True])
+def test_process_loss_before_or_during_send_preserves_unknown_without_replay(
+    worker, monkeypatch, during_call
+):
+    client, store, _, _, adapter, _, _ = worker
+    job_id = submit(client)
+
+    class Crash(BaseException):
+        pass
+
+    def crash(*args, **kwargs):
+        raise Crash()
+
+    if during_call:
+        monkeypatch.setattr(adapter.llm.factory()._client.chat.completions, "create", crash)
+    else:
+        monkeypatch.setattr(adapter, "execute", crash)
+    with pytest.raises(Crash):
+        run_one(store.admission, adapter)
+    store.ledger.clock = lambda: 161.0
+    assert client.get("/api/sol/jobs/" + job_id).json()["state"] == "unknown"
+    assert not run_one(store.admission, adapter)
+    held = store.ledger.summary()["reserved"]["tokens"]
+    assert (held > 0) == during_call
+
+
+def test_configured_support_resources_render_without_persisting_contacts(worker, monkeypatch):
+    from app.config import settings
+    from app.controls.data import data
+
+    client, store, _, _, adapter, _, calls = worker
+    monkeypatch.setattr(settings, "distress_routing_enabled", True)
+    monkeypatch.setattr(settings, "distress_support_message", "Contact support@example.invalid")
+    monkeypatch.setattr(settings, "distress_escalation_target", "your course support team")
+    job_id = submit(client, recent=[{"who": "student", "text": "I want to kill myself"}])
+    assert run_one(store.admission, adapter)
+    result = status(client, store, job_id)
+    assert result["state"] == "completed" and calls == []
+    assert "support@example.invalid" in result["result"]["message"]
+    with store.ledger.transaction() as conn:
+        for row in conn.execute(select(data)).mappings():
+            content = store.cipher.decrypt(row["body"].encode()).decode()
+            assert "support@example.invalid" not in content and "kill myself" not in content

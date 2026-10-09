@@ -150,3 +150,37 @@ def test_operational_storage_rejects_pii_and_never_keeps_distress_verbatim(
     assert claimed["id"] == job["id"]
     body = store.load(claimed)[1]
     assert body["_support"] is True and raw not in json.dumps(body)
+
+
+def test_pending_result_expiry_cannot_be_published(execution_data):
+    from conftest import controls_policy
+
+    store, identity, _, _ = execution_data
+    store.ledger.update_policy(controls_policy(version="short-results", result_seconds=1))
+    store.submit(identity, "stable", {}, "api")
+    claimed = store.admission.claim()
+    ref = store.stage(claimed, ANSWER)
+    store.ledger.clock = lambda: 102.0
+    with pytest.raises(ControlError, match="result_expired"):
+        store.publish(claimed, ref)
+
+
+def test_input_ttl_independent_of_later_extended_policy(execution_data):
+    from conftest import controls_policy
+
+    store, identity, _, _ = execution_data
+    store.submit(identity, "stable", {}, "api")
+    store.ledger.update_policy(controls_policy(version="long-execution", execution_seconds=1000))
+    claimed = store.admission.claim()
+    store.ledger.clock = lambda: 521.0
+    with pytest.raises(ControlError, match="input_expired"):
+        store.load(claimed)
+
+
+def test_nonfinite_result_is_never_completed(execution_data):
+    store, identity, _, _ = execution_data
+    store.submit(identity, "stable", {}, "api")
+    claimed = store.admission.claim()
+    with pytest.raises(ControlError, match="invalid_execution_data"):
+        store.stage(claimed, {**ANSWER, "confidence": float("nan")})
+    assert store.status(identity, claimed["id"])["state"] == "running"
