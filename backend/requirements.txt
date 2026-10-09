@@ -13,3 +13,6 @@ openai>=1.40
 
 # Domain-pack dependencies (the data-science pack) live in requirements-packs.txt:
 #       pip install -r requirements-packs.txt
+
+# Offline signature verification; keys are pinned by the operator, never fetched from tokens.
+PyJWT[crypto]>=2.10,<3

@@ -73,8 +73,24 @@ class ConsentRouter:
             from .models import Participant
 
             with SessionLocal() as s:
-                row = Participant(id=pid, anon_code=anon_code, consent=consent)
-                s.add(row)
+                # Atomic upsert: repeated/concurrent sidecar calls must not create
+                # duplicate participants. Both supported database dialects use it.
+                from sqlalchemy.dialects.postgresql import Insert as PostgresInsert
+                from sqlalchemy.dialects.postgresql import insert as postgres_insert
+                from sqlalchemy.dialects.sqlite import Insert as SQLiteInsert
+                from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+                stmt: PostgresInsert | SQLiteInsert
+                if s.bind is not None and s.bind.dialect.name == "postgresql":
+                    stmt = postgres_insert(Participant)
+                else:
+                    stmt = sqlite_insert(Participant)
+                stmt = stmt.values(id=pid, anon_code=anon_code, consent=consent)
+                s.execute(
+                    stmt.on_conflict_do_update(
+                        index_elements=[Participant.id], set_={"consent": consent}
+                    )
+                )
                 s.commit()
         self._consent_cache[pid] = consent
 
@@ -84,12 +100,12 @@ class ConsentRouter:
         """Return the recorded consent flag.
 
         Check order:
-          1. In-process cache (populated by register_participant or previous
-             lookup for this pid in this process lifetime).
-          2. Durable SqlStore — handles cross-session / cross-worker lookups.
+          1. For memory stores only, the in-process registration cache.
+          2. Durable SqlStore is read each time, so another worker's withdrawal
+             is observed by the next request (no stale SQL consent cache).
           3. Default False (fail-safe: never persist before consent).
         """
-        if pid in self._consent_cache:
+        if not isinstance(self._durable, SqlStore) and pid in self._consent_cache:
             return self._consent_cache[pid]
         if isinstance(self._durable, SqlStore):
             try:

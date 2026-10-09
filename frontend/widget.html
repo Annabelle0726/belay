@@ -130,6 +130,7 @@
   </div>
 </div>
 
+<script src="auth-client.js"></script>
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
@@ -152,7 +153,7 @@ function overlayFromKnob() {
 }
 async function post(path, body) {
   const r = await fetch(baseURL() + path, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: await window.BelayAuth.headers(baseURL()),
     body: JSON.stringify(body),
   });
   const data = await r.json().catch(() => ({}));
