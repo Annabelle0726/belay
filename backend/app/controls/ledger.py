@@ -14,7 +14,7 @@ import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 
-from sqlalchemy import JSON, Column, Float, Integer, MetaData, String, Table, select, text
+from sqlalchemy import JSON, Column, Float, Integer, MetaData, String, Table, inspect, select, text
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -77,8 +77,20 @@ class Ledger:
             existing = conn.execute(select(configuration.c.policy)).scalar_one_or_none()
             if existing is None:
                 conn.execute(configuration.insert().values(id=1, policy=policy.model_dump()))
-            elif existing != policy.model_dump():
+            elif Policy.model_validate(existing) != policy:
                 raise ValueError("policy already installed; use explicit policy update")
+
+    def upgrade_schema(self) -> None:
+        """Explicit, additive operator migration; never run at HTTP startup.
+
+        Legacy active jobs lack a trustworthy execution start/deadline. Leave
+        their deadline null so expiration fences them as unknown, without
+        releasing liability or making them eligible for automatic replay.
+        """
+        with self.transaction() as conn:
+            columns = {column["name"] for column in inspect(conn).get_columns("control_jobs")}
+            if "deadline" not in columns:
+                conn.exec_driver_sql("ALTER TABLE control_jobs ADD COLUMN deadline FLOAT")
 
     def update_policy(self, policy: Policy) -> None:
         with self.transaction() as conn:

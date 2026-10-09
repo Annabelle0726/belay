@@ -26,8 +26,12 @@ is the production coordinator; SQLite supports local development, not multi-host
 proof. Current storage schema is additive `control_*` tables, initialized by the
 operator command below. It does not alter learner/research tables. `init` is
 idempotent for identical policy and does not silently replace an existing policy.
-Back up before future schema changes; this version does not auto-upgrade old
-experimental table layouts.
+Back up before schema changes; API workers never auto-upgrade table layouts.
+Existing coordinators from the pre-deadline implementation require the explicit
+`upgrade-schema` command before using this worker version. It adds a nullable
+`deadline` column without changing policy or accounting. Legacy active jobs have
+no reliable deadline and become `unknown` on inspection/dispatch; investigate
+them rather than replaying them. Queued jobs receive a deadline when claimed.
 
 ## Operator commands
 
@@ -37,7 +41,8 @@ there is no fallback to the learner database or an in-memory budget. Example
 commands (no credentials printed):
 
 ```text
-python -m app.controls.cli init --policy ../docs/controls-policy.example.json
+python -m app.controls.cli init --policy ../deployment/controls/controls-policy.example.json
+python -m app.controls.cli upgrade-schema
 python -m app.controls.cli summary
 python -m app.controls.cli unresolved
 python -m app.controls.cli update-policy --policy approved-policy.json
@@ -66,6 +71,24 @@ failed; it does not refund budget. Acknowledging an overrun preserves the actual
 usage and overrun record. Normal budget limits still apply. Replaying a settled
 attempt with different usage is refused. No command silently requeues uncertain
 provider work; exactly-once external execution is not claimed.
+
+## Execution limits and uncertain outcomes
+
+`execution_seconds` bounds a job from dispatch, independently of queue waiting
+and the renewable heartbeat lease. The deadline is snapshotted at claim; a policy
+update or heartbeat cannot extend it. At expiry the job becomes `unknown`, its
+worker cannot publish or start another external attempt, and liability remains.
+This fences work; it does **not** kill a provider request already in progress.
+Use provider/runner termination evidence before releasing a concurrency slot.
+
+A failed worker with an active/unknown external slot remains `unknown` with
+`execution_unknown`, including during backend cancellation. Repeated submission
+of the same operation returns that job and never automatically executes it again.
+An answer received without usage may complete with its budget hold still unknown;
+response uncertainty and financial uncertainty are separate. Completion requires
+a nonempty opaque result reference. Integration must additionally validate actual
+result ownership, content and expiry in its TTL store; that store is not present
+on this branch.
 
 Content-free operation tombstones, attempts and reconciliation records are kept
 indefinitely in this development slice to preserve replay protection and audit.

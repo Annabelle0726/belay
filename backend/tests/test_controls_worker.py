@@ -90,6 +90,79 @@ def test_success_and_completed_replay(ledger):
     assert adapter.executed == 1
 
 
+def test_timeout_retains_uncertainty_and_replay_never_calls_again(ledger):
+    ledger.update_policy(policy(version="v2", deployment=Limits(tokens=100000)))
+    service, job = queue(ledger)
+
+    class Timeout(Adapter):
+        def execute(self, job):
+            self.executed += 1
+
+            def call():
+                raise TimeoutError("response lost")
+
+            return model_call(call, "test", 10, lambda result: (1, 1))
+
+    adapter = Timeout()
+    run_one(service, adapter)
+    state = service.status(SCOPE, job["id"])
+    assert state["state"] == "unknown" and state["reason"] == "execution_unknown"
+    assert ledger.summary()["reserved"]["tokens"] == 1038
+    assert service.submit(SCOPE, "op", "a" * 64, "b" * 32, 10, Amount()) == state
+    assert not run_one(service, adapter)
+    assert adapter.executed == 1
+
+
+def test_received_result_without_usage_can_complete_but_keeps_hold(ledger):
+    ledger.update_policy(policy(version="v2", deployment=Limits(tokens=100000)))
+    service, job = queue(ledger)
+
+    class MissingUsage(Adapter):
+        def execute(self, job):
+            return model_call(lambda: "c" * 32, "test", 10, lambda result: (None, None))
+
+    run_one(service, MissingUsage())
+    assert service.status(SCOPE, job["id"])["state"] == "completed"
+    assert ledger.summary()["reserved"]["tokens"] == 1038
+
+
+def test_invalid_adapter_result_never_completes(ledger):
+    service, job = queue(ledger)
+
+    class Empty(Adapter):
+        def execute(self, job):
+            return ""
+
+    run_one(service, Empty())
+    state = service.status(SCOPE, job["id"])
+    assert state["state"] == "failed" and state["reason"] == "invalid_result_ref"
+
+
+def test_late_result_cannot_publish_or_start_next_call(ledger):
+    ledger.update_policy(
+        policy(version="v2", execution_seconds=10, deployment=Limits(tokens=100000))
+    )
+    service, job = queue(ledger)
+    calls = []
+
+    class Late(Adapter):
+        def execute(self, job):
+            def call():
+                calls.append(1)
+                ledger.clock = lambda: 111.0
+                return "c" * 32
+
+            model_call(call, "test", 10, lambda result: (1, 1))
+            return model_call(call, "test", 10, lambda result: (1, 1))
+
+    run_one(service, Late())
+    state = service.status(SCOPE, job["id"])
+    assert state["state"] == "unknown" and state["reason"] == "execution_deadline"
+    assert state["result_ref"] is None and calls == [1]
+    # A known completed attempt is still settled, even if publication was fenced.
+    assert ledger.summary()["consumed"]["tokens"] == 2
+
+
 def test_coordinator_outage_never_falls_back(ledger):
     from app.controls.ledger import metadata
 

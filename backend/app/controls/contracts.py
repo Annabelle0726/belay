@@ -83,6 +83,7 @@ class Policy(BaseModel):
     payload_bytes: int = Field(default=65536, ge=1, le=1048576)
     queue_wait_seconds: int = Field(default=120, ge=1, le=3600)
     lease_seconds: int = Field(default=60, ge=1, le=3600)
+    execution_seconds: int = Field(default=300, ge=1, le=3600)
     poll_seconds: int = Field(default=2, ge=1, le=60)
 
     def limits(self) -> tuple[Limits, ...]:

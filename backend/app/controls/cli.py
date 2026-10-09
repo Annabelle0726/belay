@@ -21,6 +21,7 @@ def main(argv: list[str] | None = None) -> int:
         "command",
         choices=[
             "init",
+            "upgrade-schema",
             "update-policy",
             "summary",
             "unresolved",
@@ -43,7 +44,10 @@ def main(argv: list[str] | None = None) -> int:
     ledger = Ledger(engine)
     output: dict
     try:
-        if args.command in {"init", "update-policy"}:
+        if args.command == "upgrade-schema":
+            ledger.upgrade_schema()
+            output = {"schema": "execution_deadline"}
+        elif args.command in {"init", "update-policy"}:
             if not args.policy:
                 parser.error("--policy is required")
             policy = Policy.model_validate_json(args.policy.read_text(encoding="utf-8"))
