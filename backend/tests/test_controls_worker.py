@@ -174,8 +174,11 @@ def test_coordinator_outage_never_falls_back(ledger):
 @pytest.mark.parametrize(
     "path,payload",
     [
-        ("/api/run", {"participant_id": "p", "exercise_id": "ds-foundations", "source": "pass"}),
-        ("/api/sol/turn", {"participant_id": "p", "exercise_id": "ds-foundations"}),
+        (
+            "/api/run",
+            {"participant_id": "gh:12345", "exercise_id": "ds-foundations", "source": "pass"},
+        ),
+        ("/api/sol/turn", {"participant_id": "gh:12345", "exercise_id": "ds-foundations"}),
         ("/quad/v1/turn", {"pseudo_id": "gh:12345", "exercise_id": "ds-foundations"}),
     ],
 )
@@ -184,9 +187,15 @@ def test_http_enforcement_cannot_trust_body_identity(monkeypatch, path, payload)
 
     from app.config import settings
     from app.main import app
+    from tests.http_auth import authenticated_client
 
     monkeypatch.setattr(settings, "controls_mode", "enforced")
-    with TestClient(app) as client:
+    with TestClient(app) as anonymous:
+        assert anonymous.post(path, json=payload).status_code == 401
+        assert anonymous.get("/api/curriculum").status_code == 401
+    with authenticated_client(app) as client:
+        forged = {**payload, "learner_id": "gh:999"}
+        assert client.post(path, json=forged).status_code == 404
         result = client.post(path, json=payload)
         assert result.status_code == 503
         assert result.json()["detail"]["code"] == "verified_execution_required"

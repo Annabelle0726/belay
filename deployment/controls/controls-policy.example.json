@@ -17,5 +17,6 @@
   "queue_wait_seconds": 120,
   "lease_seconds": 60,
   "execution_seconds": 300,
+  "result_seconds": 300,
   "poll_seconds": 2
 }

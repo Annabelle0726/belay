@@ -96,8 +96,8 @@ remain blocked without trusted context in enforced mode.
 
 Validation: signed HTTP admission, recovery, same-scope different-subject denial,
 forged/revoked identity, conflict and oversized body cases plus data/error suites
-**18 passed**. Ruff passes; workers/client still need wiring. No token/model/network
-used in tests. Retention/cleanup operator steps are documented in PRIVACY.
+**18 passed**. Ruff passes; workers/client still need wiring. Only synthetic signed tokens and offline models were
+used; no live credential or provider endpoint was contacted. Retention/cleanup operator steps are documented in PRIVACY.
 
 ## B4 — real worker adapter and failure/recovery proof
 
@@ -140,3 +140,65 @@ Validation: **35 offline Node tests passed**, including both actual page reloads
 old-response fencing, pointer-before-send, credential/content exclusion, storage
 failure, same-scope different-subject recovery key, expired results and no unknown
 automatic resubmission. Combined backend/PostgreSQL acceptance follows.
+
+## B6 — combined acceptance and final boundary checks
+
+Commits through B5: `933b53c` grant, `ddc6fee` temporary data, `2269884` HTTP,
+`e3ce072` real worker, `fe70043` browser recovery. The final boundary pass adds
+credential-refresh deadlines (late credentials cannot send), safe third-party
+storage failure, pending-result/input expiry and nonfinite-result rejection.
+Configured support responses now retain only a content-free receipt and render
+institution resources live, preserving core routing without storing contact
+configuration or distressing utterances. Added a real configured HTTP/worker test
+without overriding the coordinator resolver.
+
+Full regression before the final test-isolation correction: isolated SQLite
+**648 passed, 11 skipped**, PostgreSQL **652 passed, 7 skipped**; Node **38 passed**.
+Ruff lint/format and full mypy **124 source files** passed. An additional signed
+PostgreSQL acceptance test was then added: two distinct API processes/classes,
+a blocked model stub and competing workers prove one combined active-job slot,
+class rotation and class-local FIFO. Both PostgreSQL end-to-end process tests
+passed together. Older coordinator process tests also pass in the full suite.
+
+### Test database incident and correction
+
+Some earlier targeted pytest commands omitted DATABASE_URL. The repository's
+existing autouse fixture drops/recreates learner tables on the configured engine,
+whose default is ./qimvp.db. These runs touched the ignored root/backend default
+SQLite files; their prior contents were not backed up, so they cannot be certified
+unchanged or restored from this task's deployment backup. No claim of preserving
+those default files is made. The running deployment/local data/config were separately
+preserved (including a consistent live database backup) and were not selected as
+test targets.
+
+Corrected conftest to allocate a temporary SQLite URL before any app config/store
+import whenever no explicit DATABASE_URL is supplied. Explicit isolated PostgreSQL
+remains supported. The final validation below verifies the default invocation
+leaves both application-default files unchanged.
+
+
+Final validation after test isolation correction:
+
+- SQLite **648 passed, 12 skipped**, using pytest's new automatically isolated
+  default (no DATABASE_URL supplied); PostgreSQL **653 passed, 7 skipped**.
+- The five PostgreSQL-only tests skip on SQLite; seven common skips are the
+  opt-in live-model benchmark and missing sibling verifier-contract cases.
+- Frontend **38 passed**; Ruff lint/format and full mypy **124 files** passed.
+- Both signed HTTP/process acceptance tests pass: deduplication across API/worker
+  processes, plus competing classes sharing one active-job cap with rotation/FIFO.
+- Default SQLite file hashes stayed unchanged during the final two full suites.
+  Eight comparable preserved deployment files match their initial hashes; the
+  consistent live SQLite backup remains available. The earlier default-file incident
+  described above is not undone by this later isolation check.
+
+Stage B's first unsaved Ask slice is implemented locally. No remote push/merge,
+branch deletion, paid provider, deployment, semester-rule change or R2 save-policy
+change occurred. The learner cancel UI remains absent; backend cancellation and
+operator reconciliation remain. Current local main contains complete R1 at
+`e8725ec`; R3 synchronizes it at `a621963` and contains the Stage B commits.
+
+Remaining scope: operator-approved production identity/retention/limits/pricing,
+key/coordinator configuration, scheduled physical cleanup and supervised workers
+before enabling a real service. Saved-conversation revision/deletion/publication
+integration belongs to Stage C; runner HTTP job integration and production load
+acceptance are not claimed by the unsaved Ask slice. See controls-operations.md.

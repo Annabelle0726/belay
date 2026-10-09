@@ -1,5 +1,9 @@
 # CC-R3 implementation record
 
+Historical first implementation rounds follow. For current Stage B unsaved Ask,
+local R1 integration and combined acceptance, see [controls-stage-b-summary.md](controls-stage-b-summary.md)
+and [controls-operations.md](controls-operations.md).
+
 ## 1. Inventory and contracts — 2026-10-08
 
 Base: `83bd1a9`, with planning commit `ba55f3f` in the current history. Fetch of origin succeeded;

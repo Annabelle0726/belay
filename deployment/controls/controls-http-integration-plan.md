@@ -1,17 +1,19 @@
 # Stage B readiness: unsaved Ask through shared controls
 
 Reviewed 2026-10-09 after Stage A commits `3eecbb3`, `9729f42`, `d02bdde`.
-This is an integration plan, **not an implemented HTTP job API**. The first
+This historical integration plan is now implemented for Stage B; see
+`controls-stage-b-summary.md` and `controls-operations.md` for current behavior. The first
 vertical slice is Ask without saved conversation history. Saved conversations
 remain Stage C; learner-initiated cancellation is not an acceptance condition.
 
-Approved sequencing (user decision, 2026-10-09): keep the controls branch
+Original sequencing (superseded by explicit local-main integration authorization
+later on 2026-10-09): keep the controls branch
 independent, wait for Step 1 to enter `main`, then synchronize and implement this
 slice. Do not merge the unlanded identity feature branch into controls. Recheck
 the actual identity contract on the approved baseline; the branch snapshots
 below are evidence for planning, not a substitute for that check.
 
-## Verified dependency boundary
+## Original verified dependency boundary (before implementation)
 
 The current branch has no `backend/app/auth.py` or conversation repository.
 `app/main.py` and `app/integrations/quad/router.py` still call
@@ -113,5 +115,5 @@ integrate the complete R1 tip into local main, then synchronize R3. Local main i
 boundary description above is retained as planning context, not current state.
 B1–B4 now provide original-principal grants, encrypted expiring data, both HTTP
 job edges and a real worker adapter. See `controls-stage-b-summary.md` for each
-round and validation; browser recovery/combined PostgreSQL acceptance follow.
+round and validation; browser recovery and combined PostgreSQL acceptance are recorded in the summary.
 Production opt-in requires operator retention/key/coordinator/cleanup configuration.
