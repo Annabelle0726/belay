@@ -99,6 +99,10 @@ from .integrations.quad import build_router as _build_quad_router  # noqa: E402
 
 app.include_router(_build_quad_router(_router, _pack, _llm))
 
+from .controls.jobs_http import build_jobs_router
+
+app.include_router(build_jobs_router("/api/sol/jobs", _pack))
+
 
 @app.get("/healthz")
 def healthz():
