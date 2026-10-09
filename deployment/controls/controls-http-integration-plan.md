@@ -5,6 +5,12 @@ This is an integration plan, **not an implemented HTTP job API**. The first
 vertical slice is Ask without saved conversation history. Saved conversations
 remain Stage C; learner-initiated cancellation is not an acceptance condition.
 
+Approved sequencing (user decision, 2026-10-09): keep the controls branch
+independent, wait for Step 1 to enter `main`, then synchronize and implement this
+slice. Do not merge the unlanded identity feature branch into controls. Recheck
+the actual identity contract on the approved baseline; the branch snapshots
+below are evidence for planning, not a substitute for that check.
+
 ## Verified dependency boundary
 
 The current branch has no `backend/app/auth.py` or conversation repository.

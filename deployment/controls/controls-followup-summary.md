@@ -100,3 +100,10 @@ Status: **Stage A implemented and committed; Stage B/C/D not complete.** This
 readiness round adds documentation only, not authentication or an end-to-end
 capability claim. No user cancellation feature was added. Existing unrelated
 workspace documentation/local setup changes remain outside these commits.
+
+User decision after reviewing Stage A (2026-10-09): **keep this branch independent;
+wait for Step 1 to land on `main`, then synchronize and implement Stage B**. Do not
+merge `feature/auth-class-isolation` into this branch now. On resumption, verify
+the actual approved main baseline and its live-grant contract before following
+`controls-http-integration-plan.md`. Stage B/C/D remain deferred dependencies;
+there is no background monitoring or deployment scheduled by this decision.
