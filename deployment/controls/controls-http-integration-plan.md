@@ -104,3 +104,14 @@ a second queue, authentication implementation or conversation system.
 
 Use temporary PostgreSQL, signed synthetic identities, provider/runner stubs and
 offline browser tests. No paid provider, deployment or branch merge is implied.
+
+## Implementation update (2026-10-09)
+
+The user superseded the wait-only sequencing above with explicit authorization to
+integrate the complete R1 tip into local main, then synchronize R3. Local main is
+`e8725ec`; synchronization is `a621963`. R2/UI were not merged. The historical
+boundary description above is retained as planning context, not current state.
+B1–B4 now provide original-principal grants, encrypted expiring data, both HTTP
+job edges and a real worker adapter. See `controls-stage-b-summary.md` for each
+round and validation; browser recovery/combined PostgreSQL acceptance follow.
+Production opt-in requires operator retention/key/coordinator/cleanup configuration.

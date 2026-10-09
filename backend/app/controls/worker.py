@@ -58,7 +58,11 @@ def run_one(admission: Admission, adapter: JobAdapter) -> bool:
         with operation(admission.ledger, scope, job["id"], guard):
             result = adapter.execute(job)
         check()  # Never publish using admission-time authorization alone.
-        admission.finish(job["id"], job["fence"], result, authorized=True)
+        publish = getattr(adapter, "publish", None)
+        if callable(publish):
+            publish(job, result)  # Real adapter joins owned result + finish atomically.
+        else:
+            admission.finish(job["id"], job["fence"], result, authorized=True)
     except Exception as exc:
         # No retries. Unknown external attempts/slots retain their liability.
         try:
@@ -75,4 +79,10 @@ def run_one(admission: Admission, adapter: JobAdapter) -> bool:
         stopped.set()
         if thread.is_alive():
             thread.join(timeout=1)
+        cleanup = getattr(adapter, "cleanup", None)
+        if callable(cleanup):
+            try:
+                cleanup()
+            except ControlError:
+                pass  # Expiry still denies access; operator cleanup retries later.
     return True

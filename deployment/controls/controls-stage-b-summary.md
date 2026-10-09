@@ -20,7 +20,7 @@ local main update was found. R1's review note does not itself authorize merging;
 the user's current instruction supplies that authorization. Production host/roster
 agreement and full-text analysis compatibility are not claimed by this local work.
 
-Prepared `codex/r1-main-integration` from local main `83bd1a9`, merging the entire
+Prepared `merge/r1-main-integration` from local main `83bd1a9`, merging the entire
 `feature/auth-class-isolation` tip `266c23e`, including its launcher commit. Did
 not substitute the UI branch or assume its identity-core ancestry included that
 tip. Resolved main imports with Starlette responses/CORS retained, and retained
@@ -98,3 +98,24 @@ Validation: signed HTTP admission, recovery, same-scope different-subject denial
 forged/revoked identity, conflict and oversized body cases plus data/error suites
 **18 passed**. Ruff passes; workers/client still need wiring. No token/model/network
 used in tests. Retention/cleanup operator steps are documented in PRIVACY.
+
+## B4 — real worker adapter and failure/recovery proof
+
+Added `AskAdapter` over the existing tutor loop, scoped consent store, Admission
+and per-attempt controls runtime. It reloads original authority/input TTL at
+dispatch, before each external attempt and before staging/publication. Provider
+construction is lazy; control/support paths need no provider. Actual adapter
+publication joins the owned result transaction; existing synthetic adapters and
+backend cancel/reconciliation behavior remain supported. Explicit operator worker:
+`python -m app.controls.jobs_worker --once` (or a supervised polling process).
+HTTP does not start unbounded background workers or retry unknown jobs.
+
+Validation: worker + signed HTTP + data + distress **33 passed**. Real tutor-loop
+tests use the OpenAI-compatible provider with an in-memory SDK create stub: one
+logical request executes planner/reasoner/evaluation once (three accounted calls),
+duplicate/lost HTTP response retrieves it, original-subject revocation blocks
+dispatch/next call/publication despite another grant with the same learner scope.
+Timeout retains holds/unknown concurrency; missing usage still delivers valid
+answers with retained holds. Crash before publication stays unknown; loss after
+commit retains the result. Queue expiry and deterministic control/support pass.
+No paid request or worker deployment occurred. Browser recovery remains B5.
