@@ -157,4 +157,4 @@ accept only opaque references and require a future authorized expiring store.
 Accounting/tombstone archival and rejection-record retention require an approved
 policy before production rollout. Development accounting is retained indefinitely
 to preserve idempotency and audit history. This is not a new conversation archive.
-See [operator guide](docs/controls-operations.md).
+See [operator guide](deployment/controls/controls-operations.md).

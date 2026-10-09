@@ -201,5 +201,5 @@ The existing main-based HTTP surfaces have no trusted identity adapter yet.
 routes; `enforced` rejects expensive routes without a verified execution context.
 The queue/worker services are tested behind synthetic adapters, not advertised as
 production HTTP job APIs. Auth and conversation integration are prerequisite work.
-See [implementation status](docs/controls-implementation.md) and
-[operator guide](docs/controls-operations.md) for guarantees and limitations.
+See [implementation status](deployment/controls/controls-implementation.md) and
+[operator guide](deployment/controls/controls-operations.md) for guarantees and limitations.

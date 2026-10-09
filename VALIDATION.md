@@ -1366,7 +1366,7 @@ a new external dependency (instance/account/allocation) | mark the step 🔴 and
 Base `83bd1a9`; branch `feature/shared-traffic-budget-controls`. Added shared
 ledger/admission services, model/runner attempt hooks, worker fencing, operator
 reconciliation and learner error messages. Full implementation record and
-per-step commit map: [controls-implementation.md](docs/controls-implementation.md).
+per-step commit map: [controls-implementation.md](deployment/controls/controls-implementation.md).
 
 | Final check | Result |
 | --- | --- |
@@ -1395,4 +1395,4 @@ conversation revision/deletion publication and production retention remain
 pending. Enforced existing HTTP routes fail closed without trusted context;
 development bypass is explicit in health output. No production rollout or
 full multi-API class load result is claimed. See the
-[operator guide](docs/controls-operations.md) for policy and reconciliation.
+[operator guide](deployment/controls/controls-operations.md) for policy and reconciliation.
