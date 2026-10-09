@@ -53,7 +53,7 @@
     <div class="row">
       <button id="run">Synthesize &amp; Run</button>
       <button id="ask">Ask Sol</button>
-      <span id="status" class="muted"></span>
+      <span id="status" class="muted" role="status" aria-live="polite"></span>
     </div>
     <div class="card">
       <div class="k">Run result</div>
@@ -81,19 +81,31 @@
 </main>
 
 <script src="./control-messages.js"></script>
+<script src="./request-lifecycle.js"></script>
 <script type="module">
 const $ = (id) => document.getElementById(id);
 const PID = "p_dev";  // for a real session, POST /api/participant first
 let EXERCISES = {};
+const turnGate = globalThis.belayTurnGate();
+const contextKey = () => JSON.stringify([base(), PID, $("exercise").value, $("mode").value]);
+function refreshControls() {
+  $("ask").disabled = $("run").disabled = turnGate.blocked(contextKey());
+}
+function invalidateContext() {
+  turnGate.invalidate();
+  lastResult = null;
+  $("status").textContent = turnGate.blocked(contextKey())
+    ? "A previous request is unresolved. Please contact your course support team." : "";
+  refreshControls();
+}
 
 function base() { return $("backend").value.replace(/\/$/, ""); }
 async function jpost(path, body) {
-  const r = await fetch(base() + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  if (!r.ok) {
-    const data = await r.json().catch(() => ({}));
-    throw new Error(globalThis.belayControlMessage(data.detail, r.headers.get("Retry-After")));
-  }
-  return r.json();
+  return globalThis.belayRequestJSON(base() + path,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
+    { validate: path === "/api/sol/turn" ? globalThis.belayValidateTurn
+      : (data) => data && typeof data.ok === "boolean" && (!data.ok ||
+        (Array.isArray(data.dist) && data.dist.every((d) => d && typeof d.bits === "string" && typeof d.p === "number"))) });
 }
 
 async function loadCurriculum() {
@@ -107,32 +119,38 @@ async function loadCurriculum() {
   pick();
 }
 function pick() {
+  invalidateContext();
   const ex = EXERCISES[$("exercise").value]; if (!ex) return;
   $("prompt").textContent = ex.prompt;
   $("source").value = ex.starter;
 }
 
 let lastResult = null;
-async function run() {
-  $("status").textContent = "running…";
+async function ask(event, runFirst = false) {
+  const token = turnGate.begin(contextKey());
+  if (!token) return;
+  refreshControls();
+  let unknown = false;
+  const exerciseId = $("exercise").value, mode = $("mode").value, source = $("source").value;
   try {
-    lastResult = await jpost("/api/run", { participant_id: PID, exercise_id: $("exercise").value, source: $("source").value });
-    $("result").textContent = lastResult.ok
-      ? `backend=${lastResult.backend}  goalMet=${lastResult.goalMet}  tvd=${(+lastResult.tvd).toFixed(3)}\n` +
-        lastResult.dist.map((d) => `${d.bits}: ${(d.p * 100).toFixed(0)}%`).join("   ") + `\n${lastResult.diff}`
-      : "error: " + lastResult.error;
-    $("status").textContent = "";
-  } catch (e) { $("status").textContent = String(e); }
-}
-
-async function ask(event) {
-  $("status").textContent = "Sol is thinking…";
-  try {
+    if (runFirst) {
+      $("status").textContent = "running…";
+      const result = await jpost("/api/run", { participant_id: PID, exercise_id: exerciseId, source });
+      if (!turnGate.current(token, contextKey())) return;
+      lastResult = result;
+      $("result").textContent = result.ok
+        ? `backend=${result.backend}  goalMet=${result.goalMet}  tvd=${(+result.tvd).toFixed(3)}\n` +
+          result.dist.map((d) => `${d.bits}: ${(d.p * 100).toFixed(0)}%`).join("   ") + `\n${result.diff}`
+        : "error: " + result.error;
+      if (!result.ok) { $("status").textContent = "Run failed. Please review the run result."; return; }
+    }
+    $("status").textContent = "Sol is thinking…";
     const out = await jpost("/api/sol/turn", {
-      participant_id: PID, exercise_id: $("exercise").value,
-      event: event || "chat", mode: $("mode").value, stance: "peer",
-      source: $("source").value, result: lastResult, recent: [],
+      participant_id: PID, exercise_id: exerciseId,
+      event: event || "chat", mode, stance: "peer",
+      source, result: lastResult, recent: [],
     });
+    if (!turnGate.current(token, contextKey())) return;
     $("solmsg").textContent = out.message;
     $("solq").textContent = out.check_question ? "↳ " + out.check_question : "";
     $("affect").textContent = out.affective_state;
@@ -143,16 +161,27 @@ async function ask(event) {
     const se = out.components?.self_eval || {};
     $("selfeval").textContent = `${out.self_critique}  ·  leak_risk=${se.leak_risk}`;
     $("gov").textContent = out.components?.governance?.prose || out.governance;
-    $("mem").textContent = `grasped: ${(out.memory.grasped || []).join(", ") || "—"}  ·  shaky: ${(out.memory.shaky || []).join(", ") || "—"}`;
+    $("mem").textContent = `grasped: ${(out.memory?.grasped || []).join(", ") || "—"}  ·  shaky: ${(out.memory?.shaky || []).join(", ") || "—"}`;
     const t = out.components?.timings_ms || {};
     $("timings").textContent = Object.entries(t).map(([k, v]) => `${k}=${v}`).join("  ");
     $("status").textContent = "";
-  } catch (e) { $("status").textContent = String(e); }
+  } catch (e) {
+    unknown = Boolean(e.uncertain);
+    if (turnGate.current(token, contextKey())) $("status").textContent = e.message;
+  } finally {
+    const stale = !turnGate.current(token, contextKey());
+    turnGate.finish(token, unknown);
+    if (stale) $("status").textContent = turnGate.unknown(contextKey())
+      ? globalThis.belayControlMessage({ code: "execution_unknown" }) : "";
+    refreshControls();
+  }
 }
 
 $("exercise").addEventListener("change", pick);
-$("backend").addEventListener("change", loadCurriculum);
-$("run").addEventListener("click", () => run().then(() => ask("run")));
+$("backend").addEventListener("change", () => { invalidateContext(); loadCurriculum().catch((e) => $("status").textContent = "load failed: " + e); });
+$("mode").addEventListener("change", invalidateContext);
+$("source").addEventListener("input", invalidateContext);
+$("run").addEventListener("click", () => ask("run", true));
 $("ask").addEventListener("click", () => ask("chat"));
 loadCurriculum().catch((e) => $("status").textContent = "load failed: " + e);
 </script>

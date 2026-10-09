@@ -31,3 +31,29 @@ includes the two independent-process budget/concurrency races.
 
 Remaining dependency: Step 1 verified identity and live grant recheck, followed by
 owned TTL input/result storage and HTTP/worker integration. No end-to-end Ask claim.
+
+## Round A2 — reference Ask failure handling (2026-10-09)
+
+Previous round commit: `3eecbb3`.
+
+- Share a 90-second JSON transport deadline across widget, dev page and API
+  client, including response-body reads. Never automatically retry a POST.
+- Reject malformed/empty turn responses before display; tolerate absent optional
+  telemetry while rejecting metadata that would break rendering.
+- Distinguish explicit denial from ambiguous network/timeout/server failure;
+  explain that server work may continue and do not advise a fresh submission.
+- Block page-local repeated clicks and uncertain resubmission. Fence responses
+  after context changes, including switching away and back. Preserve widget input
+  and previous valid answers on failure, without adding empty/error tutor history.
+- Keep run-and-Ask under one guard; a failed run never proceeds to Ask.
+- Keep background recovery/cancellation; add no learner cancel control.
+
+Validation: **23 Node tests passed**, including actual widget/dev page scripts in
+a minimal DOM harness with mocked fetch, stalled bodies, malformed JSON and
+deferred old responses. CI now runs all three frontend test files. No real browser
+or authenticated HTTP acceptance is claimed.
+
+Limitations: this gate has page lifetime only. Refresh, another tab/device and
+server replay still require Stage B's stable operation ID and authenticated status
+lookup. The API client exposes uncertainty but leaves UI locking to its host.
+No credential, prompt, response or recovery token is persisted by these changes.

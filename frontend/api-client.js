@@ -7,20 +7,16 @@
  * contract and Sol's JSON contract), so the UI is unchanged.
  */
 import "./control-messages.js";
+import "./request-lifecycle.js";
 
 const BASE_URL =
   (typeof window !== "undefined" && window.SOL_BACKEND_URL) || "http://localhost:8000";
 
-async function _json(path, opts) {
-  const res = await fetch(BASE_URL + path, {
+async function _json(path, opts, validate) {
+  return globalThis.belayRequestJSON(BASE_URL + path, {
     headers: { "Content-Type": "application/json" },
     ...opts,
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(globalThis.belayControlMessage(data.detail, res.headers.get("Retry-After")));
-  }
-  return res.json();
+  }, { validate });
 }
 
 export function getCurriculum() {
@@ -54,7 +50,7 @@ export function solTurn({ participantId, exerciseId, event, mode, stance, source
       recent: recent || [],
       signals: signals || null,
     }),
-  });
+  }, globalThis.belayValidateTurn);
 }
 
 export function createParticipant(anonCode, consent) {

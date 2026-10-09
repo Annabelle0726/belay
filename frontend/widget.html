@@ -111,6 +111,7 @@
         <div class="msgs" id="msgs"></div>
         <textarea id="say" rows="2" placeholder="Ask the tutor, or paste what you tried..."></textarea>
         <div><button id="send">Send turn</button></div>
+        <p id="turnstatus" class="note" role="status" aria-live="polite"></p>
       </div>
       <div class="pane">
         <h2>Goals &amp; reflection <span class="note">(opt-in, honored within limits, never a command)</span></h2>
@@ -131,11 +132,15 @@
 </div>
 
 <script src="./control-messages.js"></script>
+<script src="./request-lifecycle.js"></script>
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
 const baseURL = () => $("base").value.replace(/\/$/, "");
 const recent = [];   // dialogue history for the turn loop
+const turnGate = globalThis.belayTurnGate();
+const contextKey = () => JSON.stringify([baseURL(), $("pid").value, $("ex").value, $("stance").value]);
+const refreshSend = () => { $("send").disabled = turnGate.blocked(contextKey()); };
 
 function addMsg(who, text) {
   const d = document.createElement("div");
@@ -152,15 +157,11 @@ function overlayFromKnob() {
   return v ? { pedagogy: { scaffolding: v } } : null;
 }
 async function post(path, body) {
-  const r = await fetch(baseURL() + path, {
+  const data = await globalThis.belayRequestJSON(baseURL() + path, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-  });
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok && data.detail && typeof data.detail === "object" && data.detail.code) {
-    data.detail = globalThis.belayControlMessage(data.detail, r.headers.get("Retry-After"));
-  }
-  return { status: r.status, data };
+  }, { validate: path === "/quad/v1/turn" ? globalThis.belayValidateTurn : undefined });
+  return { status: 200, data };
 }
 
 // SIGNALS, not verdicts. A withheld solution reads as "held back, with a nudge".
@@ -201,44 +202,82 @@ function renderSignals(t) {
 }
 
 $("send").addEventListener("click", async () => {
+  const token = turnGate.begin(contextKey());
+  if (!token) return;
+  refreshSend();
+  $("turnstatus").textContent = "The tutor is thinking…";
   const text = $("say").value.trim();
-  if (text) { addMsg("student", text); recent.push({ who: "student", text }); $("say").value = ""; }
+  if (text) addMsg("student", text);
   const body = {
     pseudo_id: $("pid").value, exercise_id: $("ex").value, stance: $("stance").value,
-    event: "chat", mode: "study", source: "", recent: recent.slice(-8),
+    event: "chat", mode: "study", source: "",
+    recent: [...recent, ...(text ? [{ who: "student", text }] : [])].slice(-8),
   };
   const ov = overlayFromKnob();
   if (ov) body.overlay = ov;     // the customization knob rides on the turn
-  const { status, data } = await post("/quad/v1/turn", body);
-  if (status !== 200) { addMsg("tutor", "(" + status + ") " + (data.detail || JSON.stringify(data))); return; }
-  addMsg("tutor", data.message || "(no message)");
-  if (data.check_question) addMsg("tutor", data.check_question);
-  recent.push({ who: "tutor", text: data.message || "" });
-  renderSignals(data);
-  // Surface any declined overlay field (floor check) without echoing the raw value.
-  const decl = ((data.components || {}).overlay_declined) || [];
-  $("declined").textContent = decl.length ? ("A preference was declined by the floor check: " + decl.join(", ")) : "";
+  let unknown = false;
+  try {
+    const { data } = await post("/quad/v1/turn", body);
+    if (!turnGate.current(token, contextKey())) return;
+    addMsg("tutor", data.message);
+    if (data.check_question) addMsg("tutor", data.check_question);
+    if (text) recent.push({ who: "student", text });
+    recent.push({ who: "tutor", text: data.message });
+    if ($("say").value.trim() === text) $("say").value = "";
+    renderSignals(data);
+    const decl = ((data.components || {}).overlay_declined) || [];
+    $("declined").textContent = decl.length ? ("A preference was declined by the floor check: " + decl.join(", ")) : "";
+    $("turnstatus").textContent = "";
+  } catch (error) {
+    unknown = Boolean(error.uncertain);
+    if (turnGate.current(token, contextKey())) $("turnstatus").textContent = error.message;
+  } finally {
+    const stale = !turnGate.current(token, contextKey());
+    turnGate.finish(token, unknown);
+    if (stale) $("turnstatus").textContent = turnGate.unknown(contextKey())
+      ? globalThis.belayControlMessage({ code: "execution_unknown" }) : "";
+    refreshSend();
+  }
 });
 
+for (const id of ["base", "pid", "ex", "stance"]) {
+  $(id).addEventListener("change", () => {
+    turnGate.invalidate();
+    recent.length = 0;
+    $("msgs").replaceChildren();
+    $("signals").textContent = "Signals from the latest turn appear here.";
+    $("declined").textContent = "";
+    $("turnstatus").textContent = turnGate.blocked(contextKey())
+      ? "A previous request is unresolved. Please contact your course support team." : "";
+    refreshSend();
+  });
+}
+
 $("setgoal").addEventListener("click", async () => {
-  const { status, data } = await post("/quad/v1/goals", { pseudo_id: $("pid").value, text: $("goal").value });
-  if (status !== 200) { $("goalstate").textContent = "(" + status + ") rejected"; return; }
-  const g = data.goals;
-  $("goalstate").textContent = !g ? "cleared"
-    : g.honored ? "honored within your stance (never a command)"
-    : "recorded, but not adopted - the tutor holds you to constructive goals";
+  try {
+    const { data } = await post("/quad/v1/goals", { pseudo_id: $("pid").value, text: $("goal").value });
+    const g = data.goals;
+    $("goalstate").textContent = !g ? "cleared"
+      : g.honored ? "honored within your stance (never a command)"
+      : "recorded, but not adopted - the tutor holds you to constructive goals";
+  } catch (error) { $("goalstate").textContent = error.message; }
 });
 
 $("setrefl").addEventListener("click", async () => {
-  const { status } = await post("/quad/v1/reflection", { pseudo_id: $("pid").value, text: $("refl").value });
-  $("reflstate").textContent = status === 200 ? "recorded (private to you, never to an instructor)" : "(" + status + ")";
+  try {
+    await post("/quad/v1/reflection", { pseudo_id: $("pid").value, text: $("refl").value });
+    $("reflstate").textContent = "recorded (private to you, never to an instructor)";
+  } catch (error) { $("reflstate").textContent = error.message; }
 });
 
 // Setting the knob also persists the overlay via its own intake (opt-in).
 $("knob").addEventListener("change", async () => {
-  const { data } = await post("/quad/v1/overlay", { pseudo_id: $("pid").value, overlay: overlayFromKnob() });
-  const decl = ((data.overlay || {}).declined) || [];
-  $("declined").textContent = decl.length ? ("A preference was declined by the floor check: " + decl.join(", ")) : "";
+  turnGate.invalidate();
+  try {
+    const { data } = await post("/quad/v1/overlay", { pseudo_id: $("pid").value, overlay: overlayFromKnob() });
+    const decl = ((data.overlay || {}).declined) || [];
+    $("declined").textContent = decl.length ? ("A preference was declined by the floor check: " + decl.join(", ")) : "";
+  } catch (error) { $("declined").textContent = error.message; }
 });
 </script>
 </body>
