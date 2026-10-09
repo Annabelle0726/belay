@@ -57,3 +57,25 @@ Limitations: this gate has page lifetime only. Refresh, another tab/device and
 server replay still require Stage B's stable operation ID and authenticated status
 lookup. The API client exposes uncertainty but leaves UI locking to its host.
 No credential, prompt, response or recovery token is persisted by these changes.
+
+## Round A3 — HTTP errors and operator recovery (2026-10-09)
+
+Previous round commit: `9729f42`.
+
+- Preserve `Retry-After` through both tutor routes, the global handler and the
+  standalone embedded Quad router; expose the header through CORS.
+- Return a stable `execution_unknown` code for unexpected tutor failures instead
+  of provider exception text. A generic server failure does not prove zero work.
+- Document an evidence-based incident sequence: inspect, establish external
+  completion/usage, reconcile each attempt, confirm stopped work separately, and
+  verify remaining liabilities. Missing evidence keeps liability held; no timeout
+  refund, automatic unknown-job retry or implicit provider termination is added.
+
+Validation: full backend regression **438 passed, 10 skipped** on temporary
+SQLite and **441 passed, 7 skipped** on disposable PostgreSQL, including all six
+new HTTP cases, both independent-process races and the legacy schema upgrade.
+SQLite additionally skips the three PostgreSQL-specific checks. Both runs skip
+one opt-in live-model benchmark and six unavailable sibling verifier-contract
+cases. Ruff lint/format passed; mypy passed (110 source files). HTTP tests replace
+tutor/runner calls with stubs and exercise actual routes/CORS. They prove error
+wiring, not trusted identity, admission, result storage or authenticated recovery.

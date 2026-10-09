@@ -76,8 +76,10 @@ provider work; exactly-once external execution is not claimed.
 
 `execution_seconds` bounds a job from dispatch, independently of queue waiting
 and the renewable heartbeat lease. The deadline is snapshotted at claim; a policy
-update or heartbeat cannot extend it. At expiry the job becomes `unknown`, its
-worker cannot publish or start another external attempt, and liability remains.
+update or heartbeat cannot extend it. At expiry the worker cannot publish or
+start another external attempt. The next status/dispatch/operator inspection
+persists `unknown`; expiration is lazy and there is no new background reaper.
+Liability remains.
 This fences work; it does **not** kill a provider request already in progress.
 Use provider/runner termination evidence before releasing a concurrency slot.
 
@@ -131,3 +133,48 @@ shown by both health routes. `enforced` blocks expensive HTTP requests without
 trusted context; it is not an authentication replacement. A trusted operation
 context always enforces accounting, even in a development test. Read-only
 curriculum remains available when enforced execution is unavailable.
+
+## Incident recovery procedure
+
+Assign an operator and an opaque incident reference. Do not ask the learner to
+refresh/resubmit an uncertain Ask. A browser timeout or broken connection is not
+evidence of provider termination, even if its local HTTP connection was aborted.
+
+1. Inspect `summary` and `unresolved` using the selected coordinator credentials.
+   Link attempt IDs and their operation ID in the incident record. Keep learner
+   text, provider credentials and response bodies out of ledger evidence/logs.
+   Snapshot inspection expires queued jobs and fences expired active jobs; it
+   does not kill workers or refund external work.
+2. Distinguish answer failure from execution/usage uncertainty. A received answer
+   with missing usage can be completed while its hold remains unresolved. A lost
+   provider response, lost worker or expired execution deadline must not be
+   automatically requeued. The current branch has no student job/result lookup;
+   a local frontend error is not an operational recovery API.
+3. Obtain authoritative provider/runner completion or termination evidence and
+   usage for each external attempt. Current ledger IDs do not guarantee a
+   provider-side request ID; correlate securely with provider records. If records
+   cannot establish usage/termination, leave the corresponding hold/slot intact
+   and escalate to the deployment owner. Never invent zero usage. A timeout,
+   worker heartbeat loss or elapsed billing period alone is insufficient.
+4. Settle each attempt with `settle-attempt` using authoritative totals and the
+   incident reference. Include all attempts, even if no answer reached the learner.
+   The command rejects conflicting re-settlement. A late normal settlement of
+   the same amount is harmless; a different amount is refused. Financial
+   settlement alone does not release an uncertain concurrency slot.
+5. Only after all external work for an operation has stopped, use `confirm-stopped`
+   for that operation. It records the operator's assertion and releases slots;
+   it does not terminate external work, refund holds or publish a missing answer.
+   Fencing prevents the old worker from starting another controlled attempt or
+   publishing. Investigate any attempt still reserved/unknown separately.
+6. Verify `summary`/`unresolved` again and record evidence and remaining liabilities.
+   Reusing the original operation ID returns its tombstone and does not rerun it.
+   A deliberately new request is appropriate only after the prior operation is
+   resolved and current authorization/funding permit it. No automated retry of
+   unknown work is allowed. Policy changes for service continuity need explicit
+   owner approval and a new policy version; they are not a refund.
+
+HTTP errors from both tutor surfaces use content-free reason codes. `Retry-After`
+survives route exception handling and is exposed to cross-origin clients. Generic
+tutor exceptions return `execution_unknown`, without raw provider diagnostics.
+This improves error wiring; it does not install authenticated admission or turn
+the current synchronous endpoint into a recoverable job API.

@@ -39,6 +39,7 @@ from .agent import goals as goals_mod
 from .agent import overlay as overlay_mod
 from .config import settings
 from .controls.contracts import ControlError
+from .controls.http import control_http_error
 from .controls.runtime import current as control_context
 from .core.registry import get_active_pack
 from .schemas import (
@@ -59,9 +60,9 @@ app = FastAPI(title="Peer-Tutor Framework", version="0.1.0")
 
 @app.exception_handler(ControlError)
 async def control_error(request, exc: ControlError):
-    headers = {"Retry-After": str(exc.retry_after)} if exc.retry_after is not None else {}
+    error = control_http_error(exc)
     return JSONResponse(
-        status_code=exc.status, content={"detail": {"code": exc.code}}, headers=headers
+        status_code=error.status_code, content={"detail": error.detail}, headers=error.headers
     )
 
 
@@ -70,6 +71,7 @@ app.add_middleware(
     allow_origins=settings.cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Retry-After"],
 )
 
 # --- wiring (swappable via env) ----------------------------------------------
@@ -161,9 +163,9 @@ def sol_turn(req: SolTurnRequest):
     try:
         return run_turn(payload, _llm(), store)
     except ControlError as e:
-        raise HTTPException(e.status, {"code": e.code}) from e
+        raise control_http_error(e) from e
     except Exception as e:  # surface a clean error; the front-end shows a graceful note
-        raise HTTPException(502, f"tutor unavailable: {e}") from e
+        raise HTTPException(502, {"code": "execution_unknown"}) from e
 
 
 @app.post("/api/participant", response_model=ParticipantResponse)
