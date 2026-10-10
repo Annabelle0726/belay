@@ -204,3 +204,42 @@ Untracked review material still matches its pre-switch backup hash. User local
 deployment files and databases remain outside commits. Complete R1 `266c23e`,
 R2 `3a414d6`, and the actual R3 starting tip `1585b23` are all ancestors of this
 integration. Main is still `e8725ec`. Commit: this C5 change (recorded in C6).
+
+## C6 — local UI target integration and final scope
+
+C5 code/acceptance commit: `18c1251`. After the local repository gates passed,
+`feature/ui-conversation-preview` was fast-forwarded from `ceef784` to `18c1251`.
+This documentation commit records that completed action on the final target.
+The integration branch is retained. Main stays `e8725ec`; no branch was deleted,
+history rewritten, remote pushed/merged or deployment performed. The disposable
+PostgreSQL container and our temporary visual-demo process have been stopped;
+the user's original services/deployment files were not restarted or removed.
+
+Completed within the same-database configuration: complete R1 ancestry and
+original-principal grant revalidation without stored bearer tokens; existing R2
+save/restore/ownership/revision/expiry/deletion contracts; saved admission and
+stable request-to-turn linkage; the existing R3 queue, budget, per-model-attempt
+accounting and worker; atomic saved publication; protected recovery; existing UI
+with both optional saving and unsaved Stage B; delete/expiry/revocation fences,
+unknown-result behavior, crash rollback and cross-process deduplication evidence.
+No second conversation archive, cancellation button, teacher scope or controlled
+code-run task was added. Research consent and retention/default rules remain.
+
+Not completed or claimed: cross-database saved publication; automated inference
+replay after an unknown outcome; real-provider/paid-model evaluation; missing
+verifier sibling tests; production load, institution policy sign-off, key/backup
+operations, cleanup scheduling, deployment or live student acceptance. Temporary
+execution rows must not become a long-lived backup/archive merely because they
+share the dialogue database.
+
+Verification and local demo: follow `controls-stage-c-protocol.md`'s exact
+PowerShell launcher command in a fresh private temporary directory. It prints
+the dev-client URL, uses signed synthetic credentials and the local model stub.
+Check unsaved Ask, enable saving, Ask, reload, simulate a lost response/recover
+without a new POST, then delete via More. Use the tests listed there for controlled
+unknown/revocation/expiry/version-conflict and PostgreSQL contention scenarios;
+do not edit a real deployment database to simulate them. No code changed in C6;
+C5's recorded full backend/frontend/quality and browser evidence applies. Final
+Git status retains only the pre-existing untracked review document; private local
+deployment files remain ignored and preserved. This summary and the protocol
+are the reviewable completion record, not a production-release assertion.
