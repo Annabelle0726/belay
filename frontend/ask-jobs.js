@@ -61,8 +61,10 @@ globalThis.belayAskJobs = function ({ storage,
   const states = new Set(["queued", "running", "cancel_requested", "completed", "failed", "cancelled", "unknown", "result_expired"]);
   const validJob = (j) => j && /^[0-9a-f]{64}$/.test(j.id) && states.has(j.state);
   async function watch(context, pointer, onStatus) {
+    if (onStatus && context.recovering) onStatus("preparing", context.config,
+      {request_id:pointer.request_id, recovered:!!context.recovering});
     try { return await poll(context, pointer, onStatus); }
-    catch(e) {e.recovered_request = !!context.recovering; throw e;}
+    catch(e) {e.recovered_request = !!context.recovering; e.request_id = pointer.request_id; throw e;}
   }
   async function poll(context, pointer, onStatus) {
     const deadline = Date.now() + timeoutMs;
@@ -82,7 +84,8 @@ globalThis.belayAskJobs = function ({ storage,
         const failure = error(e.code === "job_unavailable" ? "execution_unknown" : e.code, true);
         failure.status = e.status; throw failure;
       }
-      if (onStatus) onStatus(job.state, context.config);
+      if (onStatus) onStatus(job.state, context.config,
+        {request_id:pointer.request_id, job_id:job.id, recovered:!!context.recovering});
       if (job.state === "completed") {
         if (!globalThis.belayValidateTurn(job.result)) throw error("invalid_response", true);
         receipts.set(job.result, {key: context.key, pointer, recovered:!!context.recovering});
@@ -92,12 +95,16 @@ globalThis.belayAskJobs = function ({ storage,
         write(context.key, { request_id: pointer.request_id, pending: false });
         throw error(job.reason || job.state);
       }
-      if (["unknown", "cancel_requested"].includes(job.state)) throw error("execution_unknown", true);
+      if (["unknown", "cancel_requested"].includes(job.state)) {
+        const code = ["execution_deadline", "worker_lost"].includes(job.reason) ? job.reason : "execution_unknown";
+        throw globalThis.belayRequestError(code, true, globalThis.belayControlMessage({code}));
+      }
       await wait(Math.min(Math.max(0, deadline - Date.now()), context.config.poll_seconds * 1000));
     }
   }
   return {
     prepare,
+    reference(turn) {const r = receipts.get(turn); return r ? {request_id:r.pointer.request_id, recovered:r.recovered} : null;},
     wasRecovered(turn) {return !!receipts.get(turn)?.recovered;},
     acknowledge(turn) {
       const receipt = receipts.get(turn);
@@ -109,11 +116,11 @@ globalThis.belayAskJobs = function ({ storage,
     },
     async ask(base, prefix, body, onStatus) {
       const context = await prepare(base, prefix, body.exercise_id);
-      if (onStatus) onStatus("preparing", context.config);
       let pointer = read(context.key);
       if (pointer?.pending) return watch({...context,recovering:true}, pointer, onStatus);
       pointer = { request_id: uuid(), pending: true };
       write(context.key, pointer); // Commit pointer BEFORE the only POST.
+      if (onStatus) onStatus("preparing", context.config, {request_id:pointer.request_id, recovered:false});
       const payload = { ...body, participant_id: context.config.learner_id,
         exercise_version: context.config.assignments[body.exercise_id], request_id: pointer.request_id };
       delete payload.pseudo_id;
@@ -121,6 +128,7 @@ globalThis.belayAskJobs = function ({ storage,
       try {
         await request(base, prefix, { method: "POST", body: JSON.stringify(payload) }, validJob);
       } catch (e) {
+        e.request_id = pointer.request_id;
         if (!e.uncertain && ["rate_limited", "queue_full", "payload_too_large", "content_not_storable", "invalid_execution_data", "conversation_conflict",
           "jobs_disabled", "jobs_not_configured", "invalid_controls_mode", "controls_not_initialized", "verified_execution_required"].includes(e.code)) {
           // Preserve the rejected request receipt. Only THIS newly generated ID
@@ -134,7 +142,6 @@ globalThis.belayAskJobs = function ({ storage,
     },
     async recover(base, prefix, exercise, onStatus) {
       const context = await prepare(base, prefix, exercise);
-      if (onStatus) onStatus("preparing", context.config);
       const pointer = read(context.key);
       return pointer && !pointer.not_submitted ? watch({...context,recovering:true}, pointer, onStatus) : null;
     },

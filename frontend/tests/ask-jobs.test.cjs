@@ -160,3 +160,23 @@ test('definite admission setup denial retains a rejected receipt without phantom
  assert.equal(await restored.jobs.recover('https://test','/jobs','echo-1'),null);assert.equal(posts,1);
  assert.equal((await restored.jobs.ask('https://test','/jobs',body)).message,'useful answer');assert.equal(posts,2);
 });
+
+test('recovery callback retains the logical ID even when the first GET loses its response', async()=>{
+ const store=storage();const first=client(store,async()=>{throw TypeError('lost');});
+ await assert.rejects(first.jobs.ask('https://test','/jobs',body),{uncertain:true});
+ const id=JSON.parse([...store.values.values()][0]).request_id;
+ const events=[];const next=client(store,async()=>{throw TypeError('offline');});
+ await assert.rejects(next.jobs.recover('https://test','/jobs','echo-1',(state,config,ref)=>events.push(ref)),{request_id:id,uncertain:true});
+ assert.equal(events[0].request_id,id);assert.equal(events[0].recovered,true);
+ assert.equal(next.calls.some(c=>c.opts.method==='POST'),false);
+});
+
+test('server execution deadline is distinct from browser waiting timeout and retains unknown ID',async()=>{
+ const store=storage();const value=client(store,async(url,opts)=>reply(opts.method==='POST'
+  ? {id:completed.id,state:'queued'} : {id:completed.id,state:'unknown',reason:'execution_deadline'}));
+ await assert.rejects(value.jobs.ask('https://test','/jobs',body),error=>{
+  assert.equal(error.code,'execution_deadline');assert.equal(error.uncertain,true);
+  assert.match(error.message,/server execution deadline/);assert.ok(error.request_id);return true;
+ });
+ assert.equal(JSON.parse([...store.values.values()][0]).pending,true);
+});

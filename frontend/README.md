@@ -42,6 +42,28 @@ Run the offline tests from the repository root (no backend/model endpoint):
 node --test frontend/tests/control-messages.test.cjs frontend/tests/request-lifecycle.test.cjs frontend/tests/turn-pages.test.cjs
 ```
 
+For the complete suite, including actual Markdown/sanitizer DOM checks:
+
+```powershell
+Set-Location frontend
+npm ci --ignore-scripts
+npm test
+```
+
+The dev-client serves pinned rendering libraries from `vendor/`; it needs no
+build step or CDN connection for Markdown. See `vendor/README.md` for provenance.
+Normal controlled waits show a small spinner, stable disabled submit buttons and
+a screen-reader status. Failure/unknown explanations remain visible. Fresh and
+restored tutor replies share the same sanitized Markdown renderer; only supported
+language-tagged code blocks receive syntax highlighting. Plain answers stay plain.
+
+The development page keeps request-associated history and system notices separate
+from Sol replies. Only the current reply owns an initially collapsed Glass Box.
+Desktop columns stay equally wide and tall, with long conversations scrolling
+inside the feed. Confirmed temporary-result expiry appears as a system notice;
+requesting another answer requires an explicit Ask Sol action. The compact header
+identifies this page as a Development preview.
+
 The page tests execute the actual inline page scripts with a minimal DOM harness
 and mocked transport. Real browser/authenticated HTTP acceptance remains pending.
 
