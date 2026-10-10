@@ -72,3 +72,65 @@ never initialized, migrated, restored, cleared or used as test databases.
 Remaining operational step/evidence: refresh the identified local preview without
 running its normal provisioning/migration path; see D2. This commit records D0/D1;
 its number will be recorded in D2 after commit.
+
+## D2 — non-provisioning restart and actual browser acceptance
+
+D1 repair commit: `545a722`. Goal: make the current preview usable without
+initializing/restoring/migrating databases. Files changed in D2: this summary;
+an untracked, private purpose-named restart helper/snapshot outside the repository.
+No application code changed after D1 verification.
+
+Confirmed PID 9824's exact command/cwd immediately before stopping only that
+preview. Captured its full environment privately without printing secrets. Kept
+the original backend/frontend origins, data directory, datascience pack, SQL store,
+saving flag/policy, authorization file and controls flags. Restart uses a private
+one-off `resume_dev.py` helper in
+`C:\Users\ASUS\AppData\Local\Temp\belay-curriculum-restart-fl0be4t2`.
+It does not call `configure`, dialogue migration, ledger initialization or
+`create_all`; instead SqlStore's startup hook checks existing table names through
+SQLite `mode=ro`. Normal business identity/authorization dependencies remain.
+Missing files/schema fail rather than provision. Only the memory-only local
+signing key's public counterpart rotates; original grant rules are not rewritten.
+The initial helper launch lacked the backend import path and exited without
+touching data; its path was corrected and the replacement started successfully.
+Subsequent live requests/browser checks passed. No unrelated service was stopped.
+
+Replacement PID **31124** listens on loopback **8002 and 5175**. Live verification:
+
+| Check | Actual result |
+| --- | --- |
+| OPTIONS GET with authorization, content-type, x-belay-class, x-belay-institution | 200; Allow-Origin exactly `http://127.0.0.1:5175` |
+| Different origin `http://127.0.0.1:5176` | 400; no Allow-Origin |
+| Curriculum without bearer | 401; correct CORS response |
+| Signed curriculum with original class | 200; original three exercises |
+| Signed request with ungranted class | 404 |
+| Existing optional-saving configuration | 200; enabled as before |
+| Task configuration | 503 `jobs_disabled`; correct CORS, inherited configuration unchanged |
+
+Real Chromium loaded `http://127.0.0.1:5175/dev-client.html` and received the
+curriculum HTTP 200 with the exact Allow-Origin header. All three dropdown options
+match D0 and each shows its prompt/starter. No page script errors. Requests outside
+loopback were blocked during this verification. Screenshot inspected and kept
+privately outside Git. No Ask, code Run or model request was made. No paid model
+was called. Browser observation supersedes the earlier reproduced failure.
+
+SHA-256 checks before restart and after browser verification show unchanged:
+`deployment/local/ui-preview/demo.sqlite3`, root/backend `qimvp.db`, authorization
+JSON, deletion ledger, backend `.env`, and the pre-existing untracked review.
+Only `public-key.pem` differs as expected. No database, key, token, logs, environment
+snapshot or student data is staged/committed. No main update, remote push, deploy,
+branch deletion or Stage C reintegration occurred.
+
+Remaining scope: the original service has controlled jobs disabled; its task-status
+notice/503 is a separate configuration issue, not a curriculum/CORS/auth/router/
+pack failure. It was not enabled or retested with inference. Saving operations,
+budget tasks, PostgreSQL, paid providers and full Stage C acceptance were not part
+of this repair. The ordinary launcher's existing provisioning behavior has not
+been redesigned; this repair deliberately used the one-off non-provisioning
+restart to honor the no-database-change constraint.
+
+Recheck: keep the current preview running, open
+`http://127.0.0.1:5175/dev-client.html`, hard-refresh, and inspect Network:
+`OPTIONS http://127.0.0.1:8002/api/curriculum` → 200 and authenticated GET → 200.
+Verify Grouped summaries, Held-out regression and Tiny MLP in the dropdown. No
+model call is necessary. Backend base: `http://127.0.0.1:8002`.
