@@ -42,3 +42,20 @@ completion. Commit: this integration commit (recorded by the next step).
 R2 default saving, research consent separation, creation-based retention, external
 deletion ledger, semester rules and governance vocabulary remain authoritative.
 No cancellation button, teacher permission or code-execution job is in scope.
+
+## C1 — shared transaction seam and owned turn link
+
+Previous integration commit: `ea88b26`.
+Goal: use the existing R2 transaction and turn contracts inside the coordinator.
+Files: `conversations/repository.py`, `controls/{saved,data,ledger}.py`,
+`tests/test_saved_transactions.py`. Added an additive, content-free
+`control_conversations` table to explicit controls initialization/upgrade. R2
+begin/complete accept an owned connection; normal R2 callers retain their existing
+behavior. A completion in the outer transaction is idempotent. Shared transaction
+rollback removes the assistant write and retains the pending learner turn.
+
+Validation: **25 passed, 0 failed, 0 skipped** (transaction seam, existing
+conversation lifecycle/repository and execution-data tests). Ruff targeted checks
+and formatting passed after correcting an invocation's working-directory paths.
+PostgreSQL, HTTP saved jobs and browser wiring remain unverified/not wired in this
+step. Commit: this C1 commit (number recorded in C2).
