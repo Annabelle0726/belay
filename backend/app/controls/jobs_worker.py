@@ -30,10 +30,9 @@ from .worker import run_one
 
 
 class _LazyProvider:
-    name = "configured"
-
     def __init__(self, factory: Callable[[], Provider]):
         self.factory = factory
+        self.name: str = settings.provider
         self.instance: Provider | None = None
 
     def json(self, **kwargs) -> dict:

@@ -254,14 +254,17 @@ $("send").addEventListener("click", async () => {
       addMsg("student", text); addMsg("tutor", data.message);
       if (data.check_question) addMsg("tutor", data.check_question);
       recent.push({who:"student",text}, {who:"tutor",text:data.message});
+      const recovered = askJobs.wasRecovered(data);
       askJobs.acknowledge(data);
+      data.recovered_request = recovered;
     }
     if (currentGeneration !== generation || currentExercise !== $("ex").value) return;
     if (data.unsaved_exchange) { addMsg("tutor", data.message); if (data.check_question) addMsg("tutor", data.check_question); }
-    $("say").value = ""; $("turnstatus").textContent = "";
+    if (!data.recovered_request) $("say").value = "";
+    $("send").textContent = "Send"; $("turnstatus").textContent = data.recovered_request ? "Recovered the original request. Your current input was not submitted." : "";
     if (data.live_signals || data.components) renderSignals(data.live_signals || data);
     else $("signals").textContent = "Historical replies have no saved live signals.";
-  } catch (error) { if (currentGeneration === generation) $("turnstatus").textContent = error.message; }
+  } catch (error) { if (currentGeneration === generation) {$("turnstatus").textContent = error.message; if (error.uncertain) $("send").textContent = "Check request status";} }
   finally { sending = false; $("send").disabled = false; }
 });
 

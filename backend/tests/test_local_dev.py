@@ -213,7 +213,8 @@ engine.dispose()
 
 
 @pytest.mark.parametrize("saving", [False, True])
-def test_launcher_real_auth_course_and_optional_dialogue(tmp_path, saving):
+@pytest.mark.parametrize("controlled", [False, True])
+def test_launcher_real_auth_course_and_optional_dialogue(tmp_path, saving, controlled):
     env = dict(os.environ)
     env.update(
         TUTOR_PACK="_skeleton",
@@ -249,6 +250,8 @@ def test_launcher_real_auth_course_and_optional_dialogue(tmp_path, saving):
     ]
     if saving:
         args.append("--save-dialogue")
+    if controlled:
+        args.append("--controlled-stub")
     process = subprocess.Popen(
         args, cwd=BACKEND, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
     )
@@ -310,6 +313,27 @@ def test_launcher_real_auth_course_and_optional_dialogue(tmp_path, saving):
             "/api/participant", {"anon_code": LEARNER, "consent": False}, headers
         )
         assert status == 200 and registered["anon_code"] == LEARNER
+        if controlled:
+            unsaved = {
+                "exercise_id": "echo-1",
+                "exercise_version": "local-v1",
+                "participant_id": LEARNER,
+                "request_id": "unsaved_demo_request",
+                "stance": "peer",
+                "recent": [{"who": "student", "text": "Explain loops"}],
+            }
+            code, admitted = request("/api/sol/jobs", unsaved, headers)
+            assert code == 202, admitted
+            deadline = time.monotonic() + 15
+            while True:
+                code, job = request(
+                    "/api/sol/jobs/by-request/unsaved_demo_request", headers=headers
+                )
+                if code == 200 and job["state"] == "completed":
+                    assert "Local model stub" in job["result"]["message"]
+                    break
+                assert time.monotonic() < deadline, job
+                time.sleep(2)
         body = {
             "exercise_id": "echo-1",
             "exercise_version": "local-v1",
@@ -330,7 +354,18 @@ def test_launcher_real_auth_course_and_optional_dialogue(tmp_path, saving):
                 "stance": "control",
             }
             status, released = request("/api/conversations/" + cid + "/turns", turn, headers)
-            assert status == 200, released
+            if controlled:
+                assert status == 202, released
+                deadline = time.monotonic() + 15
+                while True:
+                    code, job = request("/api/sol/jobs/by-request/turn-1", headers=headers)
+                    if code == 200 and job["state"] == "completed":
+                        assert job["result"]["revision"] == 2
+                        break
+                    assert time.monotonic() < deadline, job
+                    time.sleep(2)
+            else:
+                assert status == 200, released
             status, history = request(
                 "/quad/v1/conversations/" + cid + "/messages", headers=headers
             )
@@ -343,6 +378,7 @@ def test_launcher_real_auth_course_and_optional_dialogue(tmp_path, saving):
             "demo.sqlite3",
             "deletions.jsonl",
             "launcher.lock",
+            *(["execution.key"] if controlled else []),
         }
         assert "PRIVATE KEY" not in (tmp_path / "public-key.pem").read_text()
     finally:

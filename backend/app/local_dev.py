@@ -161,7 +161,9 @@ window.BELAY_GET_ACCESS_TOKEN = async () => {{
         return Handler
 
 
-def configure(host: DemoHost, data_dir: Path, save_dialogue: bool) -> None:
+def configure(
+    host: DemoHost, data_dir: Path, save_dialogue: bool, controlled_stub: bool = False
+) -> None:
     """Provision only separate local files; never reuse deployment auth or its DB."""
     data_dir.mkdir(parents=True, exist_ok=True)
     if (data_dir / "demo.sqlite3").exists() and not (data_dir / "deletions.jsonl").exists():
@@ -218,6 +220,14 @@ def configure(host: DemoHost, data_dir: Path, save_dialogue: bool) -> None:
         DIALOGUE_BACKUP_MAX_AGE_SECONDS="3600",
         DIALOGUE_DELETION_LEDGER_FILE=str(data_dir / "deletions.jsonl"),
     )
+    if controlled_stub:
+        os.environ.update(
+            CONTROLS_MODE="enforced",
+            CONTROLS_JOBS_ENABLED="1",
+            CONTROLS_DATABASE_URL=os.environ["DATABASE_URL"],
+            CONTROLS_DEPLOYMENT_ID="local-saved-ask",
+            CONTROLS_DATA_KEY_FILE=str(data_dir / "execution.key"),
+        )
     # Delay all settings/engine imports until local environment is complete.
     from .conversations.ledger import DeletionLedger
     from .conversations.migration import migrate
@@ -227,6 +237,10 @@ def configure(host: DemoHost, data_dir: Path, save_dialogue: bool) -> None:
     # ledger alongside an existing DB must never be silently recreated.
     DeletionLedger(str(data_dir / "deletions.jsonl")).initialize()
     migrate(engine)
+    if controlled_stub:
+        from .controls.local_demo import initialize
+
+        initialize(engine, data_dir)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -236,6 +250,11 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--env-file", type=Path, default=ROOT / "backend" / ".env")
     parser.add_argument("--data-dir", type=Path, default=ROOT / "deployment" / "local")
     parser.add_argument("--save-dialogue", action="store_true")
+    parser.add_argument(
+        "--controlled-stub",
+        action="store_true",
+        help="Use controlled Ask and a local model stub; no paid model",
+    )
     args = parser.parse_args(argv)
     if any(not 0 <= port <= 65535 for port in (args.api_port, args.frontend_port)):
         parser.error("ports must be between 0 and 65535")
@@ -244,6 +263,7 @@ def main(argv: list[str] | None = None) -> None:
     api_socket = socket.socket()
     frontend = None
     directory_lock = None
+    worker_stop = worker_thread = None
     try:
         try:
             check_loopback_port(args.api_port)
@@ -260,7 +280,7 @@ def main(argv: list[str] | None = None) -> None:
         load_dotenv(args.env_file, override=False)
         try:
             directory_lock = lock_directory(args.data_dir.resolve())
-            configure(host, args.data_dir.resolve(), args.save_dialogue)
+            configure(host, args.data_dir.resolve(), args.save_dialogue, args.controlled_stub)
         except (OSError, ValueError, HTTPException):
             parser.error(
                 "local setup failed; check pack/configuration, local deletion ledger, "
@@ -269,6 +289,10 @@ def main(argv: list[str] | None = None) -> None:
         server = uvicorn.Server(
             uvicorn.Config("app.main:app", host="127.0.0.1", access_log=False, log_level="warning")
         )
+        if args.controlled_stub:
+            from .controls.local_demo import start_worker
+
+            worker_stop, worker_thread = start_worker()
         thread = threading.Thread(target=frontend.serve_forever, daemon=True)
         thread.start()
         print(f"Local demo: {host.origin}/dev-client.html", flush=True)
@@ -280,6 +304,10 @@ def main(argv: list[str] | None = None) -> None:
             frontend.shutdown()
             thread.join(timeout=5)
     finally:
+        if worker_stop is not None:
+            worker_stop.set()
+        if worker_thread is not None:
+            worker_thread.join(timeout=5)
         if frontend is not None:
             frontend.server_close()
         api_socket.close()

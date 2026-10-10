@@ -58,7 +58,7 @@ class ConversationStore:
             turn = session.get(Turn, (cid, request_id))
             if turn is None:
                 if reading:
-                    return self.metadata(row)
+                    return {**self.metadata(row), "_turn_status": None}
                 if row.revision != revision or (
                     row.pending_id and row.pending_until > int(self.clock())
                 ):
@@ -75,7 +75,7 @@ class ConversationStore:
                     raise HTTPException(409, "conversation changed; refresh history")
             elif not reading:
                 raise HTTPException(409, "turn failed; refresh history")
-            return self.metadata(row)
+            return {**self.metadata(row), "_turn_status": turn.status if turn else None}
 
     def _ready(self, *, saving: bool = True) -> None:
         (self.policy if saving else replace(self.policy, enabled=True)).require()

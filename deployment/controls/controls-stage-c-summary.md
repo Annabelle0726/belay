@@ -114,3 +114,38 @@ Stage B page failure/duplicate/late-response checks adapted to the retained UI.
 Earlier integration-harness/syntax failures were fixed before the final run.
 Diff whitespace check passed. PostgreSQL races, full backend and visual browser
 verification remain pending. Commit: this C3 commit (number recorded in C4).
+
+## C4 — failure hardening, PostgreSQL races and no-model demo
+
+C3 commit: `d9812d9`. Files: controls saved/data/HTTP/worker modules, R2 repository/
+router/bounds, `app/local_dev.py`, new `controls/local_demo.py`, saved/PG/launcher/
+sidecar tests, UI recovery/status handling, CI, configuration/privacy/frontend
+docs and `controls-stage-c-protocol.md`.
+
+Result: terminal failed/unknown tasks now mark their original R2 turn accordingly;
+accounting holds remain unchanged. Completed reads require the R2 receipt.
+Revision denials have a structured conflict code; obsolete jobs cannot infer an
+already completed turn. Provider bounds see the configured provider identity.
+Protected transport denies caching error responses as well. Recovering an old
+request preserves a newly typed question and says it has not been submitted.
+The explicit loopback `--controlled-stub` mode provisions a separate demo DB,
+signed synthetic account and worker with local-only model factories.
+
+Validation before this commit: **43 targeted backend tests passed**, including
+saved jobs, real PG process/race tests, worker and controls HTTP; **21 launcher
+tests passed**; **70 frontend tests passed**. PG combined acceptance (saved +
+Stage B + R2 migration/concurrency) had **7 passed**. Strengthened the publication-
+first race to observe an actual blocked PostgreSQL row lock, rather than rely on
+timing. Real Chromium exercised saved completion, reload, lost POST recovery
+(one POST only) and deletion with **0 page errors**, blocking non-loopback browser
+requests. Screenshot was inspected outside Git in the temporary demo directory.
+
+Full-suite findings: first SQLite run had **739 passed, 13 skipped, 1 failed**
+(old sidecar route whitelist; updated to include the controlled endpoints).
+First PostgreSQL run had **743 passed, 7 skipped, 15 failed**: the new PG test
+helper leaked `_skeleton` into later governance tests' environment. The fixture
+now restores that selection with monkeypatch; no governance rule/test was relaxed.
+Mypy initially hit a stale pytest cache, then reported four new typing errors;
+the cache-independent run passed after fixing those errors. Ruff passed.
+Final full SQLite/PostgreSQL and quality reruns remain C5 work, not claimed here.
+Commit: this C4 commit (recorded in C5).

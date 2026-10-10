@@ -194,6 +194,13 @@ def test_no_grade_write_route_exists():
         ("/quad/v1/conversations/{cid}", ("DELETE", "GET")),
         ("/quad/v1/conversations/{cid}/messages", ("GET",)),
         ("/quad/v1/conversations/{cid}/turns", ("POST",)),
+        ("/quad/v1/conversations/{cid}/jobs/config", ("GET",)),
+        ("/quad/v1/conversations/{cid}/jobs", ("POST",)),
+        ("/quad/v1/conversations/{cid}/jobs/by-request/{request_id}", ("GET",)),
+        ("/quad/v1/jobs/config", ("GET",)),
+        ("/quad/v1/jobs", ("POST",)),
+        ("/quad/v1/jobs/by-request/{request_id}", ("GET",)),
+        ("/quad/v1/jobs/{job_id}", ("GET",)),
     }
 
 

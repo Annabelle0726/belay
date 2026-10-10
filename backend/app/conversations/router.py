@@ -118,7 +118,15 @@ def live_signals(released: dict, max_bytes: int) -> dict:
 
 
 def build_router(
-    prefix, consent_router, pack, llm_factory, *, engine=None, policy=None, tutor=run_turn
+    prefix,
+    consent_router,
+    pack,
+    llm_factory,
+    *,
+    engine=None,
+    policy=None,
+    tutor=run_turn,
+    repository_factory=None,
 ):
     if engine is None:
         from ..store.db import engine as default_engine
@@ -126,6 +134,8 @@ def build_router(
         engine = default_engine
 
     def store():
+        if repository_factory is not None:
+            return repository_factory()
         return ConversationStore(engine, policy or Policy.from_settings(settings))
 
     api = APIRouter(

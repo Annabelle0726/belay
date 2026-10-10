@@ -24,7 +24,7 @@ globalThis.belayRequestJSON = async function (url, options = {}, { timeoutMs = 9
   const controller = new AbortController();
   let timer;
   const request = async () => {
-    const response = await fetch(url, { ...options, signal: controller.signal });
+    const response = await fetch(url, { cache:"no-store", ...options, signal: controller.signal });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
       const code = data?.detail?.code;

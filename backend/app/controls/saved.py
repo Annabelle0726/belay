@@ -59,7 +59,7 @@ def check(store, conn, job_id, identity, *, reading=False):
     if binding["policy"] != repo.policy.policy_id:
         raise ControlError("conversation_unavailable", 404)
     try:
-        return repo.check_turn(
+        result = repo.check_turn(
             identity,
             binding["conversation"],
             job_id,
@@ -67,6 +67,13 @@ def check(store, conn, job_id, identity, *, reading=False):
             conn,
             reading=reading,
         )
+        if reading:
+            from .admission import jobs
+
+            state = conn.execute(select(jobs.c.state).where(jobs.c.id == job_id)).scalar_one()
+            if state == "completed" and result["_turn_status"] != "completed":
+                raise ControlError("publication_unavailable", 503)
+        return result
     except HTTPException as exc:
         raise ControlError(
             "conversation_conflict" if exc.status_code == 409 else "conversation_unavailable",
@@ -89,7 +96,15 @@ def submit(store, identity, cid, request_id, revision, payload, route):
     with store.ledger.transaction() as conn:
         previous = link(conn, job_id)
         if previous is None:
-            repo.check_turn(identity, cid, job_id, revision, conn)
+            try:
+                repo.check_turn(identity, cid, job_id, revision, conn)
+            except HTTPException as exc:
+                raise ControlError(
+                    "conversation_conflict"
+                    if exc.status_code == 409
+                    else "conversation_unavailable",
+                    exc.status_code,
+                ) from None
         elif (previous["conversation"], previous["revision"]) != (cid, revision):
             raise ControlError("operation_conflict", 409)
         # Route + target + revision are part of the immutable operation signature.
@@ -124,7 +139,7 @@ def begin(store, job, identity, payload):
         from ..conversations.router import PLACEHOLDER
 
         message = payload.get("recent", [{}])[-1].get("text", "")
-        repo.begin(
+        replay = repo.begin(
             identity,
             binding["conversation"],
             job["id"],
@@ -133,6 +148,10 @@ def begin(store, job, identity, payload):
             PLACEHOLDER if payload.get("_support") else message,
             connection=conn,
         )
+        if replay is not None:
+            raise ControlError(
+                "publication_unavailable", 503
+            )  # Never infer an already completed turn again.
         # Completed history is fetched from R2, never supplied by the browser.
         recent = recent_window(
             repo.context(identity, binding["conversation"]),
@@ -173,9 +192,12 @@ def cleanup_in(ledger, conn):
     rows = conn.execute(select(links)).mappings().all()
     if not rows:
         return
+    from sqlalchemy import update
+
     from ..config import settings
     from ..conversations.ledger import DeletionLedger
-    from ..conversations.models import Conversation
+    from ..conversations.models import Conversation, Turn
+    from .admission import jobs
     from .data import data
 
     deleted = DeletionLedger(settings.dialogue_deletion_ledger_file).deleted()
@@ -195,3 +217,25 @@ def cleanup_in(ledger, conn):
             or binding["conversation"] in deleted
         ):
             conn.execute(data.delete().where(data.c.job == binding["job"]))
+        else:
+            state = conn.execute(
+                select(jobs.c.state).where(jobs.c.id == binding["job"])
+            ).scalar_one()
+            if state in {"failed", "cancelled", "unknown"}:
+                conn.execute(
+                    update(Conversation)
+                    .where(
+                        Conversation.id == binding["conversation"],
+                        Conversation.pending_id == binding["job"],
+                    )
+                    .values(pending_id=None, pending_until=0)
+                )
+                conn.execute(
+                    update(Turn)
+                    .where(
+                        Turn.conversation_id == binding["conversation"],
+                        Turn.request_id == binding["job"],
+                        Turn.status == "pending",
+                    )
+                    .values(status="unknown" if state == "unknown" else "failed")
+                )

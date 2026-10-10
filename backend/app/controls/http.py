@@ -7,5 +7,10 @@ from .contracts import ControlError
 
 
 def control_http_error(exc: ControlError) -> HTTPException:
-    headers = {"Retry-After": str(exc.retry_after)} if exc.retry_after is not None else {}
+    headers = {
+        "Cache-Control": "no-store",
+        "Vary": "Authorization, X-Belay-Institution, X-Belay-Class",
+    }
+    if exc.retry_after is not None:
+        headers["Retry-After"] = str(exc.retry_after)
     return HTTPException(exc.status, {"code": exc.code}, headers=headers)
