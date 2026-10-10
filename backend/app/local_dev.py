@@ -174,32 +174,7 @@ def configure(
             serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
         )
     )
-    from .core.registry import get_active_pack
-
-    versions = {
-        exercise["id"]: "local-v1"
-        for module in get_active_pack().curriculum()
-        for exercise in module["exercises"]
-    }
     authorization = data_dir / "authorization.json"
-    authorization.write_text(
-        json.dumps(
-            {
-                "exercise_versions": versions,
-                "subjects": {
-                    SUBJECT: [
-                        {
-                            "institution_id": "local-demo",
-                            "class_id": "local-class",
-                            "learner_id": LEARNER,
-                            "assignments": versions,
-                        }
-                    ]
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
     # Ignore inherited dialogue settings: the explicit local flag selects a
     # synthetic one-hour policy, never an institutional retention approval.
     for name in tuple(os.environ):
@@ -228,7 +203,33 @@ def configure(
             CONTROLS_DEPLOYMENT_ID="local-saved-ask",
             CONTROLS_DATA_KEY_FILE=str(data_dir / "execution.key"),
         )
-    # Delay all settings/engine imports until local environment is complete.
+    # Packs may transitively import config via runner/controls. Set the complete
+    # environment BEFORE loading a pack, not just before direct settings imports.
+    from .core.registry import get_active_pack
+
+    versions = {
+        exercise["id"]: "local-v1"
+        for module in get_active_pack().curriculum()
+        for exercise in module["exercises"]
+    }
+    authorization.write_text(
+        json.dumps(
+            {
+                "exercise_versions": versions,
+                "subjects": {
+                    SUBJECT: [
+                        {
+                            "institution_id": "local-demo",
+                            "class_id": "local-class",
+                            "learner_id": LEARNER,
+                            "assignments": versions,
+                        }
+                    ]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     from .conversations.ledger import DeletionLedger
     from .conversations.migration import migrate
     from .store.db import engine
