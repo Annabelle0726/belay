@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """
-Deployability tests (6c): the preflight doctor + the minimal /quad/v1 embed turn
-against the _skeleton pack. No network (control stance; provider probe skipped).
+Deployability tests: preflight, the legacy /quad/v1 turn contract, and the
+controlled embed page against the _skeleton pack. No paid model calls.
 """
 
 from __future__ import annotations
@@ -74,13 +74,17 @@ def test_embed_demo_turn_against_skeleton(monkeypatch):
     assert "intervention" in body and "message" in body
 
 
-def test_embed_demo_page_targets_quad_and_skeleton():
+def test_embed_demo_page_targets_controlled_quad_jobs_and_skeleton():
     path = os.path.normpath(
         os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "embed-demo.html")
     )
     assert os.path.exists(path), path
     with open(path, encoding="utf-8") as fh:
         html = fh.read()
-    assert "/quad/v1/turn" in html
+    assert '<script src="ask-jobs.js"></script>' in html
+    assert "askJobs.ask(base, '/quad/v1/jobs'" in html
+    assert "askJobs.recover(base,'/quad/v1/jobs'" in html
+    assert "askJobs.acknowledge(data)" in html
+    assert "/quad/v1/turn" not in html
     assert "echo-1" in html  # the _skeleton pack exercise
     assert "gh:12345" in html  # pseudonymous identity only
