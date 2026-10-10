@@ -17,9 +17,11 @@ from fastapi import HTTPException
 from ..agent import Provider, get_llm, run_turn
 from ..agent.orchestrator import _distress_turn
 from ..config import settings
+from ..conversations.bounds import BoundedProvider
 from ..core.registry import get_active_pack
 from ..store import ConsentRouter, InMemoryStore, SqlStore
 from ..store.scoped import scoped_store
+from . import saved
 from .contracts import ControlError, Scope
 from .data import ExecutionData
 from .jobs_http import execution_store
@@ -70,6 +72,9 @@ class AskAdapter:
     def execute(self, job: dict) -> str:
         self.check(job)
         identity, payload = self.store.load(job)
+        payload, policy = saved.begin(
+            self.store, job, identity, {**payload, "_persona": self.pack.persona.id}
+        )
         exercise = self.pack.get_exercise(identity.exercise_id)
         # R1 consent routing and scoped content-free traces are unchanged.
         store = scoped_store(self.router, identity)
@@ -84,7 +89,11 @@ class AskAdapter:
                 self.pack,
             )
         else:
-            response = run_turn({**payload, "exercise": exercise}, self.llm, store)
+            response = run_turn(
+                {**payload, "exercise": exercise},
+                BoundedProvider(self.llm, policy) if policy else self.llm,
+                store,
+            )
         self.check(job)
         return self.store.stage(job, response)
 

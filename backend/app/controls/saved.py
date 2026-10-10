@@ -11,7 +11,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from fastapi import HTTPException
-from sqlalchemy import Column, Integer, String, Table, select
+from sqlalchemy import Column, Integer, String, Table, inspect, select
 
 from ..conversations.repository import ConversationStore
 from .contracts import ControlError
@@ -30,6 +30,8 @@ links = Table(
 def repository(store):
     injected = getattr(store, "dialogue", None)
     if injected is not None:
+        if injected.engine.url != store.ledger.engine.url:
+            raise ControlError("saved_database_mismatch", 503)
         return injected
     from ..config import settings
     from ..conversations.policy import Policy
@@ -78,6 +80,11 @@ def submit(store, identity, cid, request_id, revision, payload, route):
     identity = replace(
         identity, exercise_id=meta["exercise_id"], exercise_version=meta["exercise_version"]
     )
+    payload = {
+        **payload,
+        "participant_id": identity.learner_id,
+        "exercise_id": identity.exercise_id,
+    }
     job_id = store.job_id(identity, request_id)
     with store.ledger.transaction() as conn:
         previous = link(conn, job_id)
@@ -95,6 +102,13 @@ def submit(store, identity, cid, request_id, revision, payload, route):
                     job=job_id, conversation=cid, revision=revision, policy=repo.policy.policy_id
                 )
             )
+        from .data import data
+
+        conn.execute(
+            data.update()
+            .where(data.c.job == job_id, data.c.expires > meta["expires_at"])
+            .values(expires=meta["expires_at"])
+        )
         return result
 
 
@@ -142,3 +156,42 @@ def complete(store, conn, job, identity, value):
         connection=conn,
     )
     return {**value, "conversation_id": binding["conversation"], "revision": result["revision"]}
+
+
+def erase_in(conn, cid):
+    """Called by R2 delete/maintenance inside its own transaction. No refund."""
+    if not inspect(conn).has_table(links.name):
+        return
+    from .data import data
+
+    conn.execute(
+        data.delete().where(data.c.job.in_(select(links.c.job).where(links.c.conversation == cid)))
+    )
+
+
+def cleanup_in(ledger, conn):
+    rows = conn.execute(select(links)).mappings().all()
+    if not rows:
+        return
+    from ..config import settings
+    from ..conversations.ledger import DeletionLedger
+    from ..conversations.models import Conversation
+    from .data import data
+
+    deleted = DeletionLedger(settings.dialogue_deletion_ledger_file).deleted()
+    now = ledger.now(conn)
+    for binding in rows:
+        row = (
+            conn.execute(
+                select(Conversation.__table__).where(Conversation.id == binding["conversation"])
+            )
+            .mappings()
+            .first()
+        )
+        if (
+            row is None
+            or row["deleted"]
+            or row["expires_at"] <= now
+            or binding["conversation"] in deleted
+        ):
+            conn.execute(data.delete().where(data.c.job == binding["job"]))

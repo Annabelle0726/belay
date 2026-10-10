@@ -7,6 +7,7 @@ from dataclasses import replace
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from starlette.concurrency import run_in_threadpool
 
@@ -41,6 +42,12 @@ class NewTurn(BaseModel):
     stance: Literal["peer", "oracle", "control"] = "peer"
     result: dict | None = None
     overlay: dict | None = None
+
+
+class SavedSubmission(NewTurn):
+    exercise_id: str = Field(max_length=64)
+    exercise_version: str = Field(max_length=64)
+    participant_id: str
 
 
 def pii_content(text: str) -> bool:
@@ -135,6 +142,8 @@ def build_router(
         return {
             "enabled": p.enabled,
             "optional": True,
+            "controlled": settings.controls_mode == "enforced" or settings.controls_jobs_enabled,
+            "recovery_scope": request.state.identity.grant_ref,
             "policy_id": p.policy_id,
             "retention_seconds": p.retention_seconds if p.enabled else 0,
             "retention_clock": "creation",
@@ -170,8 +179,78 @@ def build_router(
         store().delete(request.state.identity, cid)
         return Response(status_code=204)
 
+    def submit_job(request, cid, body):
+        from ..controls.jobs_http import execution_store
+        from ..controls.saved import submit
+
+        meta = store().get(request.state.identity, cid)
+        if isinstance(body, SavedSubmission) and (body.exercise_id, body.exercise_version) != (
+            meta["exercise_id"],
+            meta["exercise_version"],
+        ):
+            raise denied()
+        if len(body.message.encode()) > store().policy.max_message_bytes:
+            raise HTTPException(413, "message limit exceeded")
+        payload = {
+            "event": "chat",
+            "mode": body.mode,
+            "stance": body.stance,
+            "source": body.source,
+            "result": body.result,
+            "overlay": body.overlay,
+            "recent": [{"who": "student", "text": body.message}],
+        }
+        return submit(
+            execution_store(),
+            request.state.identity,
+            cid,
+            body.request_id,
+            body.expected_revision,
+            payload,
+            prefix + "/conversations",
+        )
+
+    @api.get("/{cid}/jobs/config")
+    def job_config(request: Request, cid: str):
+        from ..controls.jobs_http import execution_store
+        from ..controls.saved import repository
+
+        store().get(request.state.identity, cid)
+        controls = execution_store()
+        repository(controls)._ready()
+        with controls.ledger.transaction() as conn:
+            policy = controls.ledger.policy(conn)
+        identity = request.state.identity
+        return {
+            "recovery_scope": identity.grant_ref,
+            "learner_id": identity.learner_id,
+            "assignments": dict(identity.active_assignments),
+            "poll_seconds": policy.poll_seconds,
+            "result_seconds": policy.result_seconds,
+            "notice": "Saved Ask uses bounded temporary execution data. Saved dialogue keeps its existing creation-based retention.",
+        }
+
+    @api.post("/{cid}/jobs", status_code=202)
+    def saved_job(request: Request, cid: str, body: SavedSubmission):
+        return submit_job(request, cid, body)
+
+    @api.get("/{cid}/jobs/by-request/{request_id}")
+    def job_status(request: Request, cid: str, request_id: str):
+        from ..controls.jobs_http import execution_store
+        from ..controls.saved import link
+
+        controls = execution_store()
+        job_id = controls.job_id(request.state.identity, request_id)
+        with controls.ledger.transaction() as conn:
+            binding = link(conn, job_id)
+            if binding is None or binding["conversation"] != cid:
+                raise denied()
+        return controls.status(request.state.identity, job_id)
+
     @api.post("/{cid}/turns")
     async def turn(request: Request, cid: str, body: NewTurn):
+        if settings.controls_mode == "enforced" or settings.controls_jobs_enabled:
+            return JSONResponse(submit_job(request, cid, body), status_code=202)
         repository = store()
         identity = request.state.identity
         meta = repository.get(identity, cid)

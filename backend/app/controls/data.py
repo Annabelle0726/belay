@@ -22,6 +22,7 @@ from ..auth import ExecutionGrant, Identity, execution_grant, recheck_grant
 from ..config import settings
 from ..integrations.quad.pii import PIIRejected, assert_no_pii
 from ..schemas import SolTurnResponse
+from . import saved
 from .admission import Admission, jobs
 from .contracts import Amount, ControlError, Scope
 from .ledger import Ledger, metadata
@@ -162,6 +163,7 @@ class ExecutionData:
             existing = conn.execute(select(jobs).where(jobs.c.id == job_id)).mappings().first()
             if existing:
                 self._owned(conn, job_id, identity)
+                saved.check(self, conn, job_id, identity, reading=True)
                 if existing["fingerprint"] != fingerprint:
                     raise ControlError("operation_conflict", 409)
                 return self.admission._public(dict(existing))
@@ -188,6 +190,7 @@ class ExecutionData:
     def load(self, job: dict) -> tuple[Identity, dict]:
         with self.ledger.transaction() as conn:
             identity = recheck_grant(self._grant(conn, job["id"]))
+            saved.check(self, conn, job["id"], identity)
             payload = self._get(conn, job["id"], job["payload_ref"], "input")
             return identity, payload
 
@@ -197,28 +200,56 @@ class ExecutionData:
             raise ControlError("invalid_result", 502)
         with self.ledger.transaction() as conn:
             self.admission._live(conn, job["id"], job["fence"])
-            recheck_grant(self._grant(conn, job["id"]))
+            identity = recheck_grant(self._grant(conn, job["id"]))
+            conversation = saved.check(self, conn, job["id"], identity)
             payload = self._get(conn, job["id"], job["payload_ref"], "input")
             if payload.get("_support"):
                 value = {**value, "_support_result": True, "message": "Support response available."}
+            if conversation is not None:
+                from ..conversations.router import PLACEHOLDER, private_content
+
+                screened = payload.get("_support") or private_content(
+                    value["message"] + (value.get("check_question") or "")
+                )
+                value = {
+                    "message": PLACEHOLDER if screened else value["message"],
+                    "check_question": None if screened else value.get("check_question"),
+                }
+                if payload.get("_support"):
+                    value["_support_result"] = True
+                    value["unsaved_exchange"] = True
             require_storable(value)
+            expires = self.ledger.now(conn) + self.ledger.policy(conn).result_seconds
+            if conversation is not None:
+                expires = min(expires, conversation["expires_at"])
             return self._put(
                 conn,
                 job["id"],
                 "pending",
                 value,
-                self.ledger.now(conn) + self.ledger.policy(conn).result_seconds,
+                expires,
             )
 
     def publish(self, job: dict, ref: str) -> None:
         with self.ledger.transaction() as conn:
             self.admission._live(conn, job["id"], job["fence"])
-            recheck_grant(self._grant(conn, job["id"]))
+            identity = recheck_grant(self._grant(conn, job["id"]))
+            saved.check(self, conn, job["id"], identity)
             self._get(conn, job["id"], job["payload_ref"], "input")
             value = self._get(conn, job["id"], ref, "pending")
-            if not SolTurnResponse.model_validate(value).message.strip():
+            if saved.link(conn, job["id"]) is None:
+                if not SolTurnResponse.model_validate(value).message.strip():
+                    raise ControlError("invalid_result", 502)
+            elif not isinstance(value.get("message"), str) or not value["message"].strip():
                 raise ControlError("invalid_result", 502)
-            conn.execute(data.update().where(data.c.id == ref).values(kind="result"))
+            value = saved.complete(self, conn, job, identity, value)
+            require_storable(value)
+            raw = json.dumps(value, ensure_ascii=False, allow_nan=False).encode()
+            conn.execute(
+                data.update()
+                .where(data.c.id == ref)
+                .values(kind="result", body=self.cipher.encrypt(raw).decode(), bytes=len(raw))
+            )
             self.admission.finish(job["id"], job["fence"], ref, authorized=True, connection=conn)
             self.cleanup_in(conn)
 
@@ -227,9 +258,11 @@ class ExecutionData:
         # consume the original owner's polling window or learn its state.
         with self.ledger.transaction() as conn:
             self._owned(conn, job_id, identity)
+            saved.check(self, conn, job_id, identity, reading=True)
         status = self.admission.status(self.scope(identity), job_id)
         with self.ledger.transaction() as conn:
             self._owned(conn, job_id, identity)
+            saved.check(self, conn, job_id, identity, reading=True)
             self.cleanup_in(conn)
             response = None
             if status["state"] == "completed":
@@ -279,6 +312,7 @@ def temporary_input(payload: dict) -> dict:
 
 
 def cleanup_in(ledger: Ledger, conn: Connection) -> int:
+    saved.cleanup_in(ledger, conn)
     now = ledger.now(conn)
     Admission(ledger)._expire(conn, now)
     terminal = select(jobs.c.id).where(jobs.c.state.not_in(["queued", "running"]))
