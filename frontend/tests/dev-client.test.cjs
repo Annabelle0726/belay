@@ -48,8 +48,11 @@ async function setup(state={}) {
     const body=options.body?JSON.parse(options.body):{};
     let result={},status=200;
     if(url.endsWith('/api/curriculum')) result={modules:[{exercises:[{id:'echo-1',title:'Echo',prompt:'Learn loops',starter:'print(1)'}]}]};
-    else if(url.endsWith('/jobs/config')) result={recovery_scope:'a'.repeat(64),learner_id:state.identity.learner_id,
-      assignments:{'echo-1':'v1'},poll_seconds:1,result_seconds:300,notice:'Temporary recovery'};
+    else if(url.endsWith('/jobs/config')) {
+      if(state.jobsConfigCode) {status=503;result={detail:{code:state.jobsConfigCode}};}
+      else result={recovery_scope:'a'.repeat(64),learner_id:state.identity.learner_id,
+        assignments:{'echo-1':'v1'},poll_seconds:1,result_seconds:300,notice:'Temporary recovery'};
+    }
     else if(url.includes('/jobs/by-request/')) {
       if(state.unknown) result={id:'b'.repeat(64),state:'unknown',result:null};
       else if(url.includes('/conversations/')) result=state.savedResult;
@@ -253,6 +256,33 @@ test('run results show printed values and check feedback without exposing the AP
   assert.doesNotMatch(env.nodes.result.textContent,/"pack"|"goalMet"|"metric"/);
   const turn=env.calls.find(c=>c.url.endsWith('/api/sol/jobs'));
   assert.deepEqual(JSON.parse(turn.options.body).result,env.state.runResult); // Full context still goes to Sol.
+  assert.equal(JSON.parse(turn.options.body).event,'run');
+  assert.equal(env.calls.filter(c=>c.url.endsWith('/api/run')).length,1);
+  assert.equal(env.calls.filter(c=>c.url.endsWith('/api/sol/jobs')).length,1);
+  assert.match(env.nodes['chat-feed'].children.at(-1).innerHTML,/Live answer/);
+});
+
+test('Run succeeds but disabled feedback is a confirmed non-submission, with no request pointer or POST',async()=>{
+ const env=await setup({jobsConfigCode:'jobs_disabled'});
+ assert.doesNotMatch(env.nodes.status.textContent,/not confirmed|still be running/);
+ await env.nodes.run.fire('click');
+ assert.match(env.nodes.result.textContent,/Code ran successfully/);
+ assert.match(env.nodes.status.textContent,/Code ran.*No new tutor feedback was submitted.*not enabled/);
+ assert.equal(env.nodes.ask.textContent,'Ask Sol');
+ assert.equal(env.calls.filter(c=>c.url.endsWith('/api/sol/jobs')).length,0);
+ assert.equal([...env.state.entries.keys()].some(k=>k.startsWith('belay.ask.')),false);
+});
+
+test('Run keeps a prior unknown tutor request and does not submit feedback for the new run',async()=>{
+ const env=await setup({unknown:true});await env.nodes.run.fire('click');
+ const before=JSON.stringify([...env.state.entries]);
+ await env.nodes.run.fire('click');
+ assert.equal(env.calls.filter(c=>c.url.endsWith('/api/run')).length,2);
+ assert.equal(env.calls.filter(c=>c.url.endsWith('/api/sol/jobs')).length,1);
+ assert.equal(JSON.stringify([...env.state.entries]),before);
+ assert.match(env.nodes.status.textContent,/previous tutor request.*no feedback for this run was submitted/);
+ assert.equal(env.nodes.ask.textContent,'Check request status');
+ assert.match(env.nodes.result.textContent,/Code ran successfully/);
 });
 
 test('empty output has a useful hint and runtime output stays literal text',async()=>{

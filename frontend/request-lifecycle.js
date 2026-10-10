@@ -29,7 +29,8 @@ globalThis.belayRequestJSON = async function (url, options = {}, { timeoutMs = 9
       const data = await response.json().catch(() => ({}));
       const code = data?.detail?.code;
       // A generic 5xx/coordinator outage may have happened after dispatch.
-      const denied = ["verified_execution_required", "invalid_controls_mode", "controls_not_initialized"];
+      const denied = ["verified_execution_required", "invalid_controls_mode", "controls_not_initialized",
+        "jobs_disabled", "jobs_not_configured"];
       const uncertain = (response.status >= 500 && !denied.includes(code)) ||
         ["execution_unknown", "worker_lost", "execution_deadline"].includes(code);
       const error = globalThis.belayRequestError(code || "request_failed", uncertain,
