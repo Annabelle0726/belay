@@ -4,59 +4,160 @@
   "use strict";
   const $ = id => document.getElementById(id);
   const base = () => $("backend").value.replace(/\/$/, "");
+  const glassBox = $("glass-box"), signalsStorage = $("signals-storage");
   const assignedStance = new URL(window.location.href).searchParams.get("stance") || "peer";
   const stance = ["peer", "oracle", "control"].includes(assignedStance) ? assignedStance : "peer";
   let exercises = {}, dialogue, scope, identity, lastResult = null, busy = false, generation = 0;
   const askJobs = globalThis.belayAskJobs();
   let temporaryMessages = [], recent = [], savedView = false;
   let historyContext = null, liveContext = null;
+  let localBusy = false, sessionBusy = false;
+  let records = [], activeRecord = null, feedMessages = [], requestTarget = null;
+  let savedConversation = null, glassOwner = null;
+
+  function startRecord(event) {
+    const record = {event, source:$("source").value, question:$("question").value.trim(),
+      execution:event === "run" ? "running" : "not_run", feedback:"not_submitted", messages:[]};
+    records.push(record); activeRecord = record; requestTarget = record;
+    clearTelemetry(); renderFeed(feedMessages);
+    return record;
+  }
+  function requestState(state, ref) {
+    if (!ref?.request_id) return;
+    if (ref.error) {recordFailure(ref.error, null); return;}
+    let record = records.find(r => r.request_id === ref.request_id);
+    if (!record) {
+      record = !ref.recovered && requestTarget && !requestTarget.request_id
+        ? requestTarget : {messages:[], execution:"not_retained", restored:true};
+      if (!records.includes(record)) records.push(record);
+      record.request_id = ref.request_id;
+    }
+    record.job_id = ref.job_id || record.job_id;
+    record.feedback = state;
+    if (state === "completed") {record.note = ""; record.code = null;}
+    if (ref.recovered && requestTarget && requestTarget !== record) {
+      requestTarget.feedback = "not_submitted";
+      requestTarget.note = "No new feedback submitted. The original request is being recovered in its own record.";
+    }
+    renderFeed(feedMessages);
+  }
+  function recordFailure(error, fallback) {
+    const record = records.find(r => r.request_id === error.request_id) || fallback;
+    if (!record) return;
+    record.feedback = error.uncertain ? "unknown" : error.code === "result_expired" ? "result_expired" : "blocked";
+    record.note = error.message;
+    record.code = error.code;
+    renderFeed(feedMessages);
+  }
 
   function escapeHtml(text) {
     return String(text || "").replace(/[&<>]/g, c => ({"&":"&amp;", "<":"&lt;", ">":"&gt;"}[c]));
   }
   function renderSafeMarkdown(text) {
     if (!window.marked || !window.DOMPurify) return escapeHtml(text);
-    const clean = window.DOMPurify.sanitize(window.marked.parse(String(text || "")), {
-      USE_PROFILES: {html: true}
-    });
+    const policy = {USE_PROFILES: {html: true}, FORBID_TAGS: ["style"], FORBID_ATTR: ["style"]};
+    const clean = window.DOMPurify.sanitize(window.marked.parse(String(text || "")), policy);
     const container = document.createElement("div");
     container.innerHTML = clean;
     container.querySelectorAll("a").forEach(link => {
+      const href = link.getAttribute("href");
+      if (href) {
+        try {
+          if (!["http:", "https:", "mailto:"].includes(new URL(href, window.location.href).protocol))
+            link.removeAttribute("href");
+        } catch { link.removeAttribute("href"); }
+      }
       link.setAttribute("target", "_blank");
       link.setAttribute("rel", "noopener noreferrer");
     });
+    container.querySelectorAll("pre code").forEach(code => {
+      const language = /(?:^|\s)language-([\w-]+)/.exec(code.className)?.[1];
+      if (language && window.hljs?.getLanguage(language)) {
+        // Highlight literal code only; sanitize generated spans before insertion.
+        code.innerHTML = window.DOMPurify.sanitize(window.hljs.highlight(code.textContent,
+          {language, ignoreIllegals:true}).value, policy);
+      }
+    });
     return container.innerHTML;
   }
-  function bubble(message) {
-    const feed = $("chat-feed");
+  function bubble(message, feed = $("chat-feed")) {
     if (feed.children.length === 1 && feed.children[0].className === "chat-empty") feed.replaceChildren();
     const element = document.createElement("div");
     const student = message.role === "student";
     element.className = "bubble " + (student ? "bubble-user" : "bubble-tutor markdown-body");
+    if (!student && (!window.marked || !window.DOMPurify)) element.className += " markdown-plain";
     if (student) element.textContent = message.text;
     else element.innerHTML = renderSafeMarkdown(message.text);
-    if (message.status && message.status !== "completed") {
-      const state = document.createElement("div");
-      state.className = "muted";
-      state.textContent = message.status === "pending" ? "Awaiting reply…" : "Reply unfinished. Refresh before continuing.";
-      element.appendChild(state);
-    }
     feed.appendChild(element);
     feed.scrollTop = feed.scrollHeight;
   }
   function renderFeed(messages) {
+    feedMessages = messages;
     const feed = $("chat-feed");
+    if (glassBox) signalsStorage.appendChild(glassBox);
     feed.replaceChildren();
-    if (!messages.length) {
+    // Operation notices live inside their own group, never below an unrelated reply.
+    $("status").hidden = records.length > 0;
+    const unassociated = [];
+    for (const message of messages) {
+      if (!message.request_id) {unassociated.push(message); continue;}
+      let record = records.find(r => r.request_id === message.request_id);
+      if (!record) {
+        record = {request_id:message.request_id, messages:[], restored:true, execution:"not_retained"};
+        records.push(record);
+      }
+      // Saved server sequence is stable across refresh/pagination; no positional pairing.
+      const index = record.messages.findIndex(m => message.sequence != null
+        ? m.sequence === message.sequence || (m.sequence == null && m.role === message.role)
+        : m.role === message.role);
+      if (index < 0) record.messages.push(message); else record.messages[index] = message;
+    }
+    function draw(record) {
+      const group = document.createElement("section"); group.className = "request-record";
+      group.setAttribute("aria-label", "Run and tutor feedback record");
+      group.setAttribute("data-feedback-state", record.feedback || "restored");
+      if (record.request_id) group.setAttribute("data-request-id", record.request_id);
+      if (record.question && record.request_id && !record.messages.some(m => m.role === "student"))
+        bubble({role:"student", text:record.question}, group);
+      record.messages.forEach(m => bubble(m, group));
+      const status = document.createElement("p"); status.className = "feedback-state";
+      status.setAttribute("role", "note");
+      status.setAttribute("aria-label", "System notice");
+      const hasAnswer = record.messages.some(m => m.role === "assistant" && (!m.status || m.status === "completed"));
+      status.textContent = record.code === "result_expired"
+        ? "This response can no longer be restored. For a new response, enter a question and choose Ask Sol."
+        : record.note ? "Tutor feedback: " + record.note :
+        !hasAnswer && record.feedback === "not_submitted" && record.execution !== "running" && !(record === activeRecord && busy)
+          ? "No tutor feedback submitted for this operation." : "";
+      if (record === glassOwner && record === activeRecord && hasAnswer && glassBox) group.appendChild(glassBox);
+      group.appendChild(status); feed.appendChild(group);
+    }
+    const sequence = r => Math.min(...r.messages.map(m => m.sequence).filter(Number.isInteger));
+    const historical = records.filter(r => r !== activeRecord).sort((a, b) =>
+      Number.isFinite(sequence(a)) && Number.isFinite(sequence(b)) ? sequence(a) - sequence(b) : 0);
+    if (unassociated.length || historical.length) {
+      unassociated.forEach(m => bubble(m)); historical.forEach(draw);
+      const boundary = document.createElement("div"); boundary.className = "history-boundary";
+      const line = document.createElement("hr"), label = document.createElement("p");
+      label.textContent = "Conversation history";
+      boundary.appendChild(line); boundary.appendChild(label); feed.appendChild(boundary);
+    }
+    if (activeRecord) {
+      const current = document.createElement("p"); current.className = "request-label";
+      current.textContent = "Current feedback"; feed.appendChild(current); draw(activeRecord);
+    }
+    if (!messages.length && !records.length) {
       const empty = document.createElement("div");
       empty.className = "chat-empty";
       empty.textContent = "— Conversation history will appear here —";
       feed.appendChild(empty);
-    } else messages.forEach(bubble);
+    }
     feed.scrollTop = feed.scrollHeight;
   }
   function clearTelemetry(note = "Run code or ask Sol to see signals from a new reply.") {
-    liveContext = null;
+    liveContext = null; glassOwner = null;
+    const box = glassBox;
+    if (box) {box.open = false; $("signals-storage").appendChild(box);}
     $("signals-status").textContent = note;
     for (const id of ["affect", "interv", "planner", "selfeval", "gov", "mem", "timings"]) {
       $(id).textContent = "—"; $(id).title = "";
@@ -64,7 +165,9 @@
     $("confbar").style.width = "0%"; $("conf").textContent = "—";
   }
   function clearTransient() {
+    records = []; activeRecord = null; requestTarget = null; feedMessages = [];
     temporaryMessages = []; recent = []; lastResult = null;
+    $("status").textContent = "";
     $("question").value = ""; $("result").textContent = "Run your code to see its output.";
     clearTelemetry();
   }
@@ -73,6 +176,10 @@
       identity = null; clearTransient(); renderFeed([]); return;
     }
     if (scope !== session.key || savedView !== session.enabled) clearTransient();
+    else if (savedView && savedConversation !== session.cid) {
+      records = []; activeRecord = null; requestTarget = null; feedMessages = [];
+    }
+    savedConversation = session.cid;
     scope = session.key; savedView = session.enabled; identity = session.config.identity;
     historyContext = JSON.stringify([session.key, session.cid, session.revision]);
     if (savedView) {
@@ -83,12 +190,14 @@
     }
     else renderFeed(temporaryMessages);
   }
-  function telemetry(out) {
+  function telemetry(out, owner = activeRecord) {
     out = out.live_signals || out;
     if (!out.components) {
       clearTelemetry("This reply has no live signals. History and retry responses do not include them; privacy screening can also omit them.");
       return;
     }
+    if (!owner || owner !== activeRecord || owner.feedback === "unknown") return;
+    glassOwner = owner; if (glassBox) glassBox.open = false;
     liveContext = historyContext;
     $("signals-status").textContent = "Signals from the latest live reply in this page session.";
     $("affect").textContent = "affect: " + (out.affective_state || "—");
@@ -102,6 +211,7 @@
     $("gov").textContent = out.components.governance?.prose || out.governance || "—";
     $("mem").textContent = `grasped: ${(out.memory?.grasped || []).join(", ") || "—"} | shaky: ${(out.memory?.shaky || []).join(", ") || "—"}`;
     $("timings").textContent = Object.entries(out.components.timings_ms || {}).map(([k,v]) => `${k}=${v}`).join(" ") || "—";
+    renderFeed(feedMessages);
   }
   async function json(path, body) {
     const response = await fetch(base() + path, {
@@ -120,8 +230,16 @@
     return response.json();
   }
   function setBusy(value) {
-    busy = value;
-    for (const id of ["ask", "run", "exercise", "backend", "mode"]) $(id).disabled = value;
+    localBusy = value;
+    updateBusy();
+  }
+  function updateBusy() {
+    const next = localBusy || sessionBusy;
+    if (next !== busy) $("feedback-announcement").textContent = next ? "Preparing tutor feedback." : "Processing finished.";
+    busy = next;
+    $("chat-feed").setAttribute("aria-busy", String(busy));
+    $("feedback-loading").hidden = !busy;
+    for (const id of ["ask", "run", "exercise", "backend", "mode"]) $(id).disabled = busy;
   }
   function pick() {
     generation++;
@@ -145,7 +263,9 @@
       if (!dialogue && Object.keys(exercises).length) {
         dialogue = window.BelayConversations.mount({
           container: $("conversation-controls"), base, exercise: () => $("exercise").value,
-          renderHistory, compact:true
+          renderHistory, compact:true, quietProgress:true,
+          onRequest: requestState,
+          onProcessing: value => { sessionBusy = value; updateBusy(); }
         });
       }
       $("status").textContent = "";
@@ -157,23 +277,36 @@
   }
   async function run() {
     if (busy) return false;
-    setBusy(true); $("status").textContent = "Running…";
+    const record = startRecord("run");
+    setBusy(true); $("status").textContent = "";
     lastResult = null; $("result").textContent = "Running your code…";
     try {
       const learner = identity?.learner_id || window.BELAY_LEARNER_ID;
       lastResult = await json("/api/run", {participant_id: learner,
         exercise_id: $("exercise").value, source: $("source").value});
       renderRunResult(lastResult);
-      $("status").textContent = lastResult.ok ? "Run completed." : "Run failed.";
-      return !!lastResult.ok;
+      const studentError = lastResult.pack?.execution_status === "student_error";
+      record.result = lastResult;
+      record.execution = lastResult.ok ? (lastResult.goalMet === false ? "checks_failed" : "completed")
+        : studentError ? "student_error" : lastResult.pack?.timed_out ? "timeout" : "infrastructure_error";
+      if (!lastResult.ok && !studentError) record.note = lastResult.pack?.timed_out
+        ? "Code execution timed out. No tutor feedback was submitted."
+        : "Code execution is unavailable. No tutor feedback was submitted.";
+      renderFeed(feedMessages);
+      $("status").textContent = lastResult.ok ? "Run completed." : studentError
+        ? "Your code raised an error. Requesting tutor feedback."
+        : "Code execution could not finish. No tutor feedback was submitted.";
+      return !!lastResult.ok || studentError;
     } catch (error) {
+      record.execution = "unknown"; record.note = "Code execution result not confirmed. No tutor feedback submitted.";
+      renderFeed(feedMessages);
       lastResult = null; $("status").textContent = error.message;
       $("result").textContent = "Could not run your code. " + error.message;
       return false;
     } finally { setBusy(false); }
   }
-  function renderRunResult(result) {
-    const target = $("result"), pack = result.pack || {};
+  function renderRunResult(result, target = $("result")) {
+    const pack = result.pack || {};
     target.replaceChildren();
     const status = document.createElement("p"); status.className = "run-status";
     status.textContent = !result.ok ? "Your code could not finish." :
@@ -207,10 +340,12 @@
   }
   async function ask(event = "chat") {
     if (busy || !dialogue) return;
+    const record = event === "run" ? activeRecord : startRecord("chat");
+    requestTarget = record;
     const typed = $("question").value.trim();
     const message = typed || (event === "run" ? "Help me understand the result of this run." : "Help me understand this code.");
     const originalScope = scope, requestGeneration = generation;
-    setBusy(true); $("status").textContent = "Sol is thinking…";
+    setBusy(true); $("status").textContent = "";
     try {
       const input = {message, source: $("source").value, result: lastResult,
         mode: $("mode").value, stance};
@@ -223,13 +358,17 @@
           participant_id: identity.learner_id, exercise_id: $("exercise").value,
           event, mode: input.mode, stance: input.stance, source: input.source, result: input.result,
           recent: [...recent.slice(-10), current]
-        }, state => { if (requestGeneration === generation) $("status").textContent = state === "queued" ? "Waiting for a worker…" : "Checking request status…"; });
+        }, (state, config, ref) => {
+          if (requestGeneration === generation && originalScope === scope) requestState(state, ref);
+        });
         if (requestGeneration !== generation || originalScope !== scope) throw new Error("Identity or exercise changed; previous reply was discarded.");
         const reply = out.message + (out.check_question ? "\n\n" + out.check_question : "");
         const recovered = askJobs.wasRecovered(out);
+        const ref = askJobs.reference(out);
+        const owner = records.find(r => r.request_id === ref?.request_id) || record;
         if (!recovered) recent = [...recent, current, {who: "sol", text: reply}].slice(-12);
-        if (!recovered) temporaryMessages.push({role:"student", text:message});
-        temporaryMessages.push({role:"assistant", text:reply});
+        if (!recovered) temporaryMessages.push({role:"student", text:message, request_id:owner.request_id});
+        temporaryMessages.push({role:"assistant", text:reply, request_id:owner.request_id});
         // Keep the transient feed bounded as well; nothing is written to storage.
         temporaryMessages = temporaryMessages.slice(-200);
         renderFeed(temporaryMessages);
@@ -237,13 +376,19 @@
         out.recovered_request = recovered;
       } else if (out.history_unavailable) {
         // Successful live delivery remains visible when the history request fails.
-        bubble({role: "student", text: message});
-        bubble({role: "assistant", text: out.message + (out.check_question ? "\n\n" + out.check_question : "")});
+        const owner = records.find(r => r.request_id === out.request_id) || record;
+        owner.messages = [{role: "student", text: message},
+          {role: "assistant", text: out.message + (out.check_question ? "\n\n" + out.check_question : "")}];
+        renderFeed(feedMessages);
       } else if (out.unsaved_exchange) {
         // The live support response is transient; restored history has placeholders.
-        bubble({role: "assistant", text: out.message + (out.check_question ? "\n\n" + out.check_question : "")});
+        record.messages.push({role: "assistant", text: out.message + (out.check_question ? "\n\n" + out.check_question : "")});
+        renderFeed(feedMessages);
       }
-      telemetry(out);
+      const completedOwner = out.request_id && records.find(r => r.request_id === out.request_id);
+      if (completedOwner) {completedOwner.feedback = "completed"; completedOwner.note = ""; renderFeed(feedMessages);}
+      if (out.recovered_request) clearTelemetry("An earlier request was recovered. No new tutor reply was generated.");
+      else telemetry(out);
       if (!out.recovered_request) $("question").value = "";
       $("ask").textContent = "Ask Sol";
       $("status").textContent = out.recovered_request
@@ -251,12 +396,13 @@
           : "Recovered the original request. Your current input was not submitted.") : "";
     } catch (error) {
       if (requestGeneration === generation) {
+        recordFailure(error, record);
         let message = error.message;
-        if (event === "run") {
+        if (event === "run" && error.code !== "result_expired") {
           const context = error.notSubmitted ? "No new tutor feedback was submitted. "
             : error.recovered_request ? "A previous tutor request is unresolved; no feedback for this run was submitted. "
             : "Tutor feedback: ";
-          message = "Code ran. " + context + message;
+          message = (lastResult?.ok ? "Code ran. " : "Your code raised an error. ") + context + message;
         }
         $("status").textContent = message;
         $("ask").textContent = error.uncertain ? "Check request status" : "Ask Sol";
@@ -266,21 +412,28 @@
   }
   async function recoverUnsaved() {
     if (!dialogue || busy) return;
-    const current = generation, currentScope = scope;
+    const current = generation;
     let session;
     try { session = await dialogue.ready(); }
     catch (error) { if (current === generation) $("status").textContent = error.message; return; }
+    // Initialization establishes the authorized scope; capture it after ready.
+    const currentScope = session.key;
     if (current !== generation || currentScope !== scope || session.enabled || busy) return;
     setBusy(true);
     try {
-      const answer = await askJobs.recover(base(), "/api/sol/jobs", $("exercise").value);
+      const answer = await askJobs.recover(base(), "/api/sol/jobs", $("exercise").value,
+        (state, config, ref) => {if (current === generation && currentScope === scope) requestState(state, ref);});
       if (current !== generation || currentScope !== scope) return;
       if (answer) {
-        temporaryMessages = [{role:"assistant", text:answer.message + (answer.check_question ? "\n\n" + answer.check_question : "")}];
-        renderFeed(temporaryMessages); telemetry(answer); askJobs.acknowledge(answer);
+        const ref = askJobs.reference(answer);
+        temporaryMessages = [...temporaryMessages, {role:"assistant", request_id:ref?.request_id,
+          text:answer.message + (answer.check_question ? "\n\n" + answer.check_question : "")}];
+        renderFeed(temporaryMessages);
+        clearTelemetry("An earlier request was recovered. No new tutor reply was generated.");
+        askJobs.acknowledge(answer);
         $("status").textContent = "Recovered the same request. No request was resubmitted.";
       }
-    } catch (error) { if (current === generation) $("status").textContent = error.message; }
+    } catch (error) { if (current === generation) {recordFailure(error, null); $("status").textContent = error.message;} }
     finally { setBusy(false); }
   }
   $("exercise").addEventListener("change", pick);

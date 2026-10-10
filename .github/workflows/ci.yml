@@ -94,4 +94,6 @@ jobs:
           node-version: "22"
 
       - name: Learner request lifecycle and control messages
-        run: node --test frontend/tests/*.test.cjs
+        run: |
+          npm ci --prefix frontend --ignore-scripts
+          node --test frontend/tests/*.test.cjs

@@ -6,6 +6,10 @@ const vm = require("node:vm");
 
 const read = (name) => fs.readFileSync(path.join(__dirname, "..", name), "utf8");
 const reply = (data, status = 200) => ({ ok: status < 300, status, headers: new Headers(), json: async () => data });
+const bubbles = ui => {
+ const out=[];const walk=e=>{if((e.className||'').split(' ').includes('bubble'))out.push(e);for(const c of e.children||[])walk(c);};
+ walk(ui.nodes['chat-feed']);return out;
+};
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
 async function page(name, fetchTurn, timeoutMs, sharedStorage, recoveredAnswer, readyError) {
@@ -131,7 +135,7 @@ for (const name of ["widget.html", "dev-client.html"]) {
     assert.equal(ui.nodes[status].textContent, "");
     assert.equal(ui.nodes[send].disabled, false);
     if (widget) assert.match(ui.nodes.msgs.children.at(-1).innerHTML, /Useful answer/);
-    else assert.match(ui.nodes["chat-feed"].children.at(-1).innerHTML, /Useful answer/);
+    else assert.match(bubbles(ui).at(-1).innerHTML, /Useful answer/);
   });
 
   test(`${name}: an explicit rate denial permits a later intentional request`, async () => {
@@ -200,7 +204,7 @@ for (const name of ["widget.html", "dev-client.html"]) {
     const second = await page(name, async () => {posts++; throw Error("must not resubmit");}, undefined, store, {message:"RECOVERED"});
     assert.equal(posts,1);
     if (name === "widget.html") assert.match(second.nodes.msgs.children[0].innerHTML,/RECOVERED/);
-    else assert.equal(second.nodes["chat-feed"].children.at(-1).innerHTML,"RECOVERED");
+    else assert.equal(bubbles(second).at(-1).innerHTML,"RECOVERED");
     assert.match(second.nodes[name === "widget.html" ? "turnstatus" : "status"].textContent,/Recovered/);
     assert.equal(second.nodes[name === "widget.html" ? "send" : "ask"].disabled,false);
   });
@@ -223,7 +227,7 @@ for(const name of ['widget.html','dev-client.html']) test(name+': recovering old
  await ui.click(widget?'send':'ask');assert.equal(posts,1);assert.equal(ui.nodes[input].value,'Not submitted');
  assert.match(ui.nodes[widget?'turnstatus':'status'].textContent,/current input was not submitted/);
  if(widget) assert.equal(ui.nodes.msgs.children.length,1);
- else assert.equal(ui.nodes['chat-feed'].children.length,1);
+ else {assert.equal(bubbles(ui).filter(e=>e.className.includes('bubble-tutor')).length,1); assert.ok(bubbles(ui).every(e=>e.textContent!=='Not submitted'));}
 });
 
 for (const name of ['widget.html','dev-client.html','embed-demo.html']) test(name+': denied recovery scope is shown without an unhandled rejection',async()=>{

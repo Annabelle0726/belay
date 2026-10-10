@@ -1,0 +1,13 @@
+{
+  "name": "belay-frontend-checks",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/*.test.cjs"
+  },
+  "devDependencies": {
+    "@highlightjs/cdn-assets": "11.11.1",
+    "dompurify": "3.4.16",
+    "jsdom": "26.1.0",
+    "marked": "18.0.14"
+  }
+}

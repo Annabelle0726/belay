@@ -7,14 +7,15 @@
     <link rel="icon" type="image/svg+xml" href="AI-Powered-Spark.svg"/>
     <script src="theme-client.js"></script>
     <!-- marked.js: Markdown -> HTML for Sol's replies -->
-    <script src="https://cdn.jsdelivr.net/npm/marked@18.0.14/lib/marked.umd.js"></script>
+    <script src="vendor/marked.umd.js"></script>
     <!-- DOMPurify: sanitize the rendered HTML before it reaches the DOM (XSS) -->
-    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.4.16/dist/purify.min.js"></script>
+    <script src="vendor/purify.min.js"></script>
+    <script src="vendor/highlight.min.js"></script>
 
     <style>
         /* ---- design tokens ---- */
         :root {
-            --radius-card: 12px;
+            --radius-card: 8px;
             --radius-control: 8px;
             --radius-pill: 999px;
 
@@ -27,8 +28,8 @@
             --font-body: clamp(.85rem, .35vw + .75rem, .95rem);
             --font-code: clamp(.8rem, .3vw + .7rem, .9rem);
 
-            /* Wider reply column: the tutor's prose is the reading surface here */
-            --right-col: minmax(0, .95fr);
+            /* Equal workspace columns. */
+            --right-col: minmax(0, 1fr);
             --editor-h: clamp(16rem, 35vh, 32rem);
             /* Conversation pane: tall enough to read several turns, still capped so the
                telemetry below it stays within reach instead of being pushed a page down. */
@@ -328,6 +329,20 @@
             max-height: 10rem; overflow-y: auto;
         }
         .run-error { color: var(--highlight-red); }
+        .conversation-card { border-radius: 8px; }
+        .conversation-card .chat-feed { border-radius: 6px; }
+        .request-record { display: flex; flex-direction: column; gap: .6rem; padding: .25rem 0; }
+        .request-record .bubble { margin: 0; border-radius: 6px; }
+        .request-label, .history-boundary { font-size: .8rem; margin: .35rem 0; }
+        .feedback-state {
+            font-size: .85rem; line-height: 1.5; margin: .2rem 0;
+            padding: 8px 12px; border-radius: 6px;
+            background: var(--surface-2); color: var(--text);
+        }
+        .feedback-state:empty { display: none; }
+        .history-boundary hr { border: 0; border-top: 1px solid var(--border); }
+        .inline-glass { border: 1px solid var(--border); border-radius: 6px; padding: .6rem; }
+        .inline-glass > summary { cursor: pointer; font-size: .85rem; }
         .run-result summary { cursor: pointer; color: var(--muted); }
 
         /* ---- Conversation feed ----
@@ -356,6 +371,14 @@
             text-align: center;
             padding: 1rem 0;
         }
+
+        .feedback-loading { align-self: center; width: 1rem; height: 1rem; border: 2px solid var(--border);
+            border-top-color: var(--accent); border-radius: 50%; animation: feedback-spin .9s linear infinite; }
+        .feedback-loading[hidden] { display: none; }
+        @keyframes feedback-spin { to { transform: rotate(360deg); } }
+        @media (prefers-reduced-motion: reduce) { .feedback-loading { animation: none; } }
+        .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+            overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 
         .bubble {
             max-width: 85%;
@@ -424,6 +447,13 @@
             margin-top: 0;
             margin-bottom: 0.8em;
         }
+
+        .markdown-plain { white-space: pre-wrap; }
+        .markdown-body ul, .markdown-body ol { padding-left: 1.5em; margin: 0 0 .8em; }
+        .markdown-body li + li { margin-top: .25em; }
+        .markdown-body .hljs-keyword, .markdown-body .hljs-built_in { color: var(--accent); }
+        .markdown-body .hljs-string, .markdown-body .hljs-number { color: var(--accent-teal); }
+        .markdown-body .hljs-comment { color: var(--muted); font-style: italic; }
 
         .markdown-body p:last-child {
             margin-bottom: 0;
@@ -517,14 +547,27 @@
             color: var(--muted);
         }
 
-        @media (min-width: 900px) and (min-height: 640px) {
-            .navbar { height: 56px; }
-            main { height: calc(100dvh - 56px); }
-            .col-left { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; gap: 12px; }
-            .col-right { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; gap: 12px; }
-            .editor-card { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
-            .editor-card textarea { height: 100%; min-height: 100px; resize: none; padding: .75rem; }
-            .conversation-card { min-height: 0; }
+        .navbar.site-header { min-height: 48px; padding: 6px 16px; gap: 10px; }
+        .navbar .theme-picker { font-size: .75rem; gap: 5px; }
+        .navbar .theme-picker select {
+            min-height: 28px; padding: 3px 7px; padding-right: 26px !important;
+            background-position: right 8px center; border-radius: 6px;
+        }
+        .navbar .development-label {
+            font-size: .72rem; font-weight: 400; line-height: 1.4;
+            color: var(--muted); padding: 2px 0; white-space: nowrap;
+        }
+        @media (min-width: 900px) {
+            .navbar { height: 48px; }
+            main { min-height: calc(100dvh - 48px); }
+            .col-left { min-height: 0; gap: 12px; }
+            .col-left > .card { flex-shrink: 0; }
+            .editor-card { flex-grow: 1; }
+            .editor-card textarea { flex-grow: 1; min-height: 100px; padding: .75rem; }
+            /* Only the left stack contributes intrinsic height to this grid row.
+               The right stretches to that row; its transcript scrolls inside it. */
+            .col-right { contain: size; min-height: 0; gap: 12px; }
+            .conversation-card { flex: 1; min-height: 0; overflow: hidden; }
             .chat-feed { flex: 1; min-height: 0; max-height: none; }
             .run-result { max-height: 22vh; overflow-y: auto; }
         }
@@ -556,7 +599,7 @@
         <span class="course-tag">Data Science Module</span>
         <span class="header-description">Learning workspace</span>
     </div>
-    <div class="controls-group"><label class="theme-picker"><span>Theme</span><select data-theme-picker aria-label="Color theme"><option value="auto">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label><span class="dev-badge">DEV ONLY</span></div>
+    <div class="controls-group"><label class="theme-picker"><span>Theme</span><select data-theme-picker aria-label="Color theme"><option value="auto">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label><span class="development-label">Development preview</span></div>
 </header>
 
 <main>
@@ -608,9 +651,11 @@
                 <span>Conversation Feed</span>
             </div>
             <div id="conversation-controls"></div>
-            <div id="chat-feed" class="chat-feed">
+            <div id="chat-feed" class="chat-feed" role="log" aria-label="Conversation" aria-live="polite" aria-busy="false">
                 <div id="chat-empty" class="chat-empty">— Conversation history will appear here —</div>
             </div>
+            <div id="feedback-loading" class="feedback-loading" aria-hidden="true" hidden></div>
+            <span id="feedback-announcement" class="sr-only" role="status" aria-live="polite"></span>
             <div class="chat-composer">
                 <input id="question" class="field" type="text" placeholder="Ask Sol something specific (optional)…" autocomplete="off"/>
                 <button id="ask">Ask Sol</button>
@@ -618,8 +663,9 @@
             <span id="status" class="muted" role="status"></span>
         </div>
 
-        <details class="card telemetry" open>
-            <summary class="card-title">Glass Box · Latest response signals</summary>
+        <div id="signals-storage" hidden>
+        <details id="glass-box" class="telemetry inline-glass">
+            <summary class="card-title">Glass Box · Latest response</summary>
             <div class="stack">
             <p id="signals-status" class="muted" role="status" style="margin:0; font-size:.75rem;">Run code or ask Sol to see signals from a new reply.</p>
             <div class="row" style="margin-bottom: 8px;">
@@ -653,6 +699,7 @@
             </div>
             </div>
         </details>
+        </div>
     </section>
 </main>
 
