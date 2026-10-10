@@ -8,12 +8,14 @@ import json
 import time
 import uuid
 from collections.abc import Callable
+from contextlib import contextmanager
 from dataclasses import replace
 
 from fastapi import HTTPException
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..auth import Identity, denied
@@ -36,6 +38,44 @@ class ConversationStore:
         self.policy = policy
         self.clock = clock
         self.ledger = DeletionLedger(policy.deletion_ledger_file)
+
+    @contextmanager
+    def transaction(self, connection: Connection | None = None):
+        # A supplied connection owns commit/rollback across dialogue and controls.
+        with Session(bind=connection or self.engine, expire_on_commit=False) as session:
+            with session.begin():
+                yield session
+
+    def check_turn(self, identity, cid, request_id, revision, connection, *, reading=False):
+        self._ready()
+        with self.transaction(connection) as session:
+            session.execute(
+                update(Conversation)
+                .where(Conversation.id == cid, Conversation.owner_key == identity.storage_id)
+                .values(revision=Conversation.revision)
+            )
+            row = self._owned(session, identity, cid)
+            turn = session.get(Turn, (cid, request_id))
+            if turn is None:
+                if reading:
+                    return self.metadata(row)
+                if row.revision != revision or (
+                    row.pending_id and row.pending_until > int(self.clock())
+                ):
+                    raise HTTPException(409, "conversation changed; refresh history")
+            elif turn.status == "pending":
+                if not reading and (
+                    row.pending_id != request_id
+                    or row.pending_until <= int(self.clock())
+                    or row.revision != revision + 1
+                ):
+                    raise HTTPException(409, "turn lease is no longer valid")
+            elif turn.status == "completed":
+                if not reading and row.revision != revision + 2:
+                    raise HTTPException(409, "conversation changed; refresh history")
+            elif not reading:
+                raise HTTPException(409, "turn failed; refresh history")
+            return self.metadata(row)
 
     def _ready(self, *, saving: bool = True) -> None:
         (self.policy if saving else replace(self.policy, enabled=True)).require()
@@ -225,11 +265,13 @@ class ConversationStore:
         signature: str,
         expected_revision: int,
         learner_text: str,
+        *,
+        connection: Connection | None = None,
     ) -> dict | None:
         self._ready()
         if len(learner_text.encode()) > self.policy.max_message_bytes:
             raise HTTPException(413, "message limit exceeded")
-        with self.sessions.begin() as session:
+        with self.transaction(connection) as session:
             # UPDATE acquires a row lock on Postgres, and a write lock on SQLite.
             # No transaction spans a model call. Never update by an untrusted owner.
             session.execute(
@@ -285,20 +327,31 @@ class ConversationStore:
             )
         return None
 
-    def complete(self, identity: Identity, cid: str, request_id: str, response: dict) -> dict:
+    def complete(
+        self,
+        identity: Identity,
+        cid: str,
+        request_id: str,
+        response: dict,
+        *,
+        connection: Connection | None = None,
+    ) -> dict:
         self._ready()
         message = response["message"]
         question = response.get("check_question")
         text = message + (("\n\n" + question) if question else "")
         if len(text.encode()) > self.policy.max_message_bytes:
             raise HTTPException(413, "released response exceeds saved message limit")
-        with self.sessions.begin() as session:
+        with self.transaction(connection) as session:
             session.execute(
                 update(Conversation)
                 .where(Conversation.id == cid, Conversation.owner_key == identity.storage_id)
                 .values(revision=Conversation.revision)
             )
             row = self._owned(session, identity, cid)
+            prior = session.get(Turn, (cid, request_id))
+            if connection is not None and prior is not None and prior.status == "completed":
+                return dict(prior.response or {})
             if row.pending_id != request_id or row.pending_until <= int(self.clock()):
                 raise HTTPException(409, "turn lease is no longer valid")
             turn = session.get(Turn, (cid, request_id))

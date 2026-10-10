@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
+from contextlib import nullcontext
 
 from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import Column, Float, Integer, String, Table, Text, select
@@ -137,7 +138,15 @@ class ExecutionData:
         with self.ledger.transaction() as conn:
             return self.cleanup_in(conn)
 
-    def submit(self, identity: Identity, request_id: str, payload: dict, route: str) -> dict:
+    def submit(
+        self,
+        identity: Identity,
+        request_id: str,
+        payload: dict,
+        route: str,
+        *,
+        connection: Connection | None = None,
+    ) -> dict:
         grant = execution_grant(identity)
         stored = temporary_input(payload)
         recheck_grant(grant)
@@ -146,7 +155,9 @@ class ExecutionData:
         )
         fingerprint = hashlib.sha256(raw.encode()).hexdigest()
         job_id = self.job_id(identity, request_id)
-        with self.ledger.transaction() as conn:
+        with (
+            nullcontext(connection) if connection is not None else self.ledger.transaction()
+        ) as conn:
             self.cleanup_in(conn)
             existing = conn.execute(select(jobs).where(jobs.c.id == job_id)).mappings().first()
             if existing:
