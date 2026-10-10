@@ -246,8 +246,22 @@
       telemetry(out);
       if (!out.recovered_request) $("question").value = "";
       $("ask").textContent = "Ask Sol";
-      $("status").textContent = out.recovered_request ? "Recovered the original request. Your current input was not submitted." : "";
-    } catch (error) { if (requestGeneration === generation) {$("status").textContent = error.message; if (error.uncertain) $("ask").textContent = "Check request status";} }
+      $("status").textContent = out.recovered_request
+        ? (event === "run" ? "Code ran. Recovered the previous tutor reply; no feedback for this run was submitted."
+          : "Recovered the original request. Your current input was not submitted.") : "";
+    } catch (error) {
+      if (requestGeneration === generation) {
+        let message = error.message;
+        if (event === "run") {
+          const context = error.notSubmitted ? "No new tutor feedback was submitted. "
+            : error.recovered_request ? "A previous tutor request is unresolved; no feedback for this run was submitted. "
+            : "Tutor feedback: ";
+          message = "Code ran. " + context + message;
+        }
+        $("status").textContent = message;
+        $("ask").textContent = error.uncertain ? "Check request status" : "Ask Sol";
+      }
+    }
     finally { setBusy(false); }
   }
   async function recoverUnsaved() {

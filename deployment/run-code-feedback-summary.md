@@ -74,3 +74,45 @@ implemented but will be recorded/committed as R2. Current API 8002 still runs th
 previous backend code and disabled jobs configuration. No service configuration,
 existing database, request record, auth policy or credential was changed. R1's
 commit ID will be recorded in the next entry after committing this step.
+
+## R2 — distinguish non-submission from an unknown previous task
+
+R1 commit: `b14d1c7`.
+Goal: keep automatic Run feedback and honest recovery messages. Files:
+`frontend/request-lifecycle.js`, `frontend/ask-jobs.js`, `frontend/dev-client.js`,
+their three matching test files, this summary.
+
+Explicit jobs_disabled/jobs_not_configured responses are known setup denials.
+Configuration GET failures are tagged configuration/notSubmitted: that GET cannot
+dispatch work, including on a lost response. This does not resolve or remove a
+previous pending pointer. A definite rejection of a newly generated POST retains
+a non-pending, not_submitted receipt, rather than polling a nonexistent task;
+refresh skips that rejected receipt. Generic POST outages and unknown jobs still
+keep the pending ID and prohibit automatic resubmission. Recovered replies/errors
+are attributed to the previous tutor request, not the latest code run.
+
+The UI keeps successful code output visible and explicitly says when no feedback
+was submitted. Run still automatically submits event=run with source/result and
+renders a valid completed reply when the service is configured; failed code runs
+still do not trigger tutoring. No paid fallback, cancel button or data reset.
+
+Verification: all frontend tests 81 passed, 0 failed, 0 skipped. Coverage includes
+Run->one feedback POST->display, successful code with disabled feedback/no new
+pointer or POST, prior unknown request unchanged across another deliberate Run,
+config-network failure retaining an older ID, and rejected receipt recovery.
+Full Ruff check/format passed (158 files); full mypy passed (151 source files).
+Backend full suite is still running. PostgreSQL and a live browser Run remain
+unverified in this round. Original historical /api/run status is still unavailable.
+
+Service evidence remains PID 31124 listening on 127.0.0.1:8002 and :5175. Static
+files now reflect these checkout edits when newly loaded; the existing browser
+tab has not been reloaded. Its loaded frontend version is not asserted. The API
+process has not reloaded the new backend context. Thus this is a verified code
+repair, not a claim that the existing disabled service can now generate feedback.
+
+An attempted isolated stub demo process launch was rejected by automatic approval
+review with `blocked by policy` and no specific reason. It was not retried or
+worked around; no demo listener was started by that action. Tests use isolated
+test databases and stub providers. Existing application DBs were not initialized,
+cleared or migrated. Remaining service/demo prerequisites and final counts follow
+in R3. R2 commit ID will be recorded after committing this step.

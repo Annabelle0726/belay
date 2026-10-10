@@ -23,11 +23,18 @@ globalThis.belayAskJobs = function ({ storage,
     finally { expired = true; clearTimeout(timer); }
   }
   async function prepare(base, prefix, exercise) {
-    const config = await request(base, prefix + "/config", {}, (c) => c &&
+    let config;
+    try { config = await request(base, prefix + "/config", {}, (c) => c &&
       /^[0-9a-f]{64}$/.test(c.recovery_scope) && typeof c.learner_id === "string" &&
       c.assignments && typeof c.assignments[exercise] === "string" &&
       Number.isInteger(c.poll_seconds) && c.poll_seconds >= 1 && c.poll_seconds <= 60 &&
-      Number.isInteger(c.result_seconds) && typeof c.notice === "string");
+      Number.isInteger(c.result_seconds) && typeof c.notice === "string"); }
+    catch (e) {
+      e.phase = "configuration"; e.notSubmitted = true;
+      if (e.uncertain) e.message = "Tutor service configuration could not be checked. No new feedback was submitted; any previous request is unchanged.";
+      e.uncertain = false; // This GET cannot dispatch work. Never alter an older pointer.
+      throw e;
+    }
     const key = "belay.ask.v1:" + JSON.stringify([base, prefix, config.recovery_scope, exercise, config.assignments[exercise]]);
     return { base, prefix, key, config };
   }
@@ -54,6 +61,10 @@ globalThis.belayAskJobs = function ({ storage,
   const states = new Set(["queued", "running", "cancel_requested", "completed", "failed", "cancelled", "unknown", "result_expired"]);
   const validJob = (j) => j && /^[0-9a-f]{64}$/.test(j.id) && states.has(j.state);
   async function watch(context, pointer, onStatus) {
+    try { return await poll(context, pointer, onStatus); }
+    catch(e) {e.recovered_request = !!context.recovering; throw e;}
+  }
+  async function poll(context, pointer, onStatus) {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
       if (Date.now() >= deadline) throw error("request_timeout", true);
@@ -110,8 +121,12 @@ globalThis.belayAskJobs = function ({ storage,
       try {
         await request(base, prefix, { method: "POST", body: JSON.stringify(payload) }, validJob);
       } catch (e) {
-        if (!e.uncertain && ["rate_limited", "queue_full", "payload_too_large", "content_not_storable", "invalid_execution_data", "conversation_conflict"].includes(e.code)) {
-          write(context.key, null); // Confirmed pre-admission denial, no automatic resend.
+        if (!e.uncertain && ["rate_limited", "queue_full", "payload_too_large", "content_not_storable", "invalid_execution_data", "conversation_conflict",
+          "jobs_disabled", "jobs_not_configured", "invalid_controls_mode", "controls_not_initialized", "verified_execution_required"].includes(e.code)) {
+          // Preserve the rejected request receipt. Only THIS newly generated ID
+          // was definitely not admitted; an existing pending ID never enters here.
+          write(context.key, {...pointer, pending:false, not_submitted:true, reason:e.code});
+          e.notSubmitted = true;
         }
         throw e;
       }
@@ -121,7 +136,7 @@ globalThis.belayAskJobs = function ({ storage,
       const context = await prepare(base, prefix, exercise);
       if (onStatus) onStatus("preparing", context.config);
       const pointer = read(context.key);
-      return pointer ? watch({...context,recovering:true}, pointer, onStatus) : null;
+      return pointer && !pointer.not_submitted ? watch({...context,recovering:true}, pointer, onStatus) : null;
     },
   };
 };

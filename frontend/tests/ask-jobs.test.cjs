@@ -19,6 +19,7 @@ function client(store, fetchJob, options = {}) {
     setTimeout, clearTimeout, AbortController,
     fetch: async (url, opts) => {
       calls.push({url, opts});
+      if (url.endsWith("/config") && options.configLost) throw TypeError('config disconnected');
       return url.endsWith("/config") ? reply(options.config || config) : fetchJob(url, opts);
     },
   });
@@ -110,7 +111,7 @@ test("stalled credential refresh is bounded and late credentials never send a PO
   const value = client(storage(), async () => {throw Error("must not send");}, {timeoutMs:5});
   let resume;
   value.context.window.BelayAuth.headers = () => new Promise((resolve) => {resume=resolve;});
-  await assert.rejects(value.jobs.ask("https://test","/jobs",body), {code:"request_timeout",uncertain:true});
+  await assert.rejects(value.jobs.ask("https://test","/jobs",body), {code:"request_timeout",uncertain:false,notSubmitted:true});
   resume({Authorization:"Bearer late"});
   await new Promise((r) => setImmediate(r));
   assert.equal(value.calls.length,0);
@@ -137,4 +138,25 @@ test("third-party browser storage getter failure cannot break initialization or 
   Object.defineProperty(value.context,"localStorage",{get:() => {throw Error("blocked third-party storage");}});
   await assert.rejects(value.jobs.ask("https://test","/jobs",body),{code:"recovery_unavailable"});
   assert.equal(value.calls.length,1);
+});
+
+test('configuration network failure never implies a new execution and preserves a previous unknown pointer',async()=>{
+ const store=storage();const first=client(store,async()=>{throw TypeError('lost admission');});
+ await assert.rejects(first.jobs.ask('https://test','/jobs',body),{uncertain:true});
+ const before=JSON.stringify([...store.values]);
+ const broken=client(store,async()=>{throw Error('must not send');},{configLost:true});
+ await assert.rejects(broken.jobs.ask('https://test','/jobs',body),{uncertain:false,notSubmitted:true,phase:'configuration'});
+ assert.equal(JSON.stringify([...store.values]),before);assert.equal(broken.calls.length,1);
+});
+
+test('definite admission setup denial retains a rejected receipt without phantom polling; restored service needs an intentional Ask',async()=>{
+ const store=storage();let posts=0;
+ const denied=client(store,async(url,opts)=>{
+  assert.equal(opts.method,'POST');posts++;return reply({detail:{code:'jobs_disabled'}},503);
+ });
+ await assert.rejects(denied.jobs.ask('https://test','/jobs',body),{uncertain:false,notSubmitted:true});
+ const receipt=JSON.parse([...store.values.values()][0]);assert.equal(receipt.pending,false);assert.equal(receipt.not_submitted,true);
+ const restored=client(store,async(url,opts)=>{if(opts.method==='POST'){posts++;return reply({id:completed.id,state:'queued'},202);}return reply(completed);});
+ assert.equal(await restored.jobs.recover('https://test','/jobs','echo-1'),null);assert.equal(posts,1);
+ assert.equal((await restored.jobs.ask('https://test','/jobs',body)).message,'useful answer');assert.equal(posts,2);
 });

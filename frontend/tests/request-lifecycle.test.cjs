@@ -50,6 +50,13 @@ test("known denials differ from ambiguous server errors without leaking diagnost
   await assert.rejects(belayRequestJSON("/turn"), (error) => error.uncertain && !/PRIVATE|retry/.test(error.message));
 });
 
+test('explicit job setup rejections are not execution uncertainty', async()=>{
+ for(const code of ['jobs_disabled','jobs_not_configured']) {
+  global.fetch=async()=>reply({detail:{code}},503);
+  await assert.rejects(belayRequestJSON('/jobs/config'),error=>error.code===code && !error.uncertain && !/not confirmed|still be running/.test(error.message));
+ }
+});
+
 test("gate blocks duplicates and uncertain replay and fences switch-away/switch-back", () => {
   const gate = belayTurnGate();
   const token = gate.begin("A");
