@@ -3,6 +3,12 @@
 globalThis.belayControlMessage = function (detail, retryAfter) {
   const code = detail && typeof detail === "object" ? detail.code : "";
   const messages = {
+    conversation_conflict: "This conversation changed or its turn lease ended. Refresh history before a new request.",
+    conversation_unavailable: "This conversation is unavailable, expired, deleted or no longer authorized. Its old request will not be resubmitted.",
+    saved_database_mismatch: "Saved Ask is not configured on this server. Please contact course support.",
+    operation_conflict: "This request ID belongs to different input. Check the original request status.",
+    authorization_revoked: "Access to this request was withdrawn. Its result is unavailable.",
+    authorization_unavailable: "Request authorization is temporarily unavailable. Check status later.",
     budget_exhausted: "The usage limit has been reached. Please contact your course support team.",
     rate_limited: "Requests are arriving too quickly. Please try again shortly.",
     queue_full: "The tutor is busy. Please try again shortly.",

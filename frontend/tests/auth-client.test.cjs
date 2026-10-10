@@ -14,15 +14,21 @@ function setup(origin = 'https://belay.example.invalid') {
     BELAY_GET_ACCESS_TOKEN: async () => 'short-lived-test-token',
     BELAY_INSTITUTION_ID: 'inst-a', BELAY_CLASS_ID: 'class-a',
   };
-  const ctx = vm.createContext({ window, URL, fetch: async (url, options) => {
+  const values=new Map();
+  const ctx = vm.createContext({ window, URL,Headers,AbortController,setTimeout,clearTimeout,crypto:require("node:crypto").webcrypto,localStorage:{getItem:k=>values.get(k)||null,setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)}, fetch: async (url, options) => {
     calls.push({ url, options });
-    return { ok: true, status: 200, json: async () => ({ ok: true }), text: async () => 'trace' };
+    const data=url.endsWith('/jobs/config') ? {recovery_scope:'a'.repeat(64),learner_id:'gh:1',assignments:{'echo-1':'v1'},poll_seconds:1,result_seconds:300,notice:'Temporary recovery'}
+      : url.includes('/jobs/by-request/') ? {id:'b'.repeat(64),state:'completed',result:{message:'Answer'}}
+      : url.endsWith('/jobs') ? {id:'b'.repeat(64),state:'queued'} : {ok:true};
+    return { ok:true,status:200,headers:new Headers(),json:async()=>data,text:async()=>'trace' };
   } });
   const root = path.join(__dirname, '..');
   vm.runInContext(fs.readFileSync(path.join(root, 'auth-client.js'), 'utf8'), ctx);
+  for(const file of ['control-messages.js','request-lifecycle.js','ask-jobs.js'])
+    vm.runInContext(fs.readFileSync(path.join(root,file),'utf8'),ctx);
   // Evaluate the API module's functions in a hermetic VM (no import/network side effects).
   const api = fs.readFileSync(path.join(root, 'api-client.js'), 'utf8')
-    .replace(/import "\.\/(?:auth-client|conversation-client)\.js";/g, '')
+    .replace(/^import .*;$/gm, '')
     .replace(/export /g, '');
   vm.runInContext(api, ctx);
   return { window, ctx, calls };
@@ -37,7 +43,7 @@ test('all API calls, including export, carry bearer and scope headers', async ()
     await solTurn({participantId:'gh:1', exerciseId:'echo-1'});
     await exportEvents('gh:1');
   })()`, ctx);
-  assert.equal(calls.length, 5);
+  assert.equal(calls.length, 7);
   for (const { url, options } of calls) {
     assert.equal(options.headers.Authorization, 'Bearer short-lived-test-token');
     assert.equal(options.headers['X-Belay-Institution'], 'inst-a');
@@ -75,6 +81,6 @@ test('all three demo POST paths call the shared credential helper', () => {
     assert.match(html, /src="auth-client\.js"/);
     const source = file === 'dev-client.html'
       ? fs.readFileSync(path.join(__dirname, '..', 'dev-client.js'), 'utf8') : html;
-    assert.match(source, /headers: await window\.BelayAuth\.headers/);
+    assert.match(source, /headers:\s*await window\.BelayAuth\.headers|askJobs\.ask/);
   }
 });

@@ -36,9 +36,11 @@ globalThis.belayRequestJSON = async function (url, options = {}, { timeoutMs = 9
         globalThis.belayControlMessage({ code: uncertain ? "execution_unknown" : code },
           uncertain ? null : response.headers.get("Retry-After")));
       const retry = Number(response.headers.get("Retry-After"));
+      error.status = response.status;
       error.retryAfter = Number.isInteger(retry) && retry > 0 && retry <= 3600 ? retry : null;
       throw error;
     }
+    if (response.status === 204) return null;
     let data;
     try { data = await response.json(); }
     catch { throw globalThis.belayRequestError("invalid_response", true); }

@@ -6,7 +6,8 @@
   const base = () => $("backend").value.replace(/\/$/, "");
   const assignedStance = new URL(window.location.href).searchParams.get("stance") || "peer";
   const stance = ["peer", "oracle", "control"].includes(assignedStance) ? assignedStance : "peer";
-  let exercises = {}, dialogue, scope, identity, lastResult = null, busy = false;
+  let exercises = {}, dialogue, scope, identity, lastResult = null, busy = false, generation = 0;
+  const askJobs = globalThis.belayAskJobs();
   let temporaryMessages = [], recent = [], savedView = false;
   let historyContext = null, liveContext = null;
 
@@ -123,11 +124,12 @@
     for (const id of ["ask", "run", "exercise", "backend", "mode"]) $(id).disabled = value;
   }
   function pick() {
+    generation++;
     clearTransient(); renderFeed([]);
     const exercise = exercises[$("exercise").value];
     $("prompt").textContent = exercise?.prompt || "No authorized exercises available.";
     $("source").value = exercise?.starter || "";
-    if (dialogue && exercise) dialogue.refresh();
+    if (dialogue && exercise) dialogue.refresh().then(recoverUnsaved);
   }
   async function loadCurriculum() {
     try {
@@ -147,6 +149,7 @@
         });
       }
       $("status").textContent = "";
+      await recoverUnsaved();
     } catch (error) {
       identity = null; clearTransient(); renderFeed([]);
       $("status").textContent = "Curriculum load failed: " + error.message;
@@ -206,7 +209,7 @@
     if (busy || !dialogue) return;
     const typed = $("question").value.trim();
     const message = typed || (event === "run" ? "Help me understand the result of this run." : "Help me understand this code.");
-    const originalScope = scope;
+    const originalScope = scope, requestGeneration = generation;
     setBusy(true); $("status").textContent = "Sol is thinking…";
     try {
       const input = {message, source: $("source").value, result: lastResult,
@@ -216,17 +219,19 @@
       if (!out) {
         // Unsaved history stays in RAM, in the legacy edge's who/text format.
         const current = {who: "student", text: message};
-        out = await json("/api/sol/turn", {
+        out = await askJobs.ask(base(), "/api/sol/jobs", {
           participant_id: identity.learner_id, exercise_id: $("exercise").value,
           event, mode: input.mode, stance: input.stance, source: input.source, result: input.result,
           recent: [...recent.slice(-10), current]
-        });
+        }, state => { if (requestGeneration === generation) $("status").textContent = state === "queued" ? "Waiting for a worker…" : "Checking request status…"; });
+        if (requestGeneration !== generation || originalScope !== scope) throw new Error("Identity or exercise changed; previous reply was discarded.");
         const reply = out.message + (out.check_question ? "\n\n" + out.check_question : "");
         recent = [...recent, current, {who: "sol", text: reply}].slice(-12);
         temporaryMessages.push({role: "student", text: message}, {role: "assistant", text: reply});
         // Keep the transient feed bounded as well; nothing is written to storage.
         temporaryMessages = temporaryMessages.slice(-200);
         renderFeed(temporaryMessages);
+        askJobs.acknowledge(out);
       } else if (out.history_unavailable) {
         // Successful live delivery remains visible when the history request fails.
         bubble({role: "student", text: message});
@@ -239,6 +244,23 @@
     } catch (error) { $("status").textContent = error.message; }
     finally { setBusy(false); }
   }
+  async function recoverUnsaved() {
+    if (!dialogue || busy) return;
+    const session = await dialogue.ready();
+    if (session.enabled) return;
+    const current = generation, currentScope = scope;
+    setBusy(true);
+    try {
+      const answer = await askJobs.recover(base(), "/api/sol/jobs", $("exercise").value);
+      if (current !== generation || currentScope !== scope) return;
+      if (answer) {
+        temporaryMessages = [{role:"assistant", text:answer.message + (answer.check_question ? "\n\n" + answer.check_question : "")}];
+        renderFeed(temporaryMessages); telemetry(answer); askJobs.acknowledge(answer);
+        $("status").textContent = "Recovered the same request. No request was resubmitted.";
+      }
+    } catch (error) { if (current === generation) $("status").textContent = error.message; }
+    finally { setBusy(false); }
+  }
   $("exercise").addEventListener("change", pick);
   $("backend").addEventListener("change", loadCurriculum);
   $("run").addEventListener("click", async () => { if (await run()) await ask("run"); });
@@ -247,7 +269,7 @@
     if (event.key === "Enter" && !event.isComposing) { event.preventDefault(); ask(); }
   });
   window.addEventListener("belay-auth-changed", () => {
-    identity = null; scope = null; clearTransient(); renderFeed([]);
+    generation++; identity = null; scope = null; clearTransient(); renderFeed([]);
   });
   loadCurriculum();
 })();
