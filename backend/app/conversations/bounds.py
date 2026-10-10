@@ -88,7 +88,16 @@ def bounded_route(policy_factory):
                         raise HTTPException(413, "request body limit exceeded")
                     chunks.append(chunk)
                 request._body = b"".join(chunks)
-                return await original(request)
+                from ..controls.contracts import ControlError
+                from ..controls.http import control_http_error
+
+                try:
+                    response = await original(request)
+                except ControlError as exc:
+                    raise control_http_error(exc) from exc
+                response.headers["Cache-Control"] = "no-store"
+                response.headers["Vary"] = "Authorization, X-Belay-Institution, X-Belay-Class"
+                return response
 
             return handle
 

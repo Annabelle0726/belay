@@ -59,3 +59,33 @@ conversation lifecycle/repository and execution-data tests). Ruff targeted check
 and formatting passed after correcting an invocation's working-directory paths.
 PostgreSQL, HTTP saved jobs and browser wiring remain unverified/not wired in this
 step. Commit: this C1 commit (number recorded in C2).
+
+## C2 — saved HTTP admission, worker and atomic publication
+
+C1 commit: `31fd9ed`. Files: `controls/{saved,data,jobs_worker}.py`,
+`conversations/{repository,router,bounds}.py`, `tests/test_saved_jobs.py`.
+Both conversation edges now expose owned jobs/config/by-request routes. In
+enforced mode the old turns route also enters admission, never synchronous paid
+execution. Stable IDs bind original grant, conversation, revision and immutable
+input. The worker loads completed history from R2, applies its context/model
+bounds, and starts the existing turn lease only after queue dispatch.
+
+Execution/external-call/publication/read checks enforce live original grant,
+assignment version, owner, policy, deletion fence, expiry and revision/turn lease.
+Released assistant message, encrypted result and job completion share one SQL
+transaction. A crash rolls all three back; lease loss stays unknown and is not
+model-replayed. Completed receipts survive a lost HTTP response. Dialogue delete
+and maintenance erase linked execution content in their transaction. Expiry also
+bounds temporary content and cleanup, without touching accounting liabilities.
+Saved temporary results omit Glass Box/live analysis fields, matching R2's rule
+that these summaries are not persisted or restored. Support recovery renders its
+current institution frame; stored dialogue contains only neutral placeholders.
+
+Validation: **47 passed, 0 failed, 0 skipped** (14 new saved integrations plus
+existing worker/conversation HTTP and transaction tests). Initial failures from a
+wall-clock test fixture and an incorrectly simulated crash were corrected; the
+final run passed. Ruff passed; targeted mypy C1 passed. Full mypy, PostgreSQL,
+browser wiring and manual visual verification are pending. Saving stays optional;
+the strict Stage B operational content screen may reject a sensitive queued input
+when distress routing is disabled instead of retaining it. No detector terms or
+retention policy were changed. Commit: this C2 commit (recorded in C3).

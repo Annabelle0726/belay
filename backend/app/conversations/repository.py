@@ -416,6 +416,9 @@ class ConversationStore:
 
     @staticmethod
     def _erase(session: Session, row: Conversation) -> None:
+        from ..controls.saved import erase_in
+
+        erase_in(session.connection(), row.id)
         row.deleted = True
         row.pending_id = None
         row.pending_until = 0
