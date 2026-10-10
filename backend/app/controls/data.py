@@ -245,6 +245,8 @@ class ExecutionData:
             value = saved.complete(self, conn, job, identity, value)
             require_storable(value)
             raw = json.dumps(value, ensure_ascii=False, allow_nan=False).encode()
+            if len(raw) > self.ledger.policy(conn).payload_bytes:
+                raise ControlError("payload_too_large", 413)
             conn.execute(
                 data.update()
                 .where(data.c.id == ref)

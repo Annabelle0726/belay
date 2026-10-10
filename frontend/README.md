@@ -317,3 +317,18 @@ Temporary server retention is shown in the page. Clearing browser storage loses
 the recovery pointer; it is not cancellation. Unsaved Ask does not create an R2
 saved conversation. Run remains the existing separately controlled endpoint.
 The API client exports `recoverSolTurn(exerciseId)` for host bootstrapping.
+
+## Integrated saved/unsaved Ask (CC-R3 Stage C)
+
+The existing dev/widget/embed UI now uses controlled Ask jobs and opaque request
+recovery. Saved sessions use R2's attempt/history API plus its controlled jobs
+routes. Unknown outcomes are queried, never automatically submitted again. A
+changed input remains visible when recovering an older request. Saving remains
+optional and off by default; Glass Box signals are not saved for controlled saved
+turns. Code-run jobs are outside this integration.
+
+For an isolated no-model-service demo use `app.local_dev --controlled-stub
+--save-dialogue` with a new temporary data directory and unused ports. The full
+PowerShell command and database/migration/backup requirements are in
+[the Stage C protocol](../deployment/controls/controls-stage-c-protocol.md).
+The older launcher without this flag does not provision controlled Ask.

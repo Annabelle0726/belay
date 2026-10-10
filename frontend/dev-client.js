@@ -231,7 +231,9 @@
         // Keep the transient feed bounded as well; nothing is written to storage.
         temporaryMessages = temporaryMessages.slice(-200);
         renderFeed(temporaryMessages);
+        const recovered = askJobs.wasRecovered(out);
         askJobs.acknowledge(out);
+        out.recovered_request = recovered;
       } else if (out.history_unavailable) {
         // Successful live delivery remains visible when the history request fails.
         bubble({role: "student", text: message});
@@ -240,8 +242,11 @@
         // The live support response is transient; restored history has placeholders.
         bubble({role: "assistant", text: out.message + (out.check_question ? "\n\n" + out.check_question : "")});
       }
-      telemetry(out); $("question").value = ""; $("status").textContent = "";
-    } catch (error) { $("status").textContent = error.message; }
+      telemetry(out);
+      if (!out.recovered_request) $("question").value = "";
+      $("ask").textContent = "Ask Sol";
+      $("status").textContent = out.recovered_request ? "Recovered the original request. Your current input was not submitted." : "";
+    } catch (error) { if (requestGeneration === generation) {$("status").textContent = error.message; if (error.uncertain) $("ask").textContent = "Check request status";} }
     finally { setBusy(false); }
   }
   async function recoverUnsaved() {

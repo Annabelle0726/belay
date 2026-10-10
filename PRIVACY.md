@@ -147,15 +147,17 @@ Two decisions are deliberately left to the IRB and are marked open in the code:
 - The licensing split: `LICENSING.md`.
 # Operational accounting (CC-R3)
 
-Resource controls use separate `control_*` tables and do not depend on research
-consent. They contain hashed hierarchical scope keys, opaque operation/attempt
+Resource accounting metadata uses separate controls tables and does not depend on research
+consent. Encrypted temporary execution content lives separately in `control_data`
+as described below; it is not an accounting or research record. They contain hashed hierarchical scope keys, opaque operation/attempt
 references, policy versions, integer usage, states and content-free reason codes.
 They contain no prompts, source code, response text or bearer tokens. Operator
 reconciliation records contain opaque evidence references. No institution-wide
 usage endpoint is exposed to students.
 
-Queue payload/result storage is not implemented in this slice; service methods
-accept only opaque references and require a future authorized expiring store.
+The early service-only slice accepted opaque references. Stage B implemented
+owned expiring encrypted payload/results; Stage C adds the saved-turn link and
+same-database publication contract described below.
 Accounting/tombstone archival and rejection-record retention require an approved
 policy before production rollout. Development accounting is retained indefinitely
 to preserve idempotency and audit history. This is not a new conversation archive.
@@ -206,3 +208,22 @@ these temporary tables from long-lived backups/exports. Encryption is not permis
 to retain content indefinitely. Expiry blocks access even before physical cleanup.
 PII and verbatim distress are not retained; content-free accounting/dedup records
 survive independently. No R2 saved-conversation strategy is changed.
+
+### Saved Ask execution (CC-R3 Stage C)
+
+Saved Ask reuses the existing optional R2 archive, creation expiry, ownership,
+revision/turn leases and independent deletion ledger. It requires explicitly
+co-located dialogue/controls tables to publish the released assistant reply,
+temporary result and task completion in one SQL transaction. There is no
+cross-database atomicity claim or automatic data relocation. A content-free link
+associates the logical task with one R2 turn; internal model retries remain
+separate accounting attempts. Saved temporary results omit Glass Box analysis.
+Deletion and R2 maintenance also erase linked operational input/results; expiry
+bounds their TTL. Failed/unknown jobs never create a successful empty reply or
+requeue themselves. Original-principal authorization is rechecked at worker and
+result boundaries, without retaining credentials.
+
+Operators must exclude temporary execution content from long-lived backups and
+exports even when it shares the dialogue database. Existing R2 policy/consent
+separation and deletion-fence restore checks remain unchanged. See
+[the Stage C contract and local verification](deployment/controls/controls-stage-c-protocol.md).

@@ -132,11 +132,17 @@
             if (cid !== this.cid || generation !== this.generation || key !== this.key || grant !== this.config.recovery_scope)
               throw new Error("Attempt or identity changed; previous reply was discarded.");
             if (result) {
+              if (result.conversation_id !== cid || !Number.isInteger(result.revision) || result.revision < 2)
+                throw globalThis.belayRequestError("invalid_response", true);
               await this.restore(false, false);
               this.jobs.acknowledge(result);
               this.notify("Saved request recovered. History restored; no request was resubmitted.");
             }
           } catch (error) {
+            if (error.status === 401 || error.status === 404) {
+              try {await this.scope(); await this.json("/" + encodeURIComponent(cid));}
+              catch (denied) {error = denied; this.messages = []; this.before = null;}
+            }
             if (["conversation_unavailable", "authorization_revoked"].includes(error.code)) {
               this.messages = []; this.before = null; this.cid = null; this.write({enabled:this.enabled});
             }
@@ -190,8 +196,11 @@
           this.notify("Reply completed. Refresh to reload saved history.");
         }
         this.jobs.acknowledge(result);
-        return {...result, history_unavailable:historyUnavailable};
+        return {...result, recovered_request:this.jobs.wasRecovered(result), history_unavailable:historyUnavailable};
       } catch (error) {
+        if (error.status === 401 || error.status === 404 || error.code === "result_expired") {
+          try {await this.restore(true, false);} catch (denied) {error = denied;}
+        }
         this.notify(error.message); throw error;
       } finally { this.sending = false; }
     }

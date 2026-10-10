@@ -68,12 +68,13 @@ globalThis.belayAskJobs = function ({ storage,
         }
         // A missing operation after a lost POST can be a race with admission.
         // It never proves that a second paid request would be safe.
-        throw error(e.code === "job_unavailable" ? "execution_unknown" : e.code, true);
+        const failure = error(e.code === "job_unavailable" ? "execution_unknown" : e.code, true);
+        failure.status = e.status; throw failure;
       }
       if (onStatus) onStatus(job.state, context.config);
       if (job.state === "completed") {
         if (!globalThis.belayValidateTurn(job.result)) throw error("invalid_response", true);
-        receipts.set(job.result, {key: context.key, pointer});
+        receipts.set(job.result, {key: context.key, pointer, recovered:!!context.recovering});
         return job.result;
       }
       if (["failed", "cancelled", "result_expired"].includes(job.state)) {
@@ -86,6 +87,7 @@ globalThis.belayAskJobs = function ({ storage,
   }
   return {
     prepare,
+    wasRecovered(turn) {return !!receipts.get(turn)?.recovered;},
     acknowledge(turn) {
       const receipt = receipts.get(turn);
       if (!receipt) throw error("invalid_response", true);
@@ -98,7 +100,7 @@ globalThis.belayAskJobs = function ({ storage,
       const context = await prepare(base, prefix, body.exercise_id);
       if (onStatus) onStatus("preparing", context.config);
       let pointer = read(context.key);
-      if (pointer?.pending) return watch(context, pointer, onStatus);
+      if (pointer?.pending) return watch({...context,recovering:true}, pointer, onStatus);
       pointer = { request_id: uuid(), pending: true };
       write(context.key, pointer); // Commit pointer BEFORE the only POST.
       const payload = { ...body, participant_id: context.config.learner_id,
@@ -108,7 +110,7 @@ globalThis.belayAskJobs = function ({ storage,
       try {
         await request(base, prefix, { method: "POST", body: JSON.stringify(payload) }, validJob);
       } catch (e) {
-        if (!e.uncertain && ["rate_limited", "queue_full", "payload_too_large", "content_not_storable", "conversation_conflict"].includes(e.code)) {
+        if (!e.uncertain && ["rate_limited", "queue_full", "payload_too_large", "content_not_storable", "invalid_execution_data", "conversation_conflict"].includes(e.code)) {
           write(context.key, null); // Confirmed pre-admission denial, no automatic resend.
         }
         throw e;
@@ -119,7 +121,7 @@ globalThis.belayAskJobs = function ({ storage,
       const context = await prepare(base, prefix, exercise);
       if (onStatus) onStatus("preparing", context.config);
       const pointer = read(context.key);
-      return pointer ? watch(context, pointer, onStatus) : null;
+      return pointer ? watch({...context,recovering:true}, pointer, onStatus) : null;
     },
   };
 };

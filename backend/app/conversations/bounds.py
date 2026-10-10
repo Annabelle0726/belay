@@ -95,6 +95,13 @@ def bounded_route(policy_factory):
                     response = await original(request)
                 except ControlError as exc:
                     raise control_http_error(exc) from exc
+                except HTTPException as exc:
+                    exc.headers = {
+                        **(exc.headers or {}),
+                        "Cache-Control": "no-store",
+                        "Vary": "Authorization, X-Belay-Institution, X-Belay-Class",
+                    }
+                    raise
                 response.headers["Cache-Control"] = "no-store"
                 response.headers["Vary"] = "Authorization, X-Belay-Institution, X-Belay-Class"
                 return response

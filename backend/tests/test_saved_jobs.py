@@ -132,11 +132,11 @@ def test_delete_erases_linked_input_results_and_never_resurrects(saved_worker, p
     elif phase == "staged":
         publish = adapter.publish
 
-        def remove(job, ref):
+        def remove_staged(job, ref):
             repo.delete(identity, cid)
             publish(job, ref)
 
-        monkeypatch.setattr(adapter, "publish", remove)
+        monkeypatch.setattr(adapter, "publish", remove_staged)
     if phase == "queued":
         repo.delete(identity, cid)
     run_one(store.admission, adapter)
@@ -230,3 +230,84 @@ def test_split_database_saved_path_fails_closed(saved_worker, monkeypatch):
     del store.dialogue
     with pytest.raises(ControlError, match="saved_database_mismatch"):
         saved.repository(store)
+
+
+def test_queued_revision_conflict_executes_only_first_turn(saved_worker):
+    client, store, repo, identity, cid, adapter, _, calls, _, _ = saved_worker
+    submit(saved_worker)
+    other = {**body(), "request_id": "saved_request_002"}
+    assert client.post(f"/api/conversations/{cid}/jobs", json=other).status_code == 202
+    assert run_one(store.admission, adapter)
+    assert run_one(store.admission, adapter)
+    assert len(calls) == 3 and len(repo.history(identity, cid)["messages"]) == 2
+    with store.ledger.transaction() as conn:
+        assert sorted(conn.execute(select(jobs.c.state)).scalars()) == ["completed", "failed"]
+
+
+def test_lost_publication_ack_recovers_committed_reply_without_new_calls(saved_worker, monkeypatch):
+    _, store, repo, identity, cid, adapter, _, calls, _, _ = saved_worker
+    submit(saved_worker)
+    publish = adapter.publish
+
+    def lost(*args):
+        publish(*args)
+        raise RuntimeError("ack lost")
+
+    monkeypatch.setattr(adapter, "publish", lost)
+    assert run_one(store.admission, adapter)
+    assert status(saved_worker).json()["state"] == "completed"
+    assert len(repo.history(identity, cid)["messages"]) == 2
+    assert not run_one(store.admission, adapter) and len(calls) == 3
+
+
+def test_model_json_retry_is_separate_accounting_not_a_second_turn(saved_worker):
+    from tests.test_controls_execution import response
+
+    _, store, repo, identity, cid, adapter, responses, calls, _, _ = saved_worker
+    responses.insert(0, response("invalid JSON"))
+    submit(saved_worker)
+    assert run_one(store.admission, adapter)
+    assert status(saved_worker).json()["state"] == "completed"
+    assert len(calls) == 4 and store.ledger.summary()["consumed"]["tokens"] == 60
+    assert len(repo.history(identity, cid)["messages"]) == 2
+
+
+def test_expiry_cleanup_erases_linked_content_and_dialogue(saved_worker):
+    _, store, repo, identity, cid, adapter, _, _, _, _ = saved_worker
+    submit(saved_worker)
+    assert run_one(store.admission, adapter)
+    store.ledger.clock = lambda: 701.0
+    assert repo.cleanup() == 1
+    assert status(saved_worker).status_code == 404
+    with store.ledger.transaction() as conn:
+        assert conn.execute(select(data)).all() == []
+    with repo.sessions() as session:
+        assert session.scalars(select(Message)).all() == []
+
+
+def test_original_subject_only_can_query_old_job_even_with_same_learner(saved_worker):
+    client, store, _, _, cid, adapter, _, calls, _, _ = saved_worker
+    submit(saved_worker)
+    assert run_one(store.admission, adapter)
+    reply = client.get(
+        f"/api/conversations/{cid}/jobs/by-request/saved_request_001",
+        headers={"Authorization": "Bearer " + token("other")},
+    )
+    assert reply.status_code == 404 and len(calls) == 3
+
+
+def test_saved_support_uses_placeholders_and_never_persists_distress(saved_worker, monkeypatch):
+    from app.conversations.router import PLACEHOLDER
+
+    _, store, repo, identity, cid, adapter, _, calls, _, _ = saved_worker
+    monkeypatch.setattr(settings, "distress_routing_enabled", True)
+    payload = {**body(), "message": "I want to kill myself"}
+    submit(saved_worker, payload=payload)
+    assert run_one(store.admission, adapter)
+    result = status(saved_worker).json()
+    assert result["state"] == "completed" and result["result"]["message"] != PLACEHOLDER
+    assert calls == []
+    assert all(m["text"] == PLACEHOLDER for m in repo.history(identity, cid)["messages"])
+    with store.ledger.transaction() as conn:
+        for row in conn.execute(select(data)).mappings():
+            assert "kill myself" not in store.cipher.decrypt(row["body"].encode()).decode()
