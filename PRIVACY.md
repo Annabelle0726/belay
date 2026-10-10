@@ -145,6 +145,21 @@ Two decisions are deliberately left to the IRB and are marked open in the code:
 - System architecture, including the governance gate and the trace envelope:
   `ARCHITECTURE.md`.
 - The licensing split: `LICENSING.md`.
+# Operational accounting (CC-R3)
+
+Resource controls use separate `control_*` tables and do not depend on research
+consent. They contain hashed hierarchical scope keys, opaque operation/attempt
+references, policy versions, integer usage, states and content-free reason codes.
+They contain no prompts, source code, response text or bearer tokens. Operator
+reconciliation records contain opaque evidence references. No institution-wide
+usage endpoint is exposed to students.
+
+Queue payload/result storage is not implemented in this slice; service methods
+accept only opaque references and require a future authorized expiring store.
+Accounting/tombstone archival and rejection-record retention require an approved
+policy before production rollout. Development accounting is retained indefinitely
+to preserve idempotency and audit history. This is not a new conversation archive.
+See [operator guide](deployment/controls/controls-operations.md).
 
 ## Production identity boundary
 
@@ -178,3 +193,16 @@ creation-based expiry, not research events or research consent. Sensitive exchan
 retain a neutral placeholder. Deletion fences survive database backup restoration;
 operators must retain the independent content-free ledger and retire backups.
 Deployment commands, limits and unresolved policy choices are in docs/conversations.md.
+### Unsaved Ask operational recovery (CC-R3 Stage B)
+
+When explicitly enabled, Ask uses short-lived encrypted operational input and
+results in the shared controls coordinator. This is not saved dialogue or research
+consent: research routing remains unchanged. No bearer token or raw login subject
+is retained. Input lasts at most queue wait plus execution limit; result retention
+is `result_seconds` (300 seconds locally, maximum 3600). Operators must approve
+and disclose production retention, restrict database/key access, run
+`python -m app.controls.cli cleanup-content` at least every minute, and exclude
+these temporary tables from long-lived backups/exports. Encryption is not permission
+to retain content indefinitely. Expiry blocks access even before physical cleanup.
+PII and verbatim distress are not retained; content-free accounting/dedup records
+survive independently. No R2 saved-conversation strategy is changed.

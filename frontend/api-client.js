@@ -9,16 +9,20 @@ import "./conversation-client.js";
  * Both return the same shapes the UI consumes (the backend keeps the run() result
  * contract and Sol's JSON contract), so the UI is unchanged.
  */
+import "./control-messages.js";
+import "./request-lifecycle.js";
+import "./ask-jobs.js";
+
+const askJobs = globalThis.belayAskJobs();
+
 const BASE_URL =
   (typeof window !== "undefined" && window.SOL_BACKEND_URL) || "http://localhost:8000";
 
-async function _json(path, opts) {
-  const res = await fetch(BASE_URL + path, {
+async function _json(path, opts, validate) {
+  return globalThis.belayRequestJSON(BASE_URL + path, {
     ...opts,
     headers: await window.BelayAuth.headers(BASE_URL),
-  });
-  if (!res.ok) throw new Error(`${path} -> ${res.status}`);
-  return res.json();
+  }, { validate });
 }
 
 export function getCurriculum() {
@@ -38,10 +42,8 @@ export function runModel(participantId, exerciseId, source) {
 // the Sol turn.
 // `stance` is the RQ2/H2 manipulated variable (peer|oracle|control); it is
 // assigned per participant via URL and held constant for the session.
-export function solTurn({ participantId, exerciseId, event, mode, stance, source, result, recent, signals }) {
-  return _json("/api/sol/turn", {
-    method: "POST",
-    body: JSON.stringify({
+export async function solTurn({ participantId, exerciseId, event, mode, stance, source, result, recent, signals }) {
+  const turn = await askJobs.ask(BASE_URL, "/api/sol/jobs", {
       participant_id: participantId,
       exercise_id: exerciseId,
       event: event || "chat",
@@ -51,8 +53,9 @@ export function solTurn({ participantId, exerciseId, event, mode, stance, source
       result: result || null,
       recent: recent || [],
       signals: signals || null,
-    }),
   });
+  askJobs.acknowledge(turn);
+  return turn;
 }
 
 export function createParticipant(anonCode, consent) {
@@ -71,4 +74,10 @@ export async function exportEvents(participantId) {
 // Dedicated server-owned dialogue; unsaved solTurn remains available separately.
 export function createConversationSession(exerciseId, onChange) {
   return new window.BelayConversations.Session({base: BASE_URL, exercise: exerciseId, onChange});
+}
+
+export async function recoverSolTurn(exerciseId) {
+  const turn = await askJobs.recover(BASE_URL, "/api/sol/jobs", exerciseId);
+  if (turn) askJobs.acknowledge(turn);
+  return turn;
 }

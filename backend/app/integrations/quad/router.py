@@ -31,6 +31,9 @@ from ...agent import goals as _goals
 from ...agent import overlay as _overlay
 from ...auth import authorize, denied
 from ...config import settings
+from ...controls.contracts import ControlError
+from ...controls.http import control_http_error
+from ...controls.runtime import current as control_context
 from ...core.registry import get_active_pack
 from ...store import ConsentRouter, InMemoryStore, SqlStore
 from ...store.scoped import register, scoped_store
@@ -63,6 +66,7 @@ def build_router(
             "protocol": PROTOCOL_VERSION,
             "pack": pack.id,
             "provider": settings.provider,
+            "controls": settings.controls_mode,
         }
 
     @api.get("/capabilities")
@@ -128,6 +132,10 @@ def build_router(
 
     @api.post("/turn", dependencies=[Depends(authorize)])
     def turn(request: Request, payload: dict = Body(...)):
+        try:
+            control_context()
+        except ControlError as exc:
+            raise control_http_error(exc) from exc
         # 1. PII boundary on the RAW body (before any parsing/storage).
         try:
             assert_no_pii(payload)
@@ -166,10 +174,12 @@ def build_router(
         store = scoped_store(consent_router, request.state.identity)
         try:
             return run_turn(turn_payload, _llm(), store)
+        except ControlError as e:
+            raise control_http_error(e) from e
         except HTTPException:
             raise
         except Exception as e:  # surface a clean error
-            raise HTTPException(502, "tutor unavailable") from e
+            raise HTTPException(502, {"code": "execution_unknown"}) from e
 
     @api.post("/goals", dependencies=[Depends(authorize)])
     def goals(request: Request, payload: dict = Body(...)):
@@ -243,6 +253,9 @@ def build_router(
     from ...conversations.router import build_router as build_dialogue_router
 
     api.include_router(build_dialogue_router("", consent_router, pack, _llm))
+    from ...controls.jobs_http import build_jobs_router
+
+    api.include_router(build_jobs_router("/jobs", pack))
     return api
 
 

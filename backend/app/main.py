@@ -27,8 +27,9 @@ Consent gating (DMP §3 / IRB)
 
 from __future__ import annotations
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Depends, FastAPI, HTTPException, Request
+from starlette.middleware.cors import CORSMiddleware
+from starlette.responses import JSONResponse, Response
 
 from .agent import distress as distress_mod
 from .agent import get_llm, run_turn
@@ -36,6 +37,9 @@ from .agent import goals as goals_mod
 from .agent import overlay as overlay_mod
 from .auth import authorize, denied
 from .config import settings
+from .controls.contracts import ControlError
+from .controls.http import control_http_error
+from .controls.runtime import current as control_context
 from .core.registry import get_active_pack
 from .schemas import (
     GoalRequest,
@@ -52,11 +56,22 @@ from .store import ConsentRouter, InMemoryStore, SqlStore, make_event
 from .store.scoped import ScopedStore, register, scoped_store
 
 app = FastAPI(title="Peer-Tutor Framework", version="0.1.0")
+
+
+@app.exception_handler(ControlError)
+async def control_error(request, exc: ControlError):
+    error = control_http_error(exc)
+    return JSONResponse(
+        status_code=error.status_code, content={"detail": error.detail}, headers=error.headers
+    )
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Retry-After"],
 )
 
 # --- wiring (swappable via env) ----------------------------------------------
@@ -87,6 +102,9 @@ app.include_router(_build_quad_router(_router, _pack, _llm))
 from .conversations.router import build_router as _build_dialogue_router
 
 app.include_router(_build_dialogue_router("/api", _router, _pack, _llm))
+from .controls.jobs_http import build_jobs_router
+
+app.include_router(build_jobs_router("/api/sol/jobs", _pack))
 
 
 @app.get("/healthz")
@@ -96,6 +114,7 @@ def healthz():
         "pack": _pack.id,
         "provider": settings.provider,
         "store": settings.store_backend,
+        "controls": settings.controls_mode,
     }
 
 
@@ -116,6 +135,7 @@ def get_curriculum(request: Request):
 
 @app.post("/api/run", dependencies=[Depends(authorize)], response_model=RunResult)
 def run(request: Request, req: RunRequest):
+    control_context()
     try:
         ex = _pack.get_exercise(req.exercise_id)
     except KeyError:
@@ -137,6 +157,7 @@ def run(request: Request, req: RunRequest):
 
 @app.post("/api/sol/turn", dependencies=[Depends(authorize)], response_model=SolTurnResponse)
 def sol_turn(request: Request, req: SolTurnRequest):
+    control_context()
     try:
         ex = _pack.get_exercise(req.exercise_id)
     except KeyError:
@@ -158,10 +179,12 @@ def sol_turn(request: Request, req: SolTurnRequest):
     store = scoped_store(_router, request.state.identity)
     try:
         return run_turn(payload, _llm(), store)
+    except ControlError as e:
+        raise control_http_error(e) from e
     except HTTPException:
         raise
     except Exception as e:  # surface a clean error; the front-end shows a graceful note
-        raise HTTPException(502, "tutor unavailable") from e
+        raise HTTPException(502, {"code": "execution_unknown"}) from e
 
 
 @app.post("/api/participant", dependencies=[Depends(authorize)], response_model=ParticipantResponse)

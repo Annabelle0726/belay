@@ -1364,6 +1364,41 @@ a `scripts/smoke_*.py` | the matching section (§2/§3/§4) + add its expected o
 a new env var / config knob | the section that uses it (and `backend/app/config.py`, the source of truth; there is no `.env.example`)
 a new API route | §5 (and a curl/health example if relevant)
 a new external dependency (instance/account/allocation) | mark the step 🔴 and name the blocker
+## CC-R3 shared controls — 2026-10-08
+
+Base `83bd1a9`; branch `feature/shared-traffic-budget-controls`. Added shared
+ledger/admission services, model/runner attempt hooks, worker fencing, operator
+reconciliation and learner error messages. Full implementation record and
+per-step commit map: [controls-implementation.md](deployment/controls/controls-implementation.md).
+
+| Final check | Result |
+| --- | --- |
+| SQLite full regression | 423 passed, 9 skipped |
+| PostgreSQL 16 full regression | 425 passed, 7 skipped |
+| Frontend control messages | 2 passed |
+| Ruff lint and format | Passed |
+| mypy | Passed |
+
+New tests: `test_controls_ledger.py`, `test_controls_execution.py`,
+`test_controls_admission.py`, `test_controls_worker.py`,
+`test_controls_maintenance.py` (39 new cases total). Independent spawned
+PostgreSQL processes prove 800+800 cannot fit a 1,000-token allowance and a
+10-slot cap stays at 10 across processes. Deterministic fairness checks rotate
+A/B while A has 50 waiting jobs and B has 2. Failure tests cover unknown usage,
+rollover, overrun, cancellation, stale workers, synthetic revocation and outage.
+
+Seven common skips: one live inference evaluation and six missing external
+verifier-contract tests. SQLite additionally skips the two PostgreSQL races.
+One existing Starlette/AnyIO deprecation warning. Tests used isolated temporary
+stores and a disposable PostgreSQL container, with provider stubs throughout.
+
+**Integration status:** real Step 1/2 identity and conversation dependencies are
+not merged. HTTP asynchronous job routes, saved/unsaved transfer storage,
+conversation revision/deletion publication and production retention remain
+pending. Enforced existing HTTP routes fail closed without trusted context;
+development bypass is explicit in health output. No production rollout or
+full multi-API class load result is claimed. See the
+[operator guide](deployment/controls/controls-operations.md) for policy and reconciliation.
 
 
 ## Production phase 1 — verified identity and institution/class isolation
@@ -1540,3 +1575,37 @@ identity/assignment changes and authorization failure clear them. Restored histo
 and replies without signals show an explicit explanation instead of only dashes.
 32 hermetic frontend tests pass, including same-attempt refresh and new-attempt
 clearing. No signal persistence or backend contract changes were introduced.
+
+## Authenticated standalone local demo
+
+`backend/scripts/local_demo.py` starts loopback-only frontend/backend servers for
+explicit local development. It supplies a host callback before loading the three
+demos, generates in-memory RSA signing material, and mints five-minute tokens on
+demand. The child backend uses its normal credential and class authorization path,
+`BELAY_ENV=local`, synthetic grants and the memory store. Only public verification
+material is placed in a temporary directory, removed on exit. The launcher reads
+model settings through uvicorn's optional `backend/.env`; it does not edit that
+file, the root `.env` or any operator-owned deployment configuration.
+
+Run from `backend/`: `python -m scripts.local_demo`. Stop the existing servers first
+or use `--frontend-port 5174 --backend-port 8001`. Open the printed `/dev-client.html`
+URL. `--pack _skeleton` with `/embed-demo.html` exercises a control turn without a
+model. Host/Origin/fetch-site checks, a custom request header, no-store responses
+and frame denial protect the local token response. No credentials appear in a URL
+or local host log. Production authentication remains unchanged.
+
+`tests/test_local_demo.py` adds 9 hermetic cases for bootstrap ordering, all demo
+pages, token lifetime and private-key non-persistence, rejected host/origin/bare
+requests, and acceptance/denial through the actual backend auth dependency. No real
+identity service or model is contacted. Run `python -m pytest -o addopts='' -q tests/test_local_demo.py tests/test_auth_isolation.py`, then `ruff check .`,
+`ruff format --check .` and `mypy`. Also run
+`node frontend/tests/auth-client.test.cjs` from the repository root.
+
+Measured for this launcher follow-up: **176 passed** for the 9 new local-demo cases
+plus the 167 identity/isolation cases; frontend **4 passed**; `ruff check .`,
+`ruff format --check .` (106 files), and `mypy` (99 source files) pass. An actual
+launcher smoke on ports 5174/8001 also ran the dev page's bootstrap/client JavaScript:
+the token callback and backend curriculum returned 200 and loaded `ds-foundations`.
+No model request was made; both temporary smoke servers were stopped afterwards.
+The earlier complete backend result remains 541 passed/7 skipped; the local-demo
+follow-up was validated with the related suites above, not another full-suite run.

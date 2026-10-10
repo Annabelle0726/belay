@@ -41,6 +41,7 @@ class Identity:
     exercise_id: str = ""
     exercise_version: str = ""
     active_assignments: tuple[tuple[str, str], ...] = ()
+    grant_ref: str = ""
 
     @property
     def storage_id(self) -> str:
@@ -70,51 +71,7 @@ async def authorize(
     Only these explicitly selected environments allow a non-HTTPS issuer.
     Authorization is re-read per request so revocation does not wait for token expiry.
     """
-    if settings.belay_env not in {"production", "local", "test"}:
-        raise HTTPException(503, "authentication not configured")
-    try:
-        if not all(
-            (
-                settings.auth_issuer,
-                settings.auth_audience,
-                settings.auth_public_key_file,
-                settings.auth_authorization_file,
-            )
-        ):
-            raise ValueError
-        if settings.belay_env == "production" and not settings.auth_issuer.startswith("https://"):
-            raise ValueError
-        key = Path(settings.auth_public_key_file).read_text(encoding="utf-8")
-        authorization = Authorization.model_validate_json(
-            Path(settings.auth_authorization_file).read_text(encoding="utf-8")
-        )
-        # Validate the operator's versions, including empty/malformed entries.
-        opaque = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
-        if any(
-            not opaque.fullmatch(ex) or not opaque.fullmatch(version)
-            for ex, version in authorization.exercise_versions.items()
-        ):
-            raise ValueError
-        if any(not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", sub) for sub in authorization.subjects):
-            raise ValueError
-        for members in authorization.subjects.values():
-            scopes = [(m.institution_id, m.class_id) for m in members]
-            if len(scopes) != len(set(scopes)):
-                raise ValueError
-            if any(
-                not opaque.fullmatch(ex) or not opaque.fullmatch(v)
-                for m in members
-                for ex, v in m.assignments.items()
-            ):
-                raise ValueError
-        from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
-        from cryptography.hazmat.primitives.serialization import load_pem_public_key
-
-        public_key = load_pem_public_key(key.encode())
-        if not isinstance(public_key, RSAPublicKey) or public_key.key_size < 2048:
-            raise ValueError
-    except (OSError, ValueError, TypeError):
-        raise HTTPException(503, "authentication not configured") from None
+    key, authorization = _configuration()
 
     token = credentials.credentials if credentials is not None else ""
     if not token or len(token) > 16384:
@@ -199,5 +156,128 @@ async def authorize(
             if authorization.exercise_versions.get(ex_id) == ver
         ),
     )
+    identity = Identity(**{**identity.__dict__, "grant_ref": _grant_ref(claims["sub"], m)})
     request.state.identity = identity
     return identity
+
+
+def _configuration() -> tuple[str, Authorization]:
+    if settings.belay_env not in {"production", "local", "test"}:
+        raise HTTPException(503, "authentication not configured")
+    try:
+        if not all(
+            (
+                settings.auth_issuer,
+                settings.auth_audience,
+                settings.auth_public_key_file,
+                settings.auth_authorization_file,
+            )
+        ):
+            raise ValueError
+        if settings.belay_env == "production" and not settings.auth_issuer.startswith("https://"):
+            raise ValueError
+        key = Path(settings.auth_public_key_file).read_text(encoding="utf-8")
+        authorization = Authorization.model_validate_json(
+            Path(settings.auth_authorization_file).read_text(encoding="utf-8")
+        )
+        # Validate the operator's versions, including empty/malformed entries.
+        opaque = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
+        if any(
+            not opaque.fullmatch(ex) or not opaque.fullmatch(version)
+            for ex, version in authorization.exercise_versions.items()
+        ):
+            raise ValueError
+        if any(not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", sub) for sub in authorization.subjects):
+            raise ValueError
+        for members in authorization.subjects.values():
+            scopes = [(m.institution_id, m.class_id) for m in members]
+            if len(scopes) != len(set(scopes)):
+                raise ValueError
+            if any(
+                not opaque.fullmatch(ex) or not opaque.fullmatch(v)
+                for m in members
+                for ex, v in m.assignments.items()
+            ):
+                raise ValueError
+        from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
+        from cryptography.hazmat.primitives.serialization import load_pem_public_key
+
+        public_key = load_pem_public_key(key.encode())
+        if not isinstance(public_key, RSAPublicKey) or public_key.key_size < 2048:
+            raise ValueError
+    except (OSError, ValueError, TypeError):
+        raise HTTPException(503, "authentication not configured") from None
+
+    return key, authorization
+
+
+class ExecutionGrant(BaseModel):
+    """Opaque reference to the ORIGINAL verified principal, never a bearer token."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+    grant_ref: str = Field(pattern=r"^[0-9a-f]{64}$")
+    institution_id: str
+    class_id: str
+    learner_id: str
+    exercise_id: str
+    exercise_version: str
+
+
+def _grant_ref(subject: str, member: Membership) -> str:
+    raw = json.dumps(
+        [
+            "belay-execution-grant-v1",
+            settings.auth_issuer,
+            settings.auth_audience,
+            subject,
+            member.institution_id,
+            member.class_id,
+            member.learner_id,
+        ]
+    )
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def execution_grant(identity: Identity) -> ExecutionGrant:
+    if not identity.exercise_id or not identity.exercise_version:
+        raise denied()
+    return ExecutionGrant(**{k: getattr(identity, k) for k in ExecutionGrant.model_fields})
+
+
+def recheck_grant(grant: ExecutionGrant) -> Identity:
+    """Re-read current authorization without saving or replaying a login token.
+
+    A different subject with identical learner scope cannot sustain this grant.
+    Key/config failure, original membership revocation or version change fail closed.
+    """
+    _, authorization = _configuration()
+    for subject, members in authorization.subjects.items():
+        for m in members:
+            if _grant_ref(subject, m) != grant.grant_ref:
+                continue
+            if (m.institution_id, m.class_id, m.learner_id) != (
+                grant.institution_id,
+                grant.class_id,
+                grant.learner_id,
+            ):
+                raise denied()
+            if (
+                authorization.exercise_versions.get(grant.exercise_id) != grant.exercise_version
+                or m.assignments.get(grant.exercise_id) != grant.exercise_version
+            ):
+                raise denied()
+            return Identity(
+                m.institution_id,
+                m.class_id,
+                m.learner_id,
+                tuple(m.assignments.items()),
+                grant.exercise_id,
+                grant.exercise_version,
+                tuple(
+                    (ex, v)
+                    for ex, v in m.assignments.items()
+                    if authorization.exercise_versions.get(ex) == v
+                ),
+                grant.grant_ref,
+            )
+    raise denied()
