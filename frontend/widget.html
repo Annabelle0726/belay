@@ -251,10 +251,11 @@ $("send").addEventListener("click", async () => {
         stance:$("stance").value, event:"chat", mode:"study", source:"", recent:[...recent.slice(-8), {who:"student",text}], overlay:overlayFromKnob()},
         state => { if (currentGeneration === generation) $("turnstatus").textContent = state === "queued" ? "Waiting for a worker…" : "Checking request status…"; });
       if (currentGeneration !== generation || currentExercise !== $("ex").value) return;
-      addMsg("student", text); addMsg("tutor", data.message);
-      if (data.check_question) addMsg("tutor", data.check_question);
-      recent.push({who:"student",text}, {who:"tutor",text:data.message});
       const recovered = askJobs.wasRecovered(data);
+      if (!recovered) addMsg("student", text);
+      addMsg("tutor", data.message);
+      if (data.check_question) addMsg("tutor", data.check_question);
+      if (!recovered) recent.push({who:"student",text}, {who:"tutor",text:data.message});
       askJobs.acknowledge(data);
       data.recovered_request = recovered;
     }
@@ -269,9 +270,11 @@ $("send").addEventListener("click", async () => {
 });
 
 async function recoverUnsaved() {
-  const session = await dialogue.ready();
-  if (session.enabled || sending) return;
   const current = generation;
+  let session;
+  try { session = await dialogue.ready(); }
+  catch (error) { if (current === generation) $("turnstatus").textContent = error.message; return; }
+  if (current !== generation || session.enabled || sending) return;
   sending = true; $("send").disabled = true;
   try {
     const answer = await askJobs.recover(baseURL(), "/quad/v1/jobs", $("ex").value);

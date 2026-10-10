@@ -1609,3 +1609,32 @@ the token callback and backend curriculum returned 200 and loaded `ds-foundation
 No model request was made; both temporary smoke servers were stopped afterwards.
 The earlier complete backend result remains 541 passed/7 skipped; the local-demo
 follow-up was validated with the related suites above, not another full-suite run.
+
+## CC-R3 Stage C local integration — 2026-10-10
+
+Integrated complete R1, R2 restoration, the existing UI and controlled saved/
+unsaved Ask on `integration/saved-ask-controls`, targeting the local
+`feature/ui-conversation-preview`. No main/remote/deployment update. Saved Ask
+requires explicitly co-located dialogue/control SQL schemas; its conversation
+completion, temporary result and job completion share one database transaction.
+Split databases fail closed for saving. No cross-database atomicity is claimed.
+
+Full hermetic backend validation: SQLite **748 passed / 0 failed / 17 skipped**;
+disposable PostgreSQL **758 passed / 0 failed / 7 skipped**. The common skips are
+one live-model evaluation and six absent verifier-contract sibling cases. All
+10 PostgreSQL-only cases skipped by SQLite ran in the PostgreSQL leg, including
+saved API/worker process deduplication, both deletion/publication race orders and
+worker process death during publication. Frontend **76 passed / 0 failed /
+0 skipped**. Ruff check/format passed (155 formatted files); mypy passed
+(148 source files). These runs used isolated test databases, signed synthetic
+identities and stubs, with no paid models.
+
+Real Chromium/local signed host checked the existing dev page's saved completion,
+reload, lost-response recovery without another POST, and deletion; widget and
+embed checked unsaved completion, saved 202 admission and reload. Final runs:
+zero page script errors, non-loopback browser requests blocked. The layout was
+visually inspected. This is local verification, not deployment or load acceptance.
+Initial failures and fixes, exact commit sequence, outstanding limits and the
+no-model demo commands are recorded in
+`deployment/controls/controls-stage-c-summary.md` and
+`deployment/controls/controls-stage-c-protocol.md`.

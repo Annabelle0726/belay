@@ -149,3 +149,58 @@ Mypy initially hit a stale pytest cache, then reported four new typing errors;
 the cache-independent run passed after fixing those errors. Ruff passed.
 Final full SQLite/PostgreSQL and quality reruns remain C5 work, not claimed here.
 Commit: this C4 commit (recorded in C5).
+
+## C5 — final browser corrections and complete verification
+
+C4 commit: `b5c0d99`. Goal: verify the integrated user paths and finish all local
+quality gates. Files: `frontend/{dev-client.js,widget.html,embed-demo.html}`,
+`frontend/tests/turn-pages.test.cjs`, this summary and `VALIDATION.md`.
+
+Result: the minimal embed now instantiates its task client, blocks duplicate
+clicks, restores unsaved requests and fences identity/backend changes. All three
+pages catch denied recovery initialization instead of leaving an unhandled
+Promise. Recovering an earlier unsaved request keeps new input without inventing
+a student message for that unsubmitted input. Ask offers status checking for
+uncertain outcomes; no cancel control was added. Embed copy reflects the signed,
+controlled interface. The other UI structure and optional-save default remain.
+
+Final verification (2026-10-10):
+
+- Full isolated SQLite suite: **748 passed, 0 failed, 17 skipped** in 204.33s.
+- Full disposable PostgreSQL suite: **758 passed, 0 failed, 7 skipped** in 246.24s.
+  Includes independent signed API/worker processes, exact duplicate admission,
+  delete-first and publish-first contention with an observed blocked row lock,
+  and process exit inside publication rolling back both conversation and job.
+- Frontend: **76 passed, 0 failed, 0 skipped** after the final page fixes.
+- Ruff check and format: passed, **155 files** already formatted. Mypy passed,
+  **148 source files**. Whitespace check passed. Backend code was unchanged after
+  the full-suite/quality runs; the final changes are browser code/tests/docs.
+- Real Chromium with non-loopback requests blocked: dev client saved completion,
+  refresh, lost POST acknowledgement recovery (one POST, no resubmission), delete;
+  embed and widget unsaved completion, saved HTTP 202 admission and refresh.
+  Final runs had **0 page errors**; dev layout screenshot inspected outside Git.
+
+The 7 common skips are the intentionally disabled paid/live model evaluation
+and 6 verifier-contract cases requiring an absent sibling checkout. SQLite skips
+10 additional PostgreSQL-only cases; those ran in the PostgreSQL leg. No paid
+model, real student identity/data or production deployment was used. Browser
+checks use local signed accounts and the explicit model stub. Browser validation
+initially exposed the denied-scope rejection above; it is fixed and regression
+tested. Some manual harness assertions incorrectly expected creation HTTP 201
+(R2 returns 200), or nonempty completion text in the widget status field, and
+repeated synthetic attempts hit the unchanged five-attempt quota. Harness
+expectations were corrected and synthetic demo attempts deleted through the
+existing owned API; quota and policy were not relaxed. Final checks passed.
+
+Remaining limits: saved execution requires the explicitly co-located SQL schema;
+cross-database publication/outbox is not implemented. Unknown model outcomes are
+query-only and require existing operator investigation/reconciliation. Production
+policy approval, key/backup/cleanup operations, real provider and production-load
+validation remain outside this local integration. A staged-but-uncommitted result
+is never silently rerun or republished after lease loss. The inherited strict
+temporary-content screen can reject an input it cannot safely queue.
+
+Untracked review material still matches its pre-switch backup hash. User local
+deployment files and databases remain outside commits. Complete R1 `266c23e`,
+R2 `3a414d6`, and the actual R3 starting tip `1585b23` are all ancestors of this
+integration. Main is still `e8725ec`. Commit: this C5 change (recorded in C6).
