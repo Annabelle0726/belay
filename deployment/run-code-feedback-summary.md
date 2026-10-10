@@ -216,3 +216,20 @@ Refresh to recover the same logical task; never manually replay unknown tasks.
 The temporary demo uses a synthetic local policy, not institutional retention
 approval. Ctrl+C stops only that demo's two listeners. Do not commit its DB,
 keys, grants, logs or tokens. Existing 8002/5175 should remain running untouched.
+
+## Final implementation receipts
+
+- `b14d1c7`: R0/R1 evidence, synchronous Run identity/accounting context and signed
+  datascience sandbox + controlled stub feedback tests.
+- `e55f48d`: R2 classification, old-task attribution and frontend regressions.
+- `812129c`: R3 enforcement expectation, complete test triage and retest procedures.
+
+These are local commits on `fix/run-code-tutor-feedback`. The final documentation
+receipt changes only this Markdown file; its commit number is reported externally.
+Completed: code repair and isolated automated verification of automatic Run
+feedback, deduplication, auth, budgets and retained unknown-request protection.
+Incomplete: enabling the existing preview's controlled service, validating its
+historical Run response/old task, a live browser Run, PostgreSQL verification and
+the pre-existing embed assertion drift. No push, deploy, merge, branch deletion,
+database reset/migration, browser storage reset or paid model call was performed.
+The original untracked controls integration review remains untracked and intact.
