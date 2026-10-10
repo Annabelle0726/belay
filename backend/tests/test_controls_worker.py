@@ -190,6 +190,7 @@ def test_http_enforcement_cannot_trust_body_identity(monkeypatch, path, payload)
     from tests.http_auth import authenticated_client
 
     monkeypatch.setattr(settings, "controls_mode", "enforced")
+    monkeypatch.setattr(settings, "controls_jobs_enabled", False)
     with TestClient(app) as anonymous:
         assert anonymous.post(path, json=payload).status_code == 401
         assert anonymous.get("/api/curriculum").status_code == 401
@@ -198,5 +199,9 @@ def test_http_enforcement_cannot_trust_body_identity(monkeypatch, path, payload)
         assert client.post(path, json=forged).status_code == 404
         result = client.post(path, json=payload)
         assert result.status_code == 503
-        assert result.json()["detail"]["code"] == "verified_execution_required"
+        # Run now creates its trusted context from authenticated authority, but
+        # still cannot execute with the controlled service disabled. Legacy
+        # synchronous model routes continue to require a worker context.
+        expected = "jobs_disabled" if path == "/api/run" else "verified_execution_required"
+        assert result.json()["detail"]["code"] == expected
         assert client.get("/api/curriculum").status_code == 200
