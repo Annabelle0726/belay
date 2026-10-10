@@ -39,6 +39,7 @@ from .auth import authorize, denied
 from .config import settings
 from .controls.contracts import ControlError
 from .controls.http import control_http_error
+from .controls.run_http import run_context
 from .controls.runtime import current as control_context
 from .core.registry import get_active_pack
 from .schemas import (
@@ -135,23 +136,24 @@ def get_curriculum(request: Request):
 
 @app.post("/api/run", dependencies=[Depends(authorize)], response_model=RunResult)
 def run(request: Request, req: RunRequest):
-    control_context()
-    try:
-        ex = _pack.get_exercise(req.exercise_id)
-    except KeyError:
-        raise denied() from None
-    result = _pack.run(req.source, ex)
-    # Route the trace event to durable or ephemeral based on consent.
-    store = scoped_store(_router, request.state.identity)
-    store.append_event(
-        make_event(
-            req.participant_id,
-            req.exercise_id,
-            "study",
-            "run",
-            {"source": req.source, "result": result},
+    with run_context(request.state.identity):
+        try:
+            ex = _pack.get_exercise(req.exercise_id)
+        except KeyError:
+            raise denied() from None
+        result = _pack.run(req.source, ex)
+        control_context()
+        # Route the trace event to durable or ephemeral based on consent.
+        store = scoped_store(_router, request.state.identity)
+        store.append_event(
+            make_event(
+                req.participant_id,
+                req.exercise_id,
+                "study",
+                "run",
+                {"source": req.source, "result": result},
+            )
         )
-    )
     return result
 
 
