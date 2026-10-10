@@ -116,3 +116,103 @@ worked around; no demo listener was started by that action. Tests use isolated
 test databases and stub providers. Existing application DBs were not initialized,
 cleared or migrated. Remaining service/demo prerequisites and final counts follow
 in R3. R2 commit ID will be recorded after committing this step.
+
+## R3 — regression verification and local reproduction boundaries
+
+R2 commit: `e55f48d`.
+Goal: complete regression checks and document an honest retest without changing
+the existing service/database. Files: `backend/tests/test_controls_worker.py`,
+this summary. The full suite exposed an old assertion expecting an unbound Run
+context. It now explicitly disables jobs and expects jobs_disabled for Run,
+retaining anonymous/forged-body rejection and the old model-route expectations.
+This regression plus the new Run tests: 16 passed, 0 failed, 0 skipped.
+The full-suite run (before the corrected assertion) finished with **749 passed,
+3 failed, 17 skipped** in 251.36 seconds. Failure triage:
+
+- controls_worker Run assertion: corrected as above and all 16 relevant tests
+  reran successfully.
+- local_dev saving-on/non-controlled launcher: HTTP timeout at its 5-second test
+  deadline; isolated rerun passed without code changes. This is not evidence of
+  an app fix for every possible timeout.
+- test_deploy's embed-page assertion: still fails on rerun because it requires
+  `/quad/v1/turn` literally inside embed-demo.html, which already uses controlled
+  jobs. The HTML and this test are byte-identical to starting commit 4231e39, as
+  are the launcher files. This is existing test/contract drift outside the Run
+  repair; neither the embed page nor this test was changed to hide that failure.
+
+Full Ruff check/format and mypy pass after the test assertion change (158 formatted
+files, 151 checked sources). Full frontend: **81 passed, 0 failed, 0 skipped**.
+PostgreSQL checks were skipped without isolated database settings; no PostgreSQL
+claim is made. The full backend suite was not repeated after the isolated fixes;
+it is NOT reported as fully green. The final combined Run/identity/budget/job/
+recovery/CORS regression set passed **57 tests, 0 failed, 0 skipped** in 13.98s.
+
+Read-only live recheck: health reports datascience/openai_compatible/sql/
+development_bypass; served dev-client.js, ask-jobs.js and request-lifecycle.js
+match checkout byte-for-byte. The old browser tab's loaded version/history is
+unverified. The pre-existing untracked integration review is untouched.
+The confirmed config rejection blocks the unsaved automatic-feedback path before
+its POST. Configuration GETs can also come from startup recovery, so the GET alone
+does not prove the historical Run succeeded. If optional saving was on, the
+current non-controlled saved route is separate; it was not exercised with real
+models. No actual old job state was inferred from the screenshot/config response.
+Root/backend qimvp.db, authorization rules, deletion ledger and backend .env
+match the prior curriculum-repair manifest. The application demo.sqlite3 differs
+from that PRIOR repair manifest and has last-write time 10:42:38, before the
+final regression/check commits. That older manifest is not a start-of-this-task
+snapshot; do not attribute that difference to this repair or claim a current-task
+before/after hash proof. No command in this repair provisions the existing DB.
+
+### Retest the existing preview without replaying an unknown request
+
+Frontend: http://127.0.0.1:5175/dev-client.html
+API: http://127.0.0.1:8002
+
+1. Hard-refresh to load the new static client; do not clear storage. Inspect only
+   status and response error codes, never copy Authorization. Config still returns
+   503 jobs_disabled. There should be no false new-task-running claim.
+2. For a deliberate NEW code run, click Run code once. Inspect /api/run separately:
+   HTTP 200 plus ok=true and actual stdout/check details prove code execution.
+   A runner failure should not dispatch tutoring. Do not replay an existing
+   unknown tutor task for this check.
+3. In this disabled configuration, successful Run should keep code output and
+   say no new tutor feedback was submitted. No new POST /api/sol/jobs should occur.
+   Old pending IDs stay in storage; no evidence is erased. This is the correct
+   failure presentation, NOT proof that AI feedback is now available on 8002.
+
+Actual feedback requires controls_mode=enforced, jobs_enabled, configured controls
+DB/deployment/key with an existing initialized policy/schema, and a running worker
+using the intended provider. These settings permit job/input/result and accounting
+writes; a real provider could incur charges. Simply flipping the jobs flag is not
+sufficient. No such settings were applied to 8002. The ordinary local_dev launcher
+provisions data, so do NOT restart it against deployment/local/ui-preview under
+the current no-initialization constraint.
+
+### Optional synthetic demo — instructions only, not executed this round
+
+This creates ONLY a fresh temporary test directory/database, uses the existing
+datascience three-exercise pack, enables enforced controls and its worker, and
+replaces all model factories with the local stub. It never reuses the existing
+preview DB or calls a paid model. Choose unused ports; the launcher fails if busy.
+Because automatic review blocked this round's demo launch, the following manual
+browser procedure remains unverified, distinct from passing automated tests.
+
+In a new PowerShell terminal:
+
+```powershell
+Set-Location C:\Projects\EduCloud-Ecosystem\belay\backend
+$feedbackDemo = Join-Path $env:TEMP ('belay-run-feedback-demo-' + [guid]::NewGuid().ToString('N'))
+if (Test-Path -LiteralPath $feedbackDemo) { throw 'Demo directory must be new' }
+$env:TUTOR_PACK = 'datascience'
+python -m app.local_dev --controlled-stub --api-port 8003 --frontend-port 5176 --data-dir $feedbackDemo --env-file (Join-Path $feedbackDemo 'unused.env')
+```
+
+Open http://127.0.0.1:5176/dev-client.html (API http://127.0.0.1:8003). Keep saving
+off for the minimal Run demonstration. Choose Grouped summaries, enter synthetic
+code `print("isolated code output")` followed by `result = {}`, click Run code once.
+Expected: code output/checks, one feedback POST, queued/running/completed GETs,
+and a nonempty `Local model stub` tutor bubble without manually clicking Ask Sol.
+Refresh to recover the same logical task; never manually replay unknown tasks.
+The temporary demo uses a synthetic local policy, not institutional retention
+approval. Ctrl+C stops only that demo's two listeners. Do not commit its DB,
+keys, grants, logs or tokens. Existing 8002/5175 should remain running untouched.
