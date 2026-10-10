@@ -1,7 +1,8 @@
 # Front-end
 
 Reference front-ends for the Sol peer-tutor backend. They are demos and pilot
-glue, not part of the tested framework; the backend is the source of truth.
+glue; the backend is the source of truth. Request lifecycle behavior is covered
+by offline transport and page-script tests, not authenticated browser acceptance.
 
 | File | Purpose |
 |------|---------|
@@ -10,6 +11,39 @@ glue, not part of the tested framework; the backend is the source of truth.
 | `dev-client.html` | No-build development page with responsive layout, theme and conversation feed; the host supplies an authorized learner alias and signed access token. |
 | `dev-client.js` | Authenticated run/turn wiring, live signals and saved/unsaved conversation rendering for the development page. |
 | `api-client.js` | A small API client (`runModel`, `solTurn`, `createParticipant`, `exportEvents`, `getCurriculum`) for a custom front-end. |
+| `request-lifecycle.js` | Shared bounded JSON transport, turn validation, and page-local duplicate/stale-response protection. |
+
+## Failure and waiting behavior
+
+The reference pages and API client bound JSON requests to 90 seconds, including
+reading the response body, with no automatic retries. The browser may stop
+waiting while server/provider work continues; this is not a cancellation feature.
+Malformed JSON, empty messages and unusable display metadata cannot become a
+successful tutor answer. An ambiguous network/timeout/5xx failure explains that
+execution may still be running and directs the learner to course support.
+
+The pages block repeat clicks while work is pending and after an uncertain outcome
+in that page's current learner/exercise context. Context changes fence late
+responses, including switching away and back. A failed run never starts an Ask
+with stale run data. The widget preserves unsent text on failure and does not put
+error/empty tutor messages in dialogue history. No learner cancellation button
+is added.
+
+These are local guards, **not HTTP idempotency or durable recovery**. A refresh,
+another tab or another device is not protected by the page-local gate. Do not
+reload/resubmit to resolve an unknown outcome; the authenticated job/status API
+is the next prerequisite for recovering the same operation. The API client
+reports `error.code` and `error.uncertain`; custom hosts must implement their own
+display/in-flight guard and must not automatically retry uncertain POSTs.
+
+Run the offline tests from the repository root (no backend/model endpoint):
+
+```text
+node --test frontend/tests/control-messages.test.cjs frontend/tests/request-lifecycle.test.cjs frontend/tests/turn-pages.test.cjs
+```
+
+The page tests execute the actual inline page scripts with a minimal DOM harness
+and mocked transport. Real browser/authenticated HTTP acceptance remains pending.
 
 ## Backend wiring
 
@@ -242,3 +276,44 @@ identity/assignment changes and authorization failure clear them. Restored histo
 and replies without signals show an explicit explanation instead of only dashes.
 32 hermetic frontend tests pass, including same-attempt refresh and new-attempt
 clearing. No signal persistence or backend contract changes were introduced.
+## Standalone local demo
+
+A plain `python -m http.server` cannot supply the host credential callback above.
+For an explicit local-only demo, stop the existing frontend and backend with
+Ctrl+C, then run from `backend/` using the project virtual environment:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.local_demo
+```
+
+Open `http://127.0.0.1:5173/dev-client.html`. This one command starts both servers
+on loopback, generates a temporary RSA key and synthetic class grant, and injects
+the host callback before the client loads. Access tokens are minted on demand for
+five minutes and stay in memory; the private key is never written or served. The
+backend still verifies signatures and membership, uses `BELAY_ENV=local` and an
+ephemeral memory store, and reads the inference settings from `backend/.env` when
+present. Asking the peer tutor still requires your configured model endpoint.
+Existing `.env` files and deployment configuration are not changed.
+
+If the original servers should keep running, choose different ports:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.local_demo --frontend-port 5174 --backend-port 8001
+```
+
+Then open `http://127.0.0.1:5174/dev-client.html`. For the no-model embed demo use
+`--pack _skeleton` and open `/embed-demo.html` (control stance). Ctrl+C stops both
+child/demo servers and removes the temporary public key and grants. The helper is
+only a local host emulator, never a production identity provider. Production and
+normal static hosting continue to require the real host credential callback.
+
+## Controlled unsaved Ask (CC-R3 Stage B)
+
+Ask uses `/api/sol/jobs` or `/quad/v1/jobs` and requires server opt-in plus the
+existing origin-bound host credential helper. `ask-jobs.js` stores only a scoped
+opaque request pointer in localStorage before admission. Reload or Check request
+status queries the same operation; an unknown/missing result never resends a POST.
+Temporary server retention is shown in the page. Clearing browser storage loses
+the recovery pointer; it is not cancellation. Unsaved Ask does not create an R2
+saved conversation. Run remains the existing separately controlled endpoint.
+The API client exports `recoverSolTurn(exerciseId)` for host bootstrapping.
