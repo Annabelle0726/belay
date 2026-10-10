@@ -89,3 +89,28 @@ browser wiring and manual visual verification are pending. Saving stays optional
 the strict Stage B operational content screen may reject a sensitive queued input
 when distress routing is disabled instead of retaining it. No detector terms or
 retention policy were changed. Commit: this C2 commit (recorded in C3).
+
+## C3 — existing UI and request restoration
+
+C2 commit: `0b0469d`. Files: shared `conversation-client.js`, `ask-jobs.js`,
+`request-lifecycle.js`, `control-messages.js`, existing dev/widget/embed clients
+and their auth/session/page tests. Controlled saved sessions use the new jobs
+routes; unsaved clients keep Stage B job admission/recovery. Saving remains off
+until explicitly chosen. Local storage holds scoped opaque request/attempt IDs
+and preferences only. A lost/unknown request stays query-only after reload and
+changed input. Valid replies are acknowledged after UI handling; switching
+attempt/identity invalidates late callbacks. Config/history requests have bounded
+waiting, including credential refresh, and 204 delete responses are supported.
+
+The existing layout, safe Markdown rendering, consent separation and conversation
+controls remain. Waiting/unknown/conflict/unavailable feedback is explicit;
+malformed/empty replies cannot become successes. A status check reuses Ask and
+Refresh history; no cancellation control was added. Legacy R2 behavior is still
+tested when controls are explicitly disabled.
+
+Validation: **70 frontend tests passed, 0 failed, 0 skipped**, including actual UI
+client/Session with an offline API, controlled saved refresh/unknown cases and
+Stage B page failure/duplicate/late-response checks adapted to the retained UI.
+Earlier integration-harness/syntax failures were fixed before the final run.
+Diff whitespace check passed. PostgreSQL races, full backend and visual browser
+verification remain pending. Commit: this C3 commit (number recorded in C4).

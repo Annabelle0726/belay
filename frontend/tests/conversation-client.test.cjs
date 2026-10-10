@@ -6,17 +6,36 @@ const vm = require('node:vm');
 const path = require('node:path');
 const {test} = require('node:test');
 
-function setup() {
+function setup({controlled=false}={}) {
   const entries = new Map(), calls = [], attempts = new Map();
+  let unknown = false, jobPosts = 0; const jobs = new Map();
   let subject = 'gh:1', serial = 0, unavailable = false, loseReply = false;
   const window = {location:{href:'https://host.invalid'}, BELAY_AUTH_ORIGIN:'https://belay.invalid',
     BELAY_GET_ACCESS_TOKEN:async()=>'short-token', BELAY_INSTITUTION_ID:'inst-a', BELAY_CLASS_ID:'class-a',
-    crypto:{randomUUID:()=>`request-${++serial}`}, localStorage:{
-      getItem:key=>entries.get(key) || null, setItem:(key,value)=>entries.set(key,value)}};
+    crypto:{randomUUID:()=>`logical-request-${++serial}`}, localStorage:{
+      getItem:key=>entries.get(key) || null, setItem:(key,value)=>entries.set(key,value),removeItem:key=>entries.delete(key)}};
   const fetch = async (url, options) => {
     calls.push({url,options});
     let value = {}, status = 200;
-    if (url.endsWith('/config')) value = {enabled:true, policy_id:'approved-test',retention_seconds:300,
+    if (url.endsWith('/jobs/config')) value={recovery_scope:'a'.repeat(64),learner_id:subject,assignments:{'echo-1':'v1'},poll_seconds:1,result_seconds:300,notice:'Recovery'};
+    else if(url.includes('/jobs/by-request/')) {
+      const id=url.split('/').at(-1);value=jobs.get(id)||{};
+      if(unknown) value={id:'b'.repeat(64),state:'unknown',result:null};
+      else if(!value.id) status=404;
+    }
+    else if(url.endsWith('/jobs') && options.method==='POST') {
+      jobPosts++;
+      const body=JSON.parse(options.body),cid=url.split('/conversations/')[1].split('/')[0],a=attempts.get(cid);
+      if(!a) status=404;
+      else {
+        const result={message:'Released answer',conversation_id:cid,revision:a.revision+2};
+        jobs.set(body.request_id,{id:'b'.repeat(64),state:'completed',result});
+        a.revision+=2;a.messages.push({role:'student',text:body.message,status:'completed'},{role:'assistant',text:result.message,status:'completed'});
+        value={id:'b'.repeat(64),state:'queued'};
+        if(loseReply) {loseReply=false;throw new Error('connection lost');}
+      }
+    }
+    else if (url.endsWith('/config')) value = {controlled,recovery_scope:'a'.repeat(64),enabled:true, policy_id:'approved-test',retention_seconds:300,
       identity:{institution_id:'inst-a',class_id:'class-a',learner_id:subject},assignments:{'echo-1':'v1'}};
     else if (options.method === 'POST' && url.endsWith('/conversations')) {
       const body = JSON.parse(options.body);
@@ -41,12 +60,12 @@ function setup() {
       } else if (suffix.includes('before=')) value = {revision:attempt.revision,messages:[{sequence:0,role:'student',text:'older',status:'completed'}],before:null};
       else value = {revision:attempt.revision,messages:attempt.messages.slice(-2),before:attempt.messages.length>2?'scoped-cursor':null,pending:false};
     }
-    return {ok:status<400,status,json:async()=>value};
+    return {ok:status<400,status,headers:new Headers(),json:async()=>value};
   };
-  const ctx = vm.createContext({window,URL,fetch});
-  for (const file of ['auth-client.js','conversation-client.js']) vm.runInContext(fs.readFileSync(path.join(__dirname,'..',file),'utf8'),ctx);
+  const ctx = vm.createContext({window,URL,fetch,Headers,AbortController,setTimeout,clearTimeout,crypto:window.crypto,localStorage:window.localStorage});
+  for (const file of ['auth-client.js','control-messages.js','request-lifecycle.js','ask-jobs.js','conversation-client.js']) vm.runInContext(fs.readFileSync(path.join(__dirname,'..',file),'utf8'),ctx);
   const make = () => new window.BelayConversations.Session({base:'https://belay.invalid',exercise:'echo-1'});
-  return {make,entries,calls,attempts,setSubject:value=>subject=value,setUnavailable:value=>unavailable=value,
+  return {make,entries,calls,attempts,jobs,posts:()=>jobPosts,setUnknown:v=>unknown=v,setSubject:value=>subject=value,setUnavailable:value=>unavailable=value,
     loseReply:()=>loseReply=true};
 }
 
@@ -69,7 +88,7 @@ test('refresh restores same authorized attempt; new attempt has separate history
 
 test('lost response retry keeps request ID and cannot invent history', async()=>{
   const env=setup(), session=env.make(); await session.initialize(); await session.setSaving(true);
-  env.loseReply(); await assert.rejects(session.send({message:'hello'}),/connection lost/);
+  env.loseReply(); await assert.rejects(session.send({message:'hello'}),/connection was lost/);
   const saved=await session.send({message:'hello'}); assert.equal(saved.message,'Released answer');
   const turns=env.calls.filter(c=>c.url.endsWith('/turns'));
   assert.equal(JSON.parse(turns[0].options.body).request_id,JSON.parse(turns[1].options.body).request_id);
@@ -115,7 +134,7 @@ test('all three demos mount the shared restoration controls',()=>{
 
 test('refresh after a lost completed reply allows a new message', async()=>{
   const env=setup(), session=env.make(); await session.initialize(); await session.setSaving(true);
-  env.loseReply(); await assert.rejects(session.send({message:'first'}),/connection lost/);
+  env.loseReply(); await assert.rejects(session.send({message:'first'}),/connection was lost/);
   await session.restore();
   await session.send({message:'second'});
   assert.equal(env.attempts.get(session.cid).messages.length,4);
@@ -143,4 +162,23 @@ test('initialization recovers missing history without silently replacing it',asy
   assert.equal(next.authorized,true);assert.equal(next.cid,null);assert.equal(next.messages.length,0);
   assert.match(next.note,/Choose New attempt/);assert.equal(env.attempts.size,0);
   await next.newAttempt();assert.equal(env.attempts.size,1);
+});
+
+
+test('controlled saved Ask survives lost POST and refresh with GET only',async()=>{
+ const env=setup({controlled:true}),s=env.make();await s.initialize();await s.setSaving(true);
+ env.loseReply();await assert.rejects(s.send({message:'Question'}));assert.equal(env.posts(),1);
+ const restored=env.make();await restored.initialize();assert.equal(env.posts(),1);
+ assert.equal(restored.messages.length,2);
+ assert.ok(!JSON.stringify([...env.entries.values()]).includes('Question'));
+ assert.ok(!JSON.stringify([...env.entries.values()]).includes('Released answer'));
+});
+
+test('controlled unknown remains query-only even when input changes after refresh',async()=>{
+ const env=setup({controlled:true}),s=env.make();await s.initialize();await s.setSaving(true);
+ env.setUnknown(true);await assert.rejects(s.send({message:'Question'}));
+ const restored=env.make();await restored.initialize();
+ await assert.rejects(restored.send({message:'Different input'}));assert.equal(env.posts(),1);
+ env.setUnknown(false);const result=await restored.send({message:'Still a check'});
+ assert.equal(result.message,'Released answer');assert.equal(env.posts(),1);
 });

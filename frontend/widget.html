@@ -145,6 +145,7 @@
   </div>
 </div>
 
+<p id="turnstatus" role="status" class="note"></p>
 <script src="auth-client.js"></script>
 <script src="control-messages.js"></script>
 <script src="request-lifecycle.js"></script>
@@ -158,6 +159,8 @@ if (window.SOL_BACKEND_URL || window.BELAY_AUTH_ORIGIN) $("base").value = window
 if (window.BELAY_LEARNER_ID) $("pid").value = window.BELAY_LEARNER_ID;
 if (window.BELAY_EXERCISE_ID) $("ex").value = window.BELAY_EXERCISE_ID;
 const baseURL = () => $("base").value.replace(/\/$/, "");
+const askJobs = globalThis.belayAskJobs();
+let sending = false, generation = 0;
 const recent = [];   // dialogue history for the turn loop
 
 function addMsg(who, text) {
@@ -179,12 +182,10 @@ function overlayFromKnob() {
   return v ? { pedagogy: { scaffolding: v } } : null;
 }
 async function post(path, body) {
-  const r = await fetch(baseURL() + path, {
-    method: "POST", headers: await window.BelayAuth.headers(baseURL()),
-    body: JSON.stringify(body),
+  const data = await globalThis.belayRequestJSON(baseURL() + path, {
+    method:"POST", headers:await window.BelayAuth.headers(baseURL()), body:JSON.stringify(body)
   });
-  const data = await r.json().catch(() => ({}));
-  return { status: r.status, data };
+  return {status:200,data};
 }
 
 // SIGNALS, not verdicts. A withheld solution reads as "held back, with a nudge".
@@ -235,49 +236,76 @@ const dialogue = window.BelayConversations.mount({
       (m.status === "completed" ? "" : " (" + m.status + ")")));
   }
 });
-for (const id of ["base", "ex", "pid"]) $(id).addEventListener("change", () => { recent.length = 0; dialogue.refresh(); });
+for (const id of ["base", "ex", "pid"]) $(id).addEventListener("change", () => { generation++; recent.length = 0; dialogue.refresh().then(recoverUnsaved); });
 $("send").addEventListener("click", async () => {
-  const text = $("say").value.trim(); if (!text) return;
+  if (sending) return;
+  sending = true;
+  const currentGeneration = generation, currentExercise = $("ex").value;
+  const text = $("say").value.trim(); if (!text) {sending = false; return;}
   $("send").disabled = true;
   try {
     let data = await dialogue.send({message:text, stance:$("stance").value, mode:"study",
                                    source:"", overlay:overlayFromKnob()});
     if (!data) {
-      addMsg("student", text); recent.push({who:"student",text});
-      const reply = await post("/quad/v1/turn", {pseudo_id:$("pid").value, exercise_id:$("ex").value,
-        stance:$("stance").value, event:"chat", mode:"study", source:"", recent:recent.slice(-8), overlay:overlayFromKnob()});
-      if (reply.status !== 200) throw new Error("Tutor unavailable (" + reply.status + ").");
-      data = reply.data; addMsg("tutor", data.message || "(no message)");
+      data = await askJobs.ask(baseURL(), "/quad/v1/jobs", {participant_id:$("pid").value, exercise_id:$("ex").value,
+        stance:$("stance").value, event:"chat", mode:"study", source:"", recent:[...recent.slice(-8), {who:"student",text}], overlay:overlayFromKnob()},
+        state => { if (currentGeneration === generation) $("turnstatus").textContent = state === "queued" ? "Waiting for a worker…" : "Checking request status…"; });
+      if (currentGeneration !== generation || currentExercise !== $("ex").value) return;
+      addMsg("student", text); addMsg("tutor", data.message);
       if (data.check_question) addMsg("tutor", data.check_question);
-      recent.push({who:"tutor",text:data.message || ""});
+      recent.push({who:"student",text}, {who:"tutor",text:data.message});
+      askJobs.acknowledge(data);
     }
+    if (currentGeneration !== generation || currentExercise !== $("ex").value) return;
     if (data.unsaved_exchange) { addMsg("tutor", data.message); if (data.check_question) addMsg("tutor", data.check_question); }
-    $("say").value = "";
+    $("say").value = ""; $("turnstatus").textContent = "";
     if (data.live_signals || data.components) renderSignals(data.live_signals || data);
     else $("signals").textContent = "Historical replies have no saved live signals.";
-  } catch (error) { addMsg("tutor", error.message); }
-  finally { $("send").disabled = false; }
+  } catch (error) { if (currentGeneration === generation) $("turnstatus").textContent = error.message; }
+  finally { sending = false; $("send").disabled = false; }
 });
 
+async function recoverUnsaved() {
+  const session = await dialogue.ready();
+  if (session.enabled || sending) return;
+  const current = generation;
+  sending = true; $("send").disabled = true;
+  try {
+    const answer = await askJobs.recover(baseURL(), "/quad/v1/jobs", $("ex").value);
+    if (current !== generation) return;
+    if (answer) { addMsg("tutor", answer.message); askJobs.acknowledge(answer);
+      $("turnstatus").textContent = "Recovered the same request. No request was resubmitted."; }
+  } catch (error) { if (current === generation) $("turnstatus").textContent = error.message; }
+  finally { sending = false; $("send").disabled = false; }
+}
+window.addEventListener?.("belay-auth-changed", () => {generation++; recent.length = 0; $("msgs").textContent = "";});
+recoverUnsaved();
+
 $("setgoal").addEventListener("click", async () => {
+  try {
   const { status, data } = await post("/quad/v1/goals", { pseudo_id: $("pid").value, text: $("goal").value });
   if (status !== 200) { $("goalstate").textContent = "(" + status + ") rejected"; return; }
   const g = data.goals;
   $("goalstate").textContent = !g ? "cleared"
     : g.honored ? "honored within your stance (never a command)"
     : "recorded, but not adopted - the tutor holds you to constructive goals";
+  } catch { $("goalstate").textContent = "Update not confirmed. Check status before trying again."; }
 });
 
 $("setrefl").addEventListener("click", async () => {
+  try {
   const { status } = await post("/quad/v1/reflection", { pseudo_id: $("pid").value, text: $("refl").value });
   $("reflstate").textContent = status === 200 ? "recorded (private to you, never to an instructor)" : "(" + status + ")";
+  } catch { $("reflstate").textContent = "Update not confirmed. Check status before trying again."; }
 });
 
 // Setting the knob also persists the overlay via its own intake (opt-in).
 $("knob").addEventListener("change", async () => {
+  try {
   const { data } = await post("/quad/v1/overlay", { pseudo_id: $("pid").value, overlay: overlayFromKnob() });
   const decl = ((data.overlay || {}).declined) || [];
   $("declined").textContent = decl.length ? ("A preference was declined by the floor check: " + decl.join(", ")) : "";
+  } catch { $("declined").textContent = "Update not confirmed. Check status before trying again."; }
 });
 </script>
 </body>

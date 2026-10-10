@@ -108,7 +108,7 @@ globalThis.belayAskJobs = function ({ storage,
       try {
         await request(base, prefix, { method: "POST", body: JSON.stringify(payload) }, validJob);
       } catch (e) {
-        if (!e.uncertain && ["rate_limited", "queue_full", "payload_too_large", "content_not_storable"].includes(e.code)) {
+        if (!e.uncertain && ["rate_limited", "queue_full", "payload_too_large", "content_not_storable", "conversation_conflict"].includes(e.code)) {
           write(context.key, null); // Confirmed pre-admission denial, no automatic resend.
         }
         throw e;

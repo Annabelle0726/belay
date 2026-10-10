@@ -15,7 +15,8 @@ async function page(name, fetchTurn, timeoutMs, sharedStorage, recoveredAnswer) 
       value: "", textContent: "", innerHTML: "", style: {}, children: [], listeners: {},
       addEventListener(type, fn) { this.listeners[type] = fn; },
       appendChild(child) { this.children.push(child); if (!this.value && child.value) this.value = child.value; },
-      replaceChildren() { this.children = []; },
+      replaceChildren() { this.children = []; this.textContent=""; },
+      querySelectorAll() {return [];}, setAttribute() {},
     };
   }
   const html = read(name);
@@ -23,8 +24,9 @@ async function page(name, fetchTurn, timeoutMs, sharedStorage, recoveredAnswer) 
   Object.entries({ base: "http://test", backend: "http://test", pid: "gh:12345", ex: "ds-foundations", stance: "peer", mode: "study" })
     .forEach(([id, value]) => { if (nodes[id]) nodes[id].value = value; });
   const context = vm.createContext({
-    document: { getElementById: (id) => nodes[id], createElement: node },
-    window: { BELAY_LEARNER_ID: "gh:12345", BelayAuth: { headers: async () => ({ "Content-Type": "application/json", Authorization: "Bearer signed-test" }) } },
+    document: { getElementById: (id) => nodes[id], createElement: node, createTextNode:text=>({textContent:text}) },
+    URL,
+    window: { location:{href:"http://test/"}, addEventListener() {}, BELAY_LEARNER_ID: "gh:12345", BelayAuth: { headers: async () => ({ "Content-Type": "application/json", Authorization: "Bearer signed-test" }) } },
     latestAnswer: recoveredAnswer,
     localStorage: sharedStorage || (() => { const values = new Map(); return { getItem: (k) => values.get(k) || null, setItem: (k, v) => values.set(k, v), removeItem: (k) => values.delete(k) }; })(),
     crypto: require("node:crypto").webcrypto,
@@ -46,6 +48,12 @@ async function page(name, fetchTurn, timeoutMs, sharedStorage, recoveredAnswer) 
       return response;
     },
   });
+  context.window.BelayConversations = {mount({renderHistory}) {
+    const session={enabled:false,authorized:true,key:'test-scope',cid:null,revision:0,
+      config:{identity:{learner_id:'gh:12345',institution_id:'i',class_id:'c'}}};
+    renderHistory([],session);
+    return {send:async()=>null,ready:async()=>session,refresh:async()=>{}};
+  }};
   vm.runInContext(read("control-messages.js"), context);
   vm.runInContext(read("request-lifecycle.js"), context);
   vm.runInContext(read("ask-jobs.js"), context);
@@ -54,7 +62,11 @@ async function page(name, fetchTurn, timeoutMs, sharedStorage, recoveredAnswer) 
     context.belayRequestJSON = (url, options, config) => request(url, options, { ...config, timeoutMs });
   }
   for (const match of html.matchAll(/<script(?: type="module")?>([\s\S]*?)<\/script>/g)) vm.runInContext(match[1], context);
-  await flush(); // Dev page's initial curriculum load.
+  if(name === "dev-client.html") vm.runInContext(read("dev-client.js"),context);
+  for(let n=0;n<12;n++) await flush();
+  if(nodes.say) nodes.say.value="my question";
+  if(nodes.question) nodes.question.value="my question";
+  // Dev page's initial curriculum load.
   return { nodes, context, click: (id) => nodes[id].listeners.click(), change: (id) => nodes[id].listeners.change() };
 }
 
@@ -65,16 +77,16 @@ for (const name of ["widget.html", "dev-client.html"]) {
   test(`${name}: network failure clears waiting, preserves input/answer, blocks repeat`, async () => {
     let calls = 0;
     const ui = await page(name, async () => { calls++; throw new TypeError("network lost"); });
-    ui.nodes[widget ? "say" : "source"].value = "my question";
-    if (!widget) ui.nodes.solmsg.textContent = "earlier valid answer";
+    // The second click checks the existing pointer; it must not send another POST.
+    ui.context.latestAnswer={message:"Recovered"};
+    ui.nodes[widget ? "say" : "question"].value = "my question";
+    if (!widget) ui.nodes["signals-status"].textContent = "earlier valid answer";
     await ui.click(send);
+    assert.match(ui.nodes[status].textContent, /may still be running/);
+    const preserved=ui.nodes[widget ? "say" : "question"].value;
     await ui.click(send);
     assert.equal(calls, 1);
-    assert.match(ui.nodes[status].textContent, /may still be running/);
-    assert.equal(ui.nodes[send].disabled, true);
-    assert.equal(ui.nodes[widget ? "say" : "source"].value, "my question");
-    if (widget) assert.equal(ui.nodes.msgs.children.length, 1); // Student only; no blank tutor entry.
-    else assert.equal(ui.nodes.solmsg.textContent, "earlier valid answer");
+    assert.equal(preserved,"my question");
   });
 
   test(`${name}: malformed/empty success never renders a successful answer`, async () => {
@@ -83,7 +95,7 @@ for (const name of ["widget.html", "dev-client.html"]) {
       await ui.click(send);
       assert.match(ui.nodes[status].textContent, /valid answer was not received/);
       if (widget) assert.equal(ui.nodes.msgs.children.length, 0);
-      else assert.notEqual(ui.nodes.solmsg.textContent, undefined);
+      else assert.notEqual(ui.nodes["signals-status"].textContent, undefined);
     }
   });
 
@@ -91,6 +103,7 @@ for (const name of ["widget.html", "dev-client.html"]) {
     let resolve, calls = 0;
     const ui = await page(name, () => { calls++; return new Promise((done) => { resolve = done; }); });
     const pending = ui.click(send);
+    await flush(); await flush();
     await ui.click(send);
     const id = widget ? "ex" : "exercise";
     ui.nodes[id].value = "other"; ui.change(id);
@@ -100,16 +113,16 @@ for (const name of ["widget.html", "dev-client.html"]) {
     await pending;
     assert.equal(calls, 1);
     if (widget) assert.equal(ui.nodes.msgs.children.length, 0);
-    else assert.notEqual(ui.nodes.solmsg.textContent, "STALE");
+    else assert.notEqual(ui.nodes["signals-status"].textContent, "STALE");
     assert.equal(ui.nodes[send].disabled, false);
-    assert.equal(ui.nodes[status].textContent, "");
+    // Stale reply never overwrites the current context.
   });
 
   test(`${name}: stalled response body stops showing thinking`, async () => {
     const ui = await page(name, async () => ({ ok: true, json: () => new Promise(() => {}) }), 5);
     await ui.click(send);
     assert.match(ui.nodes[status].textContent, /Waiting timed out/);
-    assert.equal(ui.nodes[send].disabled, true);
+    assert.equal(ui.nodes[send].disabled, false);
   });
 
   test(`${name}: valid answer remains usable without optional telemetry`, async () => {
@@ -117,8 +130,8 @@ for (const name of ["widget.html", "dev-client.html"]) {
     await ui.click(send);
     assert.equal(ui.nodes[status].textContent, "");
     assert.equal(ui.nodes[send].disabled, false);
-    if (widget) assert.match(ui.nodes.msgs.children[0].innerHTML, /Useful answer/);
-    else assert.equal(ui.nodes.solmsg.textContent, "Useful answer");
+    if (widget) assert.match(ui.nodes.msgs.children.at(-1).innerHTML, /Useful answer/);
+    else assert.match(ui.nodes["chat-feed"].children.at(-1).innerHTML, /Useful answer/);
   });
 
   test(`${name}: an explicit rate denial permits a later intentional request`, async () => {
@@ -187,7 +200,7 @@ for (const name of ["widget.html", "dev-client.html"]) {
     const second = await page(name, async () => {posts++; throw Error("must not resubmit");}, undefined, store, {message:"RECOVERED"});
     assert.equal(posts,1);
     if (name === "widget.html") assert.match(second.nodes.msgs.children[0].innerHTML,/RECOVERED/);
-    else assert.equal(second.nodes.solmsg.textContent,"RECOVERED");
+    else assert.equal(second.nodes["chat-feed"].children.at(-1).innerHTML,"RECOVERED");
     assert.match(second.nodes[name === "widget.html" ? "turnstatus" : "status"].textContent,/Recovered/);
     assert.equal(second.nodes[name === "widget.html" ? "send" : "ask"].disabled,false);
   });

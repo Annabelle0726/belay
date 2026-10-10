@@ -9,28 +9,34 @@
       this.base = base.replace(/\/$/, ""); this.prefix = prefix; this.exercise = exercise;
       this.onChange = onChange; this.messages = []; this.before = null;
       this.cid = null; this.revision = 0; this.pending = null; this.enabled = false;
+      this.jobs = globalThis.belayAskJobs?.(); this.sending = false; this.generation = 0;
     }
     notify(note) { this.note = note; this.onChange(this); }
     async json(path, method = "GET", body) {
-      const res = await fetch(this.base + this.prefix + "/conversations" + path, {
-        method, headers: await window.BelayAuth.headers(this.base),
-        ...(body === undefined ? {} : {body: JSON.stringify(body)})
-      });
-      if (!res.ok) {
-        const error = new Error(res.status === 404 ? "Saved history is unavailable, expired or deleted." :
-          res.status === 409 ? "The attempt changed or a turn is unfinished. Refresh before continuing." :
-          "Saved dialogue request failed (" + res.status + ").");
-        error.status = res.status;
-        if (res.status === 401 || res.status === 404) {
+      let timer, expired = false;
+      const deadline = new Promise((_, reject) => {timer = setTimeout(() => {
+        expired = true; reject(globalThis.belayRequestError("request_timeout", true));
+      }, 90000);});
+      try {
+        return await Promise.race([deadline, (async () => {
+          const headers = await window.BelayAuth.headers(this.base);
+          if (expired) throw globalThis.belayRequestError("request_timeout", true);
+          return globalThis.belayRequestJSON(this.base + this.prefix + "/conversations" + path, {
+            method, headers, ...(body === undefined ? {} : {body:JSON.stringify(body)})
+          });
+        })()]);
+      } catch (error) {
+        if (error.status === 404) error.message = "Saved history is unavailable, expired or deleted.";
+        if (error.status === 409) error.message = "The attempt changed or a turn is unfinished. Refresh before continuing.";
+        if (error.status === 401 || error.status === 404) {
           // An absent attempt does not by itself revoke the authenticated session.
-          if (res.status === 401 || path === "/config") this.authorized = false;
+          if (error.status === 401 || path === "/config") this.authorized = false;
           this.messages = []; this.before = null;
-          if (res.status === 404 && this.cid) { this.cid = null; this.write({enabled:this.enabled}); }
+          if (error.status === 404 && this.cid) { this.cid = null; this.write({enabled:this.enabled}); }
           this.notify(error.message);
         }
         throw error;
-      }
-      return res.status === 204 ? null : res.json();
+      } finally {expired = true; clearTimeout(timer);}
     }
     read() {
       try { return JSON.parse(window.localStorage.getItem(this.key)) || {}; } catch { return {}; }
@@ -77,6 +83,7 @@
       } catch (error) { this.authorized = false; this.messages = []; this.notify(error.message); throw error; }
     }
     async setSaving(enabled) {
+      this.generation++;
       await this.scope();
       if (enabled && !this.config.enabled) throw new Error("Dialogue saving is disabled.");
       this.write({...this.read(), enabled}); this.enabled = enabled;
@@ -95,6 +102,7 @@
       this.notify("New saved attempt. History expires from its creation time.");
     }
     async newAttempt(checkScope = true) {
+      this.generation++;
       if (checkScope) await this.scope();
       if (!this.enabled) throw new Error("Enable optional saving first.");
       const previous = this.read();
@@ -103,7 +111,7 @@
       try { await this.createReserved(record); }
       catch (error) { if (error.status) this.write(previous); throw error; }
     }
-    async restore(checkScope = true) {
+    async restore(checkScope = true, recoverJob = true) {
       if (checkScope) { this.pending = null; await this.scope(); }
       if (!this.enabled) return;
       const record = this.read();
@@ -114,7 +122,28 @@
         const page = await this.json("/" + encodeURIComponent(this.cid) + "/messages");
         this.messages = page.messages; this.before = page.before; this.revision = page.revision;
         this.activePending = page.pending;
-        this.notify(page.pending ? "A turn is unfinished. Refresh after it completes or its lease expires." : "Saved history restored.");
+        this.notify(page.pending ? "A turn is unfinished. Check its request status before continuing." : "Saved history restored.");
+        if (this.config.controlled && this.jobs && recoverJob) {
+          const cid = this.cid, generation = this.generation, key = this.key, grant = this.config.recovery_scope;
+          try {
+            const result = await this.jobs.recover(this.base, this.jobsPrefix(), this.exercise,
+              state => { if (this.cid === cid && generation === this.generation) this.notify(this.jobNote(state)); });
+            await this.scope();
+            if (cid !== this.cid || generation !== this.generation || key !== this.key || grant !== this.config.recovery_scope)
+              throw new Error("Attempt or identity changed; previous reply was discarded.");
+            if (result) {
+              await this.restore(false, false);
+              this.jobs.acknowledge(result);
+              this.notify("Saved request recovered. History restored; no request was resubmitted.");
+            }
+          } catch (error) {
+            if (["conversation_unavailable", "authorization_revoked"].includes(error.code)) {
+              this.messages = []; this.before = null; this.cid = null; this.write({enabled:this.enabled});
+            }
+            this.notify(error.message);
+            // Unknown pointers remain in storage; a new click only queries them.
+          }
+        }
       } catch (error) {
         this.messages = []; this.before = null; this.pending = null;
         if (error.status === 404) {
@@ -133,11 +162,45 @@
       this.messages = [...page.messages, ...this.messages]; this.before = page.before;
       this.notify("Older saved messages loaded.");
     }
+    jobsPrefix() { return this.prefix + "/conversations/" + encodeURIComponent(this.cid) + "/jobs"; }
+    jobNote(state) {
+      return {preparing:"Checking request status…", queued:"Waiting for a worker…", running:"Sol is working…",
+        unknown:"The request outcome is unknown. Checking it will not submit again.", completed:"Reply completed."}[state] || "Checking request status…";
+    }
+    async controlledSend(input) {
+      if (!this.jobs) throw new Error("Controlled request client is unavailable.");
+      if (this.sending) throw new Error("A request is already being checked.");
+      this.sending = true;
+      const cid = this.cid, key = this.key, generation = this.generation, grant = this.config.recovery_scope;
+      try {
+        const result = await this.jobs.ask(this.base, this.jobsPrefix(), {...input,
+          exercise_id:this.exercise, expected_revision:this.revision},
+          state => { if (cid === this.cid && generation === this.generation) this.notify(this.jobNote(state)); });
+        await this.scope();
+        if (cid !== this.cid || key !== this.key || generation !== this.generation || grant !== this.config.recovery_scope)
+          throw new Error("Attempt or identity changed; previous reply was discarded.");
+        if (result.conversation_id !== cid || !Number.isInteger(result.revision) || result.revision < 2)
+          throw globalThis.belayRequestError("invalid_response", true);
+        this.revision = result.revision;
+        let historyUnavailable = false;
+        try { await this.restore(false, false); }
+        catch (error) {
+          if (!this.authorized || error.status === 404) throw error;
+          historyUnavailable = true;
+          this.notify("Reply completed. Refresh to reload saved history.");
+        }
+        this.jobs.acknowledge(result);
+        return {...result, history_unavailable:historyUnavailable};
+      } catch (error) {
+        this.notify(error.message); throw error;
+      } finally { this.sending = false; }
+    }
     async send(input) {
       const previousKey = this.key;
       await this.scope();
       if (previousKey && previousKey !== this.key) throw new Error("Identity changed; refresh before sending a new message.");
       if (!this.enabled || !this.cid) throw new Error("Choose a saved attempt before sending.");
+      if (this.config.controlled) return this.controlledSend(input);
       if (this.activePending) throw new Error("A turn is unfinished; refresh before continuing.");
       const signature = JSON.stringify(input);
       if (this.pending && this.pending.signature !== signature) throw new Error("Retry the previous message or refresh before a new one.");
@@ -166,6 +229,7 @@
       }
     }
     async remove() {
+      this.generation++;
       await this.scope();
       if (!this.cid) return;
       await this.json("/" + encodeURIComponent(this.cid), "DELETE");
@@ -242,8 +306,8 @@
     check.addEventListener("change", () => action(s => s.setSaving(check.checked)));
     ensure().catch(error => { note.textContent = error.message; });
     window.addEventListener?.("belay-auth-changed", () => { signature = null; action(s => s.initialize()); });
-    return {refresh: () => action(s => s.initialize()),
-      async send(input) {
+    return {ready: ensure, refresh: () => action(s => s.initialize()),
+        async send(input) {
         const s = await ensure();
         if (!s.enabled) {
           const key = s.key;
