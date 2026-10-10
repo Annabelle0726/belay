@@ -16,11 +16,11 @@
 <body>
   <h1>Peer-Tutor — minimal embed demo</h1>
   <p class="muted">
-    Exercises <strong>one <code>/quad/v1/turn</code></strong> against the
-    <code>_skeleton</code> pack (exercise <code>echo-1</code>). Run the server with
-    <code>TUTOR_PACK=_skeleton</code>. Identity is a pseudonymous id only
-    (<code>gh:12345</code>); no PII is sent. A <code>control</code>-stance turn needs
-    no model; switch to <code>peer</code> once a provider endpoint is configured.
+    Exercises one controlled Ask against the <code>_skeleton</code> pack
+    (exercise <code>echo-1</code>). Use a host with signed authentication and
+    controlled jobs enabled. A <code>control</code>-stance turn needs no model;
+    <code>peer</code> uses the configured provider or the explicit local demo stub.
+    Saving is optional; refreshing checks the same submitted request.
   </p>
 
   <label for="backend">Backend base URL</label>
@@ -38,7 +38,7 @@
   <label for="source">source</label>
   <textarea id="source" rows="3">print('ok')</textarea>
 
-  <button id="run">Run one /quad/v1 turn</button>
+  <button id="run">Ask Sol</button>
 
   <h2 style="font-size:1rem">Response</h2>
   <pre id="history"></pre>
@@ -50,12 +50,18 @@
 <script src="ask-jobs.js"></script>
 <script src="conversation-client.js"></script>
 <script>
+    const askJobs = globalThis.belayAskJobs();
+    let busy = false, generation = 0;
     const dialogue = window.BelayConversations.mount({container:document.getElementById('out').parentElement,
       base:() => document.getElementById('backend').value.replace(/\/$/, ''), prefix:'/quad/v1', exercise:() => 'echo-1',
       renderHistory(messages) { document.getElementById('history').textContent = messages.map(m => m.role + ': ' + m.text +
         (m.status === 'completed' ? '' : ' (' + m.status + ')')).join('\n\n'); }});
-    document.getElementById('backend').addEventListener('change', () => dialogue.refresh());
+    document.getElementById('backend').addEventListener('change', () => {generation++; dialogue.refresh().then(recover);});
+    window.addEventListener?.('belay-auth-changed',()=>{generation++;document.getElementById('out').textContent='Identity changed; check the current session.';});
     document.getElementById('run').addEventListener('click', async () => {
+      if (busy) return;
+      busy = true; const current = generation;
+      document.getElementById('run').disabled = true;
       const out = document.getElementById('out');
       out.textContent = 'running…';
       const base = document.getElementById('backend').value.replace(/\/$/, '');
@@ -68,14 +74,32 @@
       };
       try {
         const saved = await dialogue.send({message:'Help me understand this code.', stance:body.stance, source:body.source});
+        if (current !== generation) return;
         if (saved) { out.textContent = JSON.stringify(saved, null, 2); return; }
-        const data = await askJobs.ask(base, '/quad/v1/jobs', {...body, participant_id:body.pseudo_id});
+        const data = await askJobs.ask(base, '/quad/v1/jobs', {...body, participant_id:body.pseudo_id, recent:[{who:'student',text:'Help me understand this code.'}]});
+        if (current !== generation) return;
         out.textContent = JSON.stringify(data, null, 2);
         askJobs.acknowledge(data);
       } catch (e) {
-        out.textContent = 'error: ' + e;
-      }
+        if (current === generation) out.textContent = 'error: ' + e.message;
+      } finally {busy = false; document.getElementById('run').disabled = false;}
     });
+    async function recover() {
+      const current = generation;
+      let session;
+      try {session = await dialogue.ready();}
+      catch(error) {if(current === generation) document.getElementById('out').textContent=error.message;return;}
+      if (current !== generation || session.enabled || busy) return;
+      busy = true; document.getElementById('run').disabled = true;
+      try {
+        const base = document.getElementById('backend').value.replace(/\/$/,'');
+        const answer = await askJobs.recover(base,'/quad/v1/jobs','echo-1');
+        if (current !== generation) return;
+        if (answer) {document.getElementById('out').textContent = JSON.stringify(answer,null,2);askJobs.acknowledge(answer);}
+      } catch(error) {if(current === generation) document.getElementById('out').textContent=error.message;}
+      finally {busy = false; document.getElementById('run').disabled = false;}
+    }
+    recover();
   </script>
 </body>
 </html>

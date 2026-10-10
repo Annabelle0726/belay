@@ -8,7 +8,7 @@ const read = (name) => fs.readFileSync(path.join(__dirname, "..", name), "utf8")
 const reply = (data, status = 200) => ({ ok: status < 300, status, headers: new Headers(), json: async () => data });
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
-async function page(name, fetchTurn, timeoutMs, sharedStorage, recoveredAnswer) {
+async function page(name, fetchTurn, timeoutMs, sharedStorage, recoveredAnswer, readyError) {
   const nodes = {};
   function node() {
     return {
@@ -33,7 +33,7 @@ async function page(name, fetchTurn, timeoutMs, sharedStorage, recoveredAnswer) 
     setTimeout, clearTimeout, AbortController, console,
     fetch: async (url, options) => {
       if (url.endsWith("/api/curriculum")) return reply({ modules: [{ exercises: [{ id: "ds-foundations", title: "test", prompt: "test", starter: "pass" }] }] });
-      if (url.endsWith("/jobs/config")) return reply({ recovery_scope: "a".repeat(64), learner_id: "gh:12345", assignments: {"ds-foundations":"v1", "ex":"v1"}, poll_seconds: 1, result_seconds: 300, notice: "Temporary encrypted recovery." });
+      if (url.endsWith("/jobs/config")) return reply({ recovery_scope: "a".repeat(64), learner_id: "gh:12345", assignments: {"ds-foundations":"v1", "ex":"v1", "echo-1":"v1"}, poll_seconds: 1, result_seconds: 300, notice: "Temporary encrypted recovery." });
       if (url.includes("/jobs/by-request/")) return reply({ id: "b".repeat(64), state: "completed", result: context.latestAnswer });
       const response = await fetchTurn(url, options);
       if (url.endsWith("/jobs") && response.ok) {
@@ -52,7 +52,7 @@ async function page(name, fetchTurn, timeoutMs, sharedStorage, recoveredAnswer) 
     const session={enabled:false,authorized:true,key:'test-scope',cid:null,revision:0,
       config:{identity:{learner_id:'gh:12345',institution_id:'i',class_id:'c'}}};
     renderHistory([],session);
-    return {send:async()=>null,ready:async()=>session,refresh:async()=>{}};
+    return {send:async()=>null,ready:async()=>{if(readyError)throw readyError;return session;},refresh:async()=>{}};
   }};
   vm.runInContext(read("control-messages.js"), context);
   vm.runInContext(read("request-lifecycle.js"), context);
@@ -205,3 +205,29 @@ for (const name of ["widget.html", "dev-client.html"]) {
     assert.equal(second.nodes[name === "widget.html" ? "send" : "ask"].disabled,false);
   });
 }
+
+
+test('minimal embed uses controlled Ask and blocks double clicks while one POST is outstanding',async()=>{
+ let finish,posts=0;
+ const ui=await page('embed-demo.html',()=>{posts++;return new Promise(resolve=>finish=resolve);});
+ const first=ui.click('run');await flush();await flush();await ui.click('run');
+ assert.equal(posts,1);finish(reply({message:'Embedded answer'}));await first;
+ assert.match(ui.nodes.out.textContent,/Embedded answer/);assert.equal(ui.nodes.run.disabled,false);
+});
+
+for(const name of ['widget.html','dev-client.html']) test(name+': recovering old request preserves new input without inventing a student message',async()=>{
+ let posts=0;const widget=name==='widget.html',input=widget?'say':'question';
+ const ui=await page(name,()=>{posts++;throw TypeError('lost');});
+ ui.nodes[input].value='Original';await ui.click(widget?'send':'ask');
+ ui.context.latestAnswer={message:'Original reply'};ui.nodes[input].value='Not submitted';
+ await ui.click(widget?'send':'ask');assert.equal(posts,1);assert.equal(ui.nodes[input].value,'Not submitted');
+ assert.match(ui.nodes[widget?'turnstatus':'status'].textContent,/current input was not submitted/);
+ if(widget) assert.equal(ui.nodes.msgs.children.length,1);
+ else assert.equal(ui.nodes['chat-feed'].children.length,1);
+});
+
+for (const name of ['widget.html','dev-client.html','embed-demo.html']) test(name+': denied recovery scope is shown without an unhandled rejection',async()=>{
+ const ui=await page(name,()=>{throw Error('No submission allowed');},undefined,undefined,undefined,Error('This exercise version is unavailable.'));
+ const status=name==='widget.html'?'turnstatus':name==='dev-client.html'?'status':'out';
+ assert.match(ui.nodes[status].textContent,/exercise version is unavailable/);
+});

@@ -226,12 +226,13 @@
         }, state => { if (requestGeneration === generation) $("status").textContent = state === "queued" ? "Waiting for a worker…" : "Checking request status…"; });
         if (requestGeneration !== generation || originalScope !== scope) throw new Error("Identity or exercise changed; previous reply was discarded.");
         const reply = out.message + (out.check_question ? "\n\n" + out.check_question : "");
-        recent = [...recent, current, {who: "sol", text: reply}].slice(-12);
-        temporaryMessages.push({role: "student", text: message}, {role: "assistant", text: reply});
+        const recovered = askJobs.wasRecovered(out);
+        if (!recovered) recent = [...recent, current, {who: "sol", text: reply}].slice(-12);
+        if (!recovered) temporaryMessages.push({role:"student", text:message});
+        temporaryMessages.push({role:"assistant", text:reply});
         // Keep the transient feed bounded as well; nothing is written to storage.
         temporaryMessages = temporaryMessages.slice(-200);
         renderFeed(temporaryMessages);
-        const recovered = askJobs.wasRecovered(out);
         askJobs.acknowledge(out);
         out.recovered_request = recovered;
       } else if (out.history_unavailable) {
@@ -251,9 +252,11 @@
   }
   async function recoverUnsaved() {
     if (!dialogue || busy) return;
-    const session = await dialogue.ready();
-    if (session.enabled) return;
     const current = generation, currentScope = scope;
+    let session;
+    try { session = await dialogue.ready(); }
+    catch (error) { if (current === generation) $("status").textContent = error.message; return; }
+    if (current !== generation || currentScope !== scope || session.enabled || busy) return;
     setBusy(true);
     try {
       const answer = await askJobs.recover(base(), "/api/sol/jobs", $("exercise").value);
