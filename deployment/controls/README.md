@@ -233,7 +233,7 @@ Do not delete/edit the manifest to switch modes. Existing timed profiles and
 their explicit additional-money workflow are retained. Switching an amount-only
 profile back to a new bounded authorization is not exposed by this command; it
 requires a separate reviewed transition. This change adds no administrator page
-or grant scheduling system. Details and verification: [implementation summary](amount-only-budget-summary.md).
+or grant scheduling system. Details and verification: [implementation summary](budget-policy.md).
 
 ### Local developer budgets and formal teaching quotas
 
@@ -244,15 +244,15 @@ tiny test limit in place. Preserve old spend and unknown holds. `update-policy`
 alone does not change the manifest's cumulative ceiling, and `authorize-window`
 is a timed grant operation, not an amount-only top-up.
 
-The [audit, pending local recommendation and Greg discussion requirements](local-and-course-budget-plan.md)
-keep those concerns separate. Its proposed numbers are **not applied defaults**.
+The [local policy and future course requirements](budget-policy.md)
+keep those concerns separate. Local values are **not course defaults**.
 Formal teaching may refresh learner allowances daily or every configurable few
 hours while course access is valid, without resetting the class/course cumulative
 budget or ledger history. That independent policy/interface remains unimplemented
 and requires agreement with Greg; this round adds no administrator page or quota
 refresh mechanism.
 
-The newer [local short-period + weekly plan](local-period-budget-plan.md) adds
+The newer [local short-period + weekly plan](budget-policy.md) adds
 optional deployment-wide model quotas, default disabled, using the same ledger
 transaction. It does not implement formal learner quota renewal. Both fixed
 windows, cumulative funding and existing scoped limits must pass. UTC anchors
@@ -264,7 +264,7 @@ Timezone **Asia/Shanghai (UTC+08:00)** uses fixed 00/06/12/18 boundaries and Mon
 00:00 weeks. Short refresh does not reset week consumption; weekly refresh does
 not reset cumulative consumption or grant money. No expiry is restored and no
 non-money resource limit was raised. These are private local test settings, not
-formal student/course defaults. See the [applied summary](local-budget-authorization-20261011-summary.md).
+formal student/course defaults. See the [applied summary](budget-policy.md).
 
 Once an exact incremental grant and its policy are approved, the prepared entry
 is `./start-belay.ps1 -BudgetAuthorization <approved-json> -BudgetPolicy <policy-json>`.
@@ -337,5 +337,5 @@ govern reservations/settlement and must cover thinking/cache and both tiers.
 Missing usage keeps the reservation; invoice-specific discounts are not implemented.
 Then check and restart to load the reviewed environment. No renewal is implicit.
 
-See [daily-entry implementation evidence](daily-entry-summary.md). Lifecycle mock
+See [budget policy and operational boundaries](budget-policy.md). Lifecycle mock
 tests are not live-listener, production deployment or load acceptance.
