@@ -21,6 +21,7 @@ import time
 import uuid
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+from typing import cast
 
 import jwt
 import uvicorn
@@ -359,7 +360,7 @@ def check(directory: Path) -> dict:
             raise ValueError("unsupported dialogue schema")
         policy = Ledger(engine).policy(conn)
         job_counts = {
-            str(state): int(count)
+            str(state): cast(int, count)
             for state, count in conn.execute(
                 select(jobs.c.state, func.count()).group_by(jobs.c.state)
             )
