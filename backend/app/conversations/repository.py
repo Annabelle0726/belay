@@ -220,6 +220,7 @@ class ConversationStore:
                     status = "failed"
                 item = {
                     "sequence": msg.sequence,
+                    "request_id": msg.request_id,
                     "role": msg.role,
                     "text": msg.text,
                     "status": status,

@@ -48,3 +48,6 @@ _git_locks_to_delete/
 # Operator-owned identity configuration (public key and private grant mapping).
 /deployment/auth/
 /deployment/local/
+
+# Generated offline UI verification page (source is build-feedback-fixture.cjs)
+frontend/tests/fixtures/generated-feedback-preview.html

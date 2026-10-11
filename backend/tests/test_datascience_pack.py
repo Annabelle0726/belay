@@ -53,6 +53,11 @@ def test_runtime_error_is_not_ok():
     r = PACK.run("raise ValueError('boom')", ex)
     assert r["ok"] is False
     assert r["goalMet"] is False
+    assert r["pack"]["execution_status"] == "student_error"
+    assert "ValueError: boom" in r["error"]
+    # A student exception terminates only this sandbox execution.
+    following = PACK.run(SOLUTIONS["ds-foundations"]["source"], ex)
+    assert following["ok"] is True
 
 
 # ── executable leak oracle ────────────────────────────────────────────────────

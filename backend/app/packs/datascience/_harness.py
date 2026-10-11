@@ -15,6 +15,7 @@ Declarative check types (convergent with Quad pkg/gradingspec — see GRADING_SP
 import contextlib
 import io
 import json
+import traceback
 
 import numpy as np
 
@@ -122,11 +123,16 @@ def main():
     ns = {"__name__": "__student__"}
     buf = io.StringIO()
     err = None
+    error_line = None
     try:
         with contextlib.redirect_stdout(buf):
             exec(compile(student_src, "<student>", "exec"), ns)
     except Exception as exc:  # noqa: BLE001
-        err = f"{type(exc).__name__}: {exc}"
+        err = f"{type(exc).__name__}: {exc}"[:2000]
+        frames = [f for f in traceback.extract_tb(exc.__traceback__) if f.filename == "<student>"]
+        error_line = (
+            exc.lineno if isinstance(exc, SyntaxError) else frames[-1].lineno if frames else None
+        )
     stdout_text = buf.getvalue()
 
     checks_out = []
@@ -149,6 +155,7 @@ def main():
             {
                 "ok": err is None,
                 "error": err,
+                "error_line": error_line,
                 "goalMet": bool(goal),
                 "metric": metric_value,
                 "checks": checks_out,
