@@ -4,6 +4,12 @@ Reference front-ends for the Sol peer-tutor backend. They are demos and pilot
 glue; the backend is the source of truth. Request lifecycle behavior is covered
 by offline transport and page-script tests, not authenticated browser acceptance.
 
+For the complete controlled backend/worker setup, use the
+[team setup and launch README](../deployment/controls/README.md), then the detailed
+[controlled runtime guide](../deployment/controls/controlled-runtime.md). The same
+page works with the selected implemented provider; frontend code does not select
+models or vendor pricing. The legacy local demo command below is retained.
+
 | File | Purpose |
 |------|---------|
 | `widget.html` | The reference widget (Slice E/F), wired to the `/quad/v1` sidecar. Drop-in embeddable; routes entirely through the backend (no browser-side key). |

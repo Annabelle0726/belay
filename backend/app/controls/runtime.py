@@ -73,6 +73,13 @@ def model_call(
     input_bound = len(input_text.encode("utf-8")) + 1024
     with context.ledger.transaction() as conn:
         policy = context.ledger.policy(conn)
+        if settings.llm_billing_mode not in {"metered", "unmetered"}:
+            raise ControlError("invalid_billing_mode", 503)
+        if settings.llm_billing_mode == "metered" and (
+            policy.input_price <= 0 or policy.output_price <= 0
+        ):
+            raise ControlError("model_price_unavailable", 503)
+        check_inference_deadline(context.ledger.now(conn))
     attempt_id = uuid.uuid4().hex
     row = context.ledger.reserve(
         attempt_id,
@@ -96,6 +103,9 @@ def model_call(
     try:
         if context.guard:
             context.guard()
+        if settings.controls_inference_expires_at:
+            with context.ledger.transaction() as conn:
+                check_inference_deadline(context.ledger.now(conn))
     except BaseException:
         admission.release_slot(slot, stopped=True)
         context.ledger.settle(attempt_id, Amount())
@@ -122,6 +132,14 @@ def model_call(
             ),
         )
     return result
+
+
+def check_inference_deadline(now: float) -> None:
+    deadline = settings.controls_inference_expires_at
+    if not math.isfinite(deadline) or deadline < 0:
+        raise ControlError("invalid_inference_window", 503)
+    if deadline and now >= deadline:
+        raise ControlError("inference_window_expired", 503)
 
 
 def runner_call(call: Callable[[], T], wall_seconds: float) -> T:

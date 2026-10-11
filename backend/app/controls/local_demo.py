@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import threading
 import time
@@ -31,8 +32,31 @@ class DemoProvider:
                     "confidence": 0.8,
                 }
             if role == "reasoner":
+                try:
+                    context = json.loads(
+                        user.removeprefix("CONTEXT:\n").split("\n\nCHOSEN PLAN", 1)[0]
+                    )
+                except (ValueError, TypeError):
+                    context = {}
+                result = context.get("last_result", {})
+                message = "Local model stub: what is the next small step you could check?"
+                if isinstance(result, dict) and result.get("execution_status") == "student_error":
+                    kind = str(result.get("error", "")).split(":", 1)[0]
+                    meaning = (
+                        "Python could not parse the code"
+                        if kind == "SyntaxError"
+                        else "an operation received an unsuitable value"
+                        if kind == "ValueError"
+                        else "execution raised an exception"
+                    )
+                    location = (
+                        f" on student line {result['error_line']}"
+                        if result.get("error_line")
+                        else ""
+                    )
+                    message = f"Local model stub: {kind}{location} means {meaning}. This run did not finish. Check that line against the selected exercise before rerunning."
                 return {
-                    "message": "Local model stub: what is the next small step you could check?",
+                    "message": message,
                     "check_question": None,
                     "confidence": 0.8,
                     "grasped": [],
@@ -79,6 +103,7 @@ def initialize(engine, directory: Path):
     # All existing imported factory aliases consult this registry at construction.
     # Even optional secondary model guards receive the stub in this explicit mode.
     settings.provider = "openai_compatible"
+    settings.llm_billing_mode = "unmetered"
     llm._PROVIDERS["openai_compatible"] = DemoProvider
 
 

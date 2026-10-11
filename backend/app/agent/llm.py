@@ -27,6 +27,7 @@ never changes the deterministic leak gate.
 from __future__ import annotations
 
 import json
+import math
 import re
 import time
 from typing import Protocol, runtime_checkable
@@ -65,6 +66,13 @@ class Provider(Protocol):
 LLMClient = Provider
 
 
+def _timeout() -> float:
+    value = settings.llm_timeout_seconds
+    if not math.isfinite(value) or not 0 < value <= 3600:
+        raise ValueError("LLM_TIMEOUT_SECONDS must be finite and between 0 and 3600")
+    return value
+
+
 def parse_json(text: str) -> dict | None:
     """Strip fences, then parse. Falls back to the first {...} block. This also
     tolerates reasoning models that prepend analysis before the final JSON."""
@@ -100,10 +108,23 @@ class OpenAICompatProvider:
         from openai import OpenAI  # lazy import
 
         self._client = OpenAI(
-            base_url=settings.openai_base_url, api_key=settings.openai_api_key, max_retries=0
+            base_url=settings.openai_base_url,
+            api_key=settings.openai_api_key,
+            max_retries=0,
+            timeout=_timeout(),
         )
 
     def _attempt(self, role: str, kwargs: dict):
+        if settings.openai_thinking_mode not in {"", "enabled", "disabled"}:
+            raise ValueError("invalid OPENAI_THINKING_MODE capability")
+        if settings.openai_thinking_mode:
+            kwargs = {
+                **kwargs,
+                "extra_body": {
+                    **kwargs.get("extra_body", {}),
+                    "thinking": {"type": settings.openai_thinking_mode},
+                },
+            }
         started = time.perf_counter()
         ptok = ctok = None
         sent = False
@@ -138,7 +159,11 @@ class OpenAICompatProvider:
     @staticmethod
     def _extract_text(resp) -> str:
         msg = resp.choices[0].message
-        return getattr(msg, "content", None) or getattr(msg, "reasoning_content", "") or ""
+        return (
+            getattr(msg, "content", None)
+            or ("" if settings.openai_final_content_only else getattr(msg, "reasoning_content", ""))
+            or ""
+        )
 
     @staticmethod
     def _usage(resp):
@@ -177,7 +202,13 @@ class OpenAICompatProvider:
 
         # Retry only an explicit request-format rejection. A timeout/lost
         # response is uncertain spending, never a trigger for a blind retry.
-        kwargs_json = dict(kwargs, response_format={"type": "json_object"})
+        if settings.openai_response_format not in {"json_object", "none"}:
+            raise ValueError("invalid OPENAI_RESPONSE_FORMAT capability")
+        kwargs_json = (
+            dict(kwargs, response_format={"type": "json_object"})
+            if settings.openai_response_format == "json_object"
+            else kwargs
+        )
         try:
             resp = self._attempt(role, kwargs_json)
         except ControlError:
@@ -233,9 +264,9 @@ class AnthropicProvider:
         from anthropic import Anthropic  # lazy import
 
         self._client = (
-            Anthropic(api_key=settings.anthropic_api_key, max_retries=0)
+            Anthropic(api_key=settings.anthropic_api_key, max_retries=0, timeout=_timeout())
             if settings.anthropic_api_key
-            else Anthropic(max_retries=0)
+            else Anthropic(max_retries=0, timeout=_timeout())
         )
 
     def model_for(self, tier: str) -> str:
@@ -348,10 +379,13 @@ class BedrockProvider:
 
 
 # Provider id -> class. New providers register here; core selects by PROVIDER.
+from ..controls.local_demo import DemoProvider
+
 _PROVIDERS: dict[str, type] = {
     "openai_compatible": OpenAICompatProvider,
     "anthropic": AnthropicProvider,
     "bedrock": BedrockProvider,
+    "local_stub": DemoProvider,
 }
 
 
