@@ -104,6 +104,7 @@ def grade(source: str, exercise: Exercise) -> RunResult:
                 "stdout": res.stdout[-500:],
                 "summary": err,
                 "timed_out": res.timed_out,
+                "execution_status": "timeout" if res.timed_out else "infrastructure_error",
             },
         }
 
@@ -117,5 +118,7 @@ def grade(source: str, exercise: Exercise) -> RunResult:
             "checks": grade_obj.get("checks", []),
             "stdout": grade_obj.get("stdout", ""),
             "summary": _summary(grade_obj),
+            "execution_status": "completed" if grade_obj.get("ok") else "student_error",
+            "error_line": grade_obj.get("error_line"),
         },
     }

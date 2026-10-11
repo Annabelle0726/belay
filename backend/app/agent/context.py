@@ -51,8 +51,11 @@ def _last_result(result: dict | None) -> object:
     if not result:
         return "no run yet"
     if not result.get("ok"):
+        pack = result.get("pack") or {}
         return {
-            "compiles": False,
+            "compiles": False if str(result.get("error", "")).startswith("SyntaxError") else None,
+            "execution_status": pack.get("execution_status", "unconfirmed"),
+            "error_line": pack.get("error_line"),
             "error": result.get("error"),
             "goal_met": False,
             "metric": None,

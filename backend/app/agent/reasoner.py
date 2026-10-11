@@ -33,6 +33,14 @@ def respond(
     persona = get_active_pack().persona
     base = reasoner_system(persona, stance, goals=ctx.get("goals"), overlay=ctx.get("overlay"))
     system = base + (("\n\n" + TEACH_ADDENDUM) if ctx["mode"] == "teach" else "")
+    result = ctx.get("last_result")
+    if isinstance(result, dict) and result.get("execution_status") == "student_error":
+        system += (
+            "\nThe current run raised a student error. Explain its meaning, the reported student "
+            "line if available, and one suitable next check. Ground the explanation in the current "
+            "code and error; do not claim the run succeeded or invent a location. Distinguish "
+            "a syntax error from an exception during execution. Do not provide a full solution."
+        )
 
     user = (
         "CONTEXT:\n"

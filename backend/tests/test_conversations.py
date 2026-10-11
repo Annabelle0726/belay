@@ -89,6 +89,7 @@ def test_sequencing_retry_and_restarted_store(dialogue):
     assert reopened.begin(owner, cid, "turn-1", "hash", 0, "hello") == response
     page = reopened.history(owner, cid)
     assert [m["role"] for m in page["messages"]] == ["student", "assistant"]
+    assert [m["request_id"] for m in page["messages"]] == ["turn-1", "turn-1"]
     assert "secret" not in str(page)
     with store.sessions() as session:
         assert session.get(Turn, (cid, "turn-1")).response == response
