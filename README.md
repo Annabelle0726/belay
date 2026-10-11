@@ -141,7 +141,7 @@ explicit finite cumulative budget with no short renewal deadline. It is not a
 student allowance. Raising it requires approval of the additional money and
 associated resource limits; changing only the key or scoped policy cannot raise
 the manifest's pinned ceiling. The [local budget proposal and future course
-quota requirements](deployment/controls/local-and-course-budget-plan.md) record
+quota requirements](deployment/controls/budget-policy.md) record
 the current audit and pending recommendation, not active new settings.
 Formal teaching is a separate future requirement: configurable learner quota
 periods during valid course access, with spending still accumulated against the
@@ -149,10 +149,10 @@ class/course total and all ledger history retained. That policy and its ownershi
 are to be agreed with Greg; no new periodic quota or admin UI is implemented.
 
 For the newer **local short-period + weekly** proposal, see the
-[current budget plan and verification summary](deployment/controls/local-period-budget-plan.md).
+[current budget plan and verification summary](deployment/controls/budget-policy.md).
 The optional coordinator checks both fixed windows plus existing scope/cumulative
 limits. A quota refresh does not add funds or erase historical/unknown usage.
-The earlier suggestions were not authorizations. A **new explicit local approval
+Local budget changes require explicit authorization. A **new explicit local approval
 on 2026-10-11 has now been applied**: USD5 additional funding, cumulative ceiling
 USD5.148223 without expiry, USD1 per six hours and USD5 per week. These are that
 local installation's approved values, not repository/provider/student defaults.
@@ -162,7 +162,7 @@ Its fixed timezone is **Asia/Shanghai (UTC+08:00)**: six-hour buckets begin at
 usage; week refresh never resets cumulative usage or grants new money. Restart
 does not change these boundaries. Both windows and all other budget controls
 must pass. Other resource caps remain unchanged. See the
-[applied authorization and verification summary](deployment/controls/local-budget-authorization-20261011-summary.md)
+[applied authorization and verification summary](deployment/controls/budget-policy.md)
 for preserved ledger evidence and the manual restart commands. Formal
 student/course quota rules remain separate and unimplemented.
 

@@ -171,7 +171,7 @@ explicit transition archives an existing window and pins its original cap in
 It refuses pending grants and active/queued work. An unknown task/hold stays
 unknown and is never replayed. `check` reports `state: disabled, mode: amount_only`;
 normal start/stop commands remain unchanged. This supersedes the earlier
-[24-hour extension proposal](local-window-extension-design.md).
+[fixed-window discussion](budget-policy.md).
 
 For new profiles, configure zero window/expiry plus an approved finite cumulative
 cap, prepare the new installation once, then persist amount-only mode with that
