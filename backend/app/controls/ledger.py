@@ -209,6 +209,39 @@ class Ledger:
         policy = self.policy(conn)
         now = self.now(conn)
         period = int(now) // policy.period_seconds
+        # Optional one-time authorization must not replenish at period rollover.
+        # Enforce inside the SAME coordinator transaction as reservation creation.
+        from ..config import settings
+
+        total_cap = settings.controls_inference_total_microunits
+        if kind == "model" and total_cap is not None:
+            if not 0 <= total_cap <= 10**15:
+                raise ControlError("invalid_inference_budget", 503)
+            liability = 0
+            for item in conn.execute(select(attempts)).mappings():
+                if keys[0] in item["scopes"]:
+                    charge = item["actual"] if item["actual"] is not None else item["reserved"]
+                    liability += charge["microunits"]
+            if liability + amount.microunits > total_cap:
+                raise ControlError("budget_exhausted")
+        if kind == "model" and policy.model_quotas is not None:
+            # Both fixed buckets use the original reservation timestamp, even
+            # for pre-policy history. Unknown liabilities encumber every new
+            # bucket until reconciled. No counter reset or renewal job exists.
+            rows = list(conn.execute(select(attempts).where(attempts.c.kind == "model")).mappings())
+            for seconds, anchor, cap in policy.model_quotas.windows():
+                start = anchor + ((int(now) - anchor) // seconds) * seconds
+                end = start + seconds
+                liability = 0
+                for item in rows:
+                    if keys[0] not in item["scopes"]:
+                        continue
+                    if item["actual"] is None:
+                        liability += item["reserved"]["microunits"]
+                    elif start <= item["created"] < end:
+                        liability += item["actual"]["microunits"]
+                if liability + amount.microunits > cap:
+                    raise ControlError("budget_exhausted")
         acknowledged = select(reconciliations.c.target).where(
             reconciliations.c.action == "acknowledge_overrun"
         )

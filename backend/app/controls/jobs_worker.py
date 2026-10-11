@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
+import threading
 import time
 from collections.abc import Callable
 
@@ -102,6 +104,43 @@ class AskAdapter:
 
     def cleanup(self) -> None:
         self.store.cleanup()
+
+
+def start_worker(*, poll_seconds: float = 0.2):
+    """Managed API+worker host. No provider override, schema creation or replay.
+
+    Fatal errors stop the thread so the host supervisor can stop admission.
+    Temporary control denials keep their existing conservative ledger behavior.
+    """
+    from ..conversations.policy import Policy as DialoguePolicy
+    from ..conversations.repository import ConversationStore
+
+    store = execution_store()
+    router = ConsentRouter(SqlStore() if settings.store_backend == "sql" else InMemoryStore())
+    adapter = AskAdapter(store, router, get_active_pack(), get_llm)
+    history = ConversationStore(store.ledger.engine, DialoguePolicy.from_settings(settings))
+    stopped = threading.Event()
+
+    def work():
+        next_cleanup = 0.0
+        try:
+            while not stopped.is_set():
+                try:
+                    adapter.cleanup()
+                    if time.monotonic() >= next_cleanup:
+                        history.cleanup()  # Also applies when optional saving is disabled.
+                        next_cleanup = time.monotonic() + 30
+                    if run_one(store.admission, adapter):
+                        continue
+                except ControlError:
+                    pass
+                stopped.wait(poll_seconds)
+        except Exception:
+            logging.getLogger(__name__).error("controlled_worker_stopped")
+
+    thread = threading.Thread(target=work, name="controlled-ask-worker", daemon=True)
+    thread.start()
+    return stopped, thread
 
 
 def main(argv: list[str] | None = None) -> int:

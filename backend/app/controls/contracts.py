@@ -62,6 +62,27 @@ class Traffic(BaseModel):
     runner_calls: int = Field(default=4, ge=0)
 
 
+class ModelQuotas(BaseModel):
+    """Optional deployment-wide fixed buckets, independent of scope periods.
+
+    Anchors are explicit UTC epoch seconds supplied by the operator. They do not
+    move on restart or policy update. This is not a learner entitlement policy.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+    short_period_seconds: int = Field(ge=3600, le=86400, multiple_of=3600)
+    short_anchor_utc: int = Field(ge=0, le=10**11)
+    short_microunits: int = Field(ge=0, le=10**15)
+    week_anchor_utc: int = Field(ge=0, le=10**11)
+    week_microunits: int = Field(ge=0, le=10**15)
+
+    def windows(self) -> tuple[tuple[int, int, int], ...]:
+        return (
+            (self.short_period_seconds, self.short_anchor_utc, self.short_microunits),
+            (604800, self.week_anchor_utc, self.week_microunits),
+        )
+
+
 class Policy(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
     version: str = Field(min_length=1, max_length=64)
@@ -76,6 +97,7 @@ class Policy(BaseModel):
     # covering every configured model; no runtime vendor pricing assumption.
     input_price: int = Field(ge=0, le=10**9)
     output_price: int = Field(ge=0, le=10**9)
+    model_quotas: ModelQuotas | None = None
     deployment_traffic: Traffic = Field(default_factory=Traffic)
     institution_traffic: Traffic = Field(default_factory=Traffic)
     classroom_traffic: Traffic = Field(default_factory=Traffic)
