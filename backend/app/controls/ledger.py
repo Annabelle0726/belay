@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 
 from sqlalchemy import JSON, Column, Float, Integer, MetaData, String, Table, inspect, select, text
@@ -245,7 +245,7 @@ class Ledger:
         acknowledged = select(reconciliations.c.target).where(
             reconciliations.c.action == "acknowledge_overrun"
         )
-        breaches = conn.execute(
+        breaches: Iterable[list[str]] = conn.execute(
             select(attempts.c.scopes).where(
                 attempts.c.state == "overrun", attempts.c.id.not_in(acknowledged)
             )
@@ -295,7 +295,7 @@ class Ledger:
         with self.transaction() as conn:
             policy = self.policy(conn)
             rows = list(conn.execute(select(attempts)).mappings())
-            codes = list(conn.execute(select(rejections.c.code)).scalars())
+            codes: list[str] = list(conn.execute(select(rejections.c.code)).scalars())
             return {
                 "policy_version": policy.version,
                 "currency": policy.currency,
