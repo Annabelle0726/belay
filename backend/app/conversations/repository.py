@@ -18,6 +18,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session, sessionmaker
 
+from ..agent.reply_context import reply_metadata
 from ..auth import Identity, denied
 from .bounds import wire_size
 from .ledger import DeletionLedger
@@ -225,6 +226,8 @@ class ConversationStore:
                     "text": msg.text,
                     "status": status,
                 }
+                if msg.role == "student" and turn and (turn.response or {}).get("reply_to"):
+                    item["reply_to"] = (turn.response or {})["reply_to"]
                 trial = [item, *page]
                 cursor: str | None = (
                     f"{msg.sequence}.{digest([identity.storage_id, cid, msg.sequence])}"
@@ -240,6 +243,37 @@ class ConversationStore:
                 sequence = page[0]["sequence"]
                 cursor = f"{sequence}.{digest([identity.storage_id, cid, sequence])}"
             return {**meta, "messages": page, "before": cursor}
+
+    def reply(self, identity: Identity, cid: str, request_id: str, *, connection=None) -> dict:
+        self._ready()
+        with self.transaction(connection) as session:
+            row = self._owned(session, identity, cid)
+            if (row.exercise_id, row.exercise_version) != (
+                identity.exercise_id,
+                identity.exercise_version,
+            ):
+                raise denied()
+            turn = session.get(Turn, (cid, request_id))
+            message = session.scalar(
+                select(Message).where(
+                    Message.conversation_id == cid,
+                    Message.request_id == request_id,
+                    Message.role == "assistant",
+                )
+            )
+            if (
+                turn is None
+                or turn.status != "completed"
+                or message is None
+                or message.text == "[This exchange was not saved.]"
+            ):
+                raise denied()
+            ref = {"conversation_id": cid, "request_id": request_id}
+            return {
+                **reply_metadata(ref, message.text),
+                "text": message.text,
+                "original_evidence": None,
+            }
 
     def context(self, identity: Identity, cid: str) -> list[dict]:
         self._ready()
@@ -268,6 +302,7 @@ class ConversationStore:
         learner_text: str,
         *,
         connection: Connection | None = None,
+        reply_to: dict | None = None,
     ) -> dict | None:
         self._ready()
         if len(learner_text.encode()) > self.policy.max_message_bytes:
@@ -300,7 +335,7 @@ class ConversationStore:
                 prior = session.get(Turn, (cid, row.pending_id))
                 if prior:
                     prior.status = "failed"
-            size = len(learner_text.encode())
+            size = len(learner_text.encode()) + (wire_size(reply_to) if reply_to else 0)
             if (
                 row.message_count + 2 > self.policy.max_messages
                 or row.byte_count + size + self.policy.max_message_bytes * 7 + 1024
@@ -313,7 +348,13 @@ class ConversationStore:
             row.pending_id = request_id
             row.pending_until = int(self.clock()) + self.policy.pending_seconds
             session.add(
-                Turn(conversation_id=cid, request_id=request_id, digest=signature, status="pending")
+                Turn(
+                    conversation_id=cid,
+                    request_id=request_id,
+                    digest=signature,
+                    status="pending",
+                    response={"reply_to": reply_to} if reply_to else None,
+                )
             )
             session.add(
                 Message(
@@ -368,6 +409,8 @@ class ConversationStore:
                 "revision": row.revision,
                 "response": {"message": message, "check_question": question},
             }
+            if (turn.response or {}).get("reply_to"):
+                result["reply_to"] = turn.response["reply_to"]
             retained_size = len(text.encode()) + wire_size(result)
             if row.byte_count + retained_size > self.policy.max_stored_bytes:
                 raise HTTPException(409, "conversation storage limit reached")

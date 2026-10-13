@@ -6,7 +6,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field, StrictBool
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
+
+
+class ReplyReference(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,128}$")
+    conversation_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,64}$")
 
 
 class DialogueTurn(BaseModel):
@@ -39,6 +45,7 @@ class RunResult(BaseModel):
 
 
 class SolTurnRequest(BaseModel):
+    reply_to: ReplyReference | None = None
     participant_id: str
     exercise_id: str
     event: str = Field("chat", pattern="^(run|chat)$")

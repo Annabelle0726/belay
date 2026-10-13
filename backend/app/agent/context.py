@@ -129,6 +129,13 @@ def build_context(payload: dict, learner_state: dict, attempts: int) -> dict:
         },
         "recent_dialogue": payload.get("recent", []),
     }
+    if payload.get("_reply_context"):
+        quote = payload["_reply_context"]
+        ctx["quoted_prior_reply"] = {
+            **quote,
+            "text": quote["text"][:6000],
+            "truncated": len(quote["text"]) > 6000,
+        }
     # Opt-in learner-authored goals (the student's own words). Injected into the
     # persona-parameterized prompts (reasoner especially) as goals the tutor honors
     # within its stance — never as authority over the stance. Absent for control.

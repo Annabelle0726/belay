@@ -180,3 +180,82 @@ test('server execution deadline is distinct from browser waiting timeout and ret
  });
  assert.equal(JSON.parse([...store.values.values()][0]).pending,true);
 });
+
+
+test('old backend validation rejection records non-admission and never polls the rejected ID', async()=>{
+ const store=storage();
+ const rejected=client(store,async()=>reply({detail:[{type:'extra_forbidden',loc:['body','reply_to'],msg:'Extra inputs not permitted',input:{secret:'must not display'}}]},422),{config:{...config,reply_references:{version:1,passages:true}}});
+ await assert.rejects(rejected.jobs.ask('https://test','/jobs',{...body,reply_to:{request_id:'prior_request_001'}}),{code:'request_invalid',notSubmitted:true,uncertain:false});
+ const receipt=JSON.parse([...store.values.values()][0]);
+ assert.equal(receipt.pending,false);assert.equal(receipt.not_submitted,true);
+ const reload=client(store,async()=>{throw Error('no request for rejected ID');});
+ assert.equal(await reload.jobs.recover('https://test','/jobs','echo-1'),null);
+ assert.equal(reload.calls.length,1);
+ const next=client(store,async(url,opts)=>reply(opts.method==='POST'?{id:completed.id,state:'queued'}:completed));
+ const result=await next.jobs.ask('https://test','/jobs',body);
+ assert.equal(result.message,'useful answer');
+ assert.notEqual(JSON.parse(next.calls.find(c=>c.opts.method==='POST').opts.body).request_id,receipt.request_id);
+});
+
+test('unsupported quote capability does not create a pointer or erase an older pending request',async()=>{
+ const store=storage();const old=client(store,async()=>{throw TypeError('lost');});
+ await assert.rejects(old.jobs.ask('https://test','/jobs',body));
+ const before=JSON.stringify([...store.values]);
+ const value=client(store,async(url,opts)=>{assert.notEqual(opts.method,'POST');return reply({detail:{code:'job_unavailable'}},404);});
+ await assert.rejects(value.jobs.ask('https://test','/jobs',{...body,reply_to:{request_id:'prior_request_001'}}),{uncertain:true});
+ assert.equal(JSON.stringify([...store.values]),before);
+ const empty=storage();const incompatible=client(empty,async()=>{throw Error('must not post');});
+ await assert.rejects(incompatible.jobs.ask('https://test','/jobs',{...body,reply_to:{request_id:'prior_request_001'}}),{code:'reply_protocol_unavailable',notSubmitted:true});
+ assert.equal(empty.values.size,0);
+});
+
+
+test('fresh admission budget or unstructured validation rejection never becomes a phantom unknown task',async()=>{
+ for(const response of [reply({detail:'object required'},422),reply({detail:{code:'budget_exhausted'}},429)]) {
+  const store=storage();const value=client(store,async()=>response);
+  await assert.rejects(value.jobs.ask('https://test','/jobs',body),{notSubmitted:true,uncertain:false});
+  assert.equal(JSON.parse([...store.values.values()][0]).pending,false);
+  assert.equal(await value.jobs.recover('https://test','/jobs','echo-1'),null);
+ }
+});
+
+test("missing legacy pointer is fenced before release, then requires a deliberate new Ask", async () => {
+  const store=storage(); let old;
+  const lost=client(store,async(url,opts)=>{old=JSON.parse(opts.body).request_id;throw TypeError('lost');});
+  await assert.rejects(lost.jobs.ask('https://test','/jobs',body));
+  const restored=client(store,async(url,opts)=>{
+    if(url.endsWith('/reconcile')) {
+      assert.equal(opts.method,'POST'); assert.equal(JSON.parse(opts.body).request_id,old);
+      assert.equal(JSON.parse(opts.body).exercise_id,'echo-1');
+      return reply({id:'c'.repeat(64),state:'failed',reason:'request_not_admitted'});
+    }
+    if(opts.method==='POST') return reply({id:completed.id,state:'queued'});
+    if(url.endsWith(old)) return reply({detail:{code:'job_unavailable'}},404);
+    return reply(completed);
+  },{config:{...config,missing_request_recovery:1}});
+  await assert.rejects(restored.jobs.ask('https://test','/jobs',body),{code:'request_not_admitted',uncertain:false,notSubmitted:true});
+  assert.equal(restored.calls.filter(c=>c.url.endsWith('/by-request/'+old)).length,0);
+  assert.equal(restored.calls.filter(c=>c.opts.method==='POST'&&!c.url.endsWith('/reconcile')).length,0);
+  assert.equal(JSON.parse([...store.values.values()][0]).request_id,old);
+  assert.equal(await restored.jobs.recover('https://test','/jobs','echo-1'),null);
+  assert.equal((await restored.jobs.ask('https://test','/jobs',body)).message,'useful answer');
+});
+
+test("unconfirmed reconciliation keeps the original ID blocked without model submission", async () => {
+  for(const failure of ['lost','foreign','unknown']) {
+    const store=storage();
+    const lost=client(store,async()=>{throw TypeError('lost');});
+    await assert.rejects(lost.jobs.ask('https://test','/jobs',body));
+    const before=JSON.stringify([...store.values]);
+    const recovery=client(store,async(url)=>{
+      if(url.endsWith('/reconcile')) {
+        if(failure==='lost') throw TypeError('lost receipt');
+        if(failure==='unknown') return reply({id:completed.id,state:'unknown'});
+      }
+      return reply({detail:{code:'job_unavailable'}},404);
+    },{config:{...config,missing_request_recovery:1}});
+    await assert.rejects(recovery.jobs.recover('https://test','/jobs','echo-1'),{uncertain:true});
+    assert.equal(JSON.stringify([...store.values]),before);
+    assert.equal(recovery.calls.filter(c=>c.opts.method==='POST'&&!c.url.endsWith('/reconcile')).length,0);
+  }
+});

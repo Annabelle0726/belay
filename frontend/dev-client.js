@@ -14,9 +14,43 @@
   let localBusy = false, sessionBusy = false;
   let records = [], activeRecord = null, feedMessages = [], requestTarget = null;
   let savedConversation = null, glassOwner = null;
+  let selectedReply = null;
+  const defaultQuestionPlaceholder = $("question").getAttribute("placeholder") || "Ask Sol something specific (optional)…";
+  function replyExcerpt(text) {
+    let plain = String(text || "");
+    if (window.marked && window.DOMPurify) {
+      const rendered = document.createElement("div");
+      rendered.innerHTML = renderSafeMarkdown(plain);
+      plain = rendered.textContent;
+    }
+    return plain.replace(/\s+/g, " ").trim().slice(0, 360);
+  }
+  function removeReply() {
+    selectedReply = null;
+    $("reply-reference").hidden = true;
+    $("reply-excerpt").textContent = "";
+    $("question").setAttribute("placeholder", defaultQuestionPlaceholder);
+  }
+  function selectReply(record) {
+    if (busy) return;
+    const answer = record?.messages.find(m => m.role === "assistant" && (!m.status || m.status === "completed"));
+    const requestId = savedView ? answer?.request_id : record?.request_id;
+    if (!answer || !requestId) {
+      $("status").hidden = false;
+      $("status").textContent = "This reply is no longer available to reference. Choose another reply or ask a new question.";
+      return;
+    }
+    selectedReply = {request_id:requestId, conversation_id:savedView ? savedConversation : null,
+      excerpt:replyExcerpt(answer.text)};
+    $("reply-excerpt").textContent = selectedReply.excerpt;
+    $("reply-reference").hidden = false;
+    $("question").setAttribute("placeholder", "What would you like to ask about this reply?");
+    $("question").focus?.();
+  }
 
   function startRecord(event) {
     const record = {event, source:$("source").value, question:$("question").value.trim(),
+      reply_to:selectedReply ? {...selectedReply} : null,
       execution:event === "run" ? "running" : "not_run", feedback:"not_submitted", messages:[]};
     records.push(record); activeRecord = record; requestTarget = record;
     clearTelemetry(); renderFeed(feedMessages);
@@ -36,8 +70,15 @@
     record.feedback = state;
     if (state === "completed") {record.note = ""; record.code = null;}
     if (ref.recovered && requestTarget && requestTarget !== record) {
-      requestTarget.feedback = "not_submitted";
-      requestTarget.note = "No new feedback submitted. The original request is being recovered in its own record.";
+      if (requestTarget.event === "chat" && !requestTarget.request_id) {
+        // Checking an existing request is not a new conversation turn.
+        records = records.filter(r => r !== requestTarget);
+        if (activeRecord === requestTarget) activeRecord = record;
+        requestTarget = record;
+      } else {
+        requestTarget.feedback = "not_submitted";
+        requestTarget.note = "No new feedback submitted. The original request is being recovered in its own record.";
+      }
     }
     renderFeed(feedMessages);
   }
@@ -47,6 +88,10 @@
     record.feedback = error.uncertain ? "unknown" : error.code === "result_expired" ? "result_expired" : "blocked";
     record.note = error.message;
     record.code = error.code;
+    if (error.code === "request_not_admitted" && fallback && fallback !== record) {
+      fallback.feedback = "not_submitted";
+      fallback.note = "No tutor feedback was submitted for this run. The previous request is now closed. Choose Ask Sol to discuss this run.";
+    }
     renderFeed(feedMessages);
   }
 
@@ -101,7 +146,7 @@
     const unassociated = [];
     for (const message of messages) {
       if (!message.request_id) {unassociated.push(message); continue;}
-      let record = records.find(r => r.request_id === message.request_id);
+      let record = records.find(r => r.request_id === message.request_id || r.job_id === message.request_id);
       if (!record) {
         record = {request_id:message.request_id, messages:[], restored:true, execution:"not_retained"};
         records.push(record);
@@ -117,9 +162,27 @@
       group.setAttribute("aria-label", "Run and tutor feedback record");
       group.setAttribute("data-feedback-state", record.feedback || "restored");
       if (record.request_id) group.setAttribute("data-request-id", record.request_id);
+      if (record.reply_to && !record.messages.some(m => m.role === "student")) {
+        const quote = document.createElement("blockquote"); quote.className = "reply-reference";
+        quote.textContent = "In reply to Sol: " + replyExcerpt(record.reply_to.excerpt); group.appendChild(quote);
+      }
       if (record.question && record.request_id && !record.messages.some(m => m.role === "student"))
         bubble({role:"student", text:record.question}, group);
-      record.messages.forEach(m => bubble(m, group));
+      record.messages.forEach(m => {
+        const reference = m.reply_to || (m.role === "student" ? record.reply_to : null);
+        if (reference) {
+          const quote = document.createElement("blockquote"); quote.className = "reply-reference";
+          quote.setAttribute("aria-label", "In reply to Sol");
+          quote.textContent = "In reply to Sol: " + replyExcerpt(reference.excerpt);
+          group.appendChild(quote);
+        }
+        bubble(m, group);
+        if (m.role === "assistant" && (!m.status || m.status === "completed") && record !== glassOwner) {
+          const follow = document.createElement("button"); follow.type = "button";
+          follow.className = "reply-followup"; follow.textContent = "Ask Sol about this reply";
+          follow.addEventListener("click", () => selectReply(record)); group.appendChild(follow);
+        }
+      });
       const status = document.createElement("p"); status.className = "feedback-state";
       status.setAttribute("role", "note");
       status.setAttribute("aria-label", "System notice");
@@ -162,6 +225,7 @@
     $("glass-approach").textContent = "";
   }
   function clearTransient() {
+    removeReply();
     records = []; activeRecord = null; requestTarget = null; feedMessages = [];
     temporaryMessages = []; recent = []; lastResult = null;
     $("status").textContent = "";
@@ -174,6 +238,7 @@
     }
     if (scope !== session.key || savedView !== session.enabled) clearTransient();
     else if (savedView && savedConversation !== session.cid) {
+      removeReply();
       records = []; activeRecord = null; requestTarget = null; feedMessages = [];
     }
     savedConversation = session.cid;
@@ -327,6 +392,10 @@
   }
   async function ask(event = "chat") {
     if (busy || !dialogue) return;
+    if (event === "chat" && selectedReply && !$("question").value.trim()) {
+      $("question").focus();
+      return;
+    }
     const record = event === "run" ? activeRecord : startRecord("chat");
     requestTarget = record;
     const typed = $("question").value.trim();
@@ -336,6 +405,7 @@
     try {
       const input = {message, source: $("source").value, result: lastResult,
         mode: $("mode").value, stance};
+      if (record.reply_to) input.reply_to = {request_id:record.reply_to.request_id, conversation_id:record.reply_to.conversation_id};
       let out = await dialogue.send(input);
       if (originalScope && originalScope !== scope) throw new Error("Identity changed; enter a new question.");
       if (!out) {
@@ -344,6 +414,7 @@
         out = await askJobs.ask(base(), "/api/sol/jobs", {
           participant_id: identity.learner_id, exercise_id: $("exercise").value,
           event, mode: input.mode, stance: input.stance, source: input.source, result: input.result,
+          ...(input.reply_to ? {reply_to:input.reply_to} : {}),
           recent: [...recent.slice(-10), current]
         }, (state, config, ref) => {
           if (requestGeneration === generation && originalScope === scope) requestState(state, ref);
@@ -353,8 +424,9 @@
         const recovered = askJobs.wasRecovered(out);
         const ref = askJobs.reference(out);
         const owner = records.find(r => r.request_id === ref?.request_id) || record;
+        if (out.reply_to) owner.reply_to = out.reply_to;
         if (!recovered) recent = [...recent, current, {who: "sol", text: reply}].slice(-12);
-        if (!recovered) temporaryMessages.push({role:"student", text:message, request_id:owner.request_id});
+        if (!recovered) temporaryMessages.push({role:"student", text:message, request_id:owner.request_id, reply_to:out.reply_to || record.reply_to});
         temporaryMessages.push({role:"assistant", text:reply, request_id:owner.request_id});
         // Keep the transient feed bounded as well; nothing is written to storage.
         temporaryMessages = temporaryMessages.slice(-200);
@@ -376,7 +448,7 @@
       if (completedOwner) {completedOwner.feedback = "completed"; completedOwner.note = ""; renderFeed(feedMessages);}
       if (out.recovered_request) clearTelemetry("An earlier request was recovered. No new tutor reply was generated.");
       else telemetry(out);
-      if (!out.recovered_request) $("question").value = "";
+      if (!out.recovered_request) {$("question").value = ""; removeReply();}
       $("ask").textContent = "Ask Sol";
       $("status").textContent = out.recovered_request
         ? (event === "run" ? "Code ran. Recovered the previous tutor reply; no feedback for this run was submitted."
@@ -413,6 +485,10 @@
       if (current !== generation || currentScope !== scope) return;
       if (answer) {
         const ref = askJobs.reference(answer);
+        if (answer.reply_to) {
+          const owner = records.find(r => r.request_id === ref?.request_id);
+          if (owner) owner.reply_to = answer.reply_to;
+        }
         temporaryMessages = [...temporaryMessages, {role:"assistant", request_id:ref?.request_id,
           text:answer.message + (answer.check_question ? "\n\n" + answer.check_question : "")}];
         renderFeed(temporaryMessages);
@@ -428,11 +504,9 @@
   $("run").addEventListener("click", async () => { if (await run()) await ask("run"); });
   $("ask").addEventListener("click", () => ask());
   $("glass-correct").addEventListener("click", () => {
-    if (busy) return;
-    const question = $("question");
-    if (!question.value.trim()) question.value = "Correction: ";
-    question.focus?.();
+    selectReply(glassOwner);
   });
+  $("reply-remove").addEventListener("click", removeReply);
   $("question").addEventListener("keydown", event => {
     if (event.key === "Enter" && !event.isComposing) { event.preventDefault(); ask(); }
   });

@@ -20,7 +20,7 @@ async function page(name, fetchTurn, timeoutMs, sharedStorage, recoveredAnswer, 
       addEventListener(type, fn) { this.listeners[type] = fn; },
       appendChild(child) { this.children.push(child); if (!this.value && child.value) this.value = child.value; },
       replaceChildren() { this.children = []; this.textContent=""; },
-      querySelectorAll() {return [];}, setAttribute() {},
+      querySelectorAll() {return [];}, setAttribute() {}, getAttribute() {return null;},
     };
   }
   const html = read(name);

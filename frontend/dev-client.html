@@ -255,6 +255,9 @@
         .connection-settings summary { color: var(--muted); font-size: .75rem; cursor: pointer; }
         .connection-settings .row { margin-top: 8px; }
         .telemetry summary { cursor: pointer; }
+        .conversation-card .reply-reference { margin: 6px 0; padding: 8px 12px; border-left: 3px solid var(--border); border-radius: 6px; background: var(--surface-2); overflow-wrap: anywhere; }
+        .conversation-card .reply-reference p { margin: 4px 0 8px; max-height: 4.5em; overflow: auto; }
+        .conversation-card .reply-followup { font-size: 0.85rem; margin: 4px 0 8px; padding: 4px 8px; }
         .telemetry summary::after { content: "+"; margin-left: auto; }
         .telemetry[open] summary::after { content: "−"; }
         .telemetry > .stack { margin-top: 12px; max-height: 32vh; overflow-y: auto; }
@@ -656,6 +659,11 @@
             </div>
             <div id="feedback-loading" class="feedback-loading" aria-hidden="true" hidden></div>
             <span id="feedback-announcement" class="sr-only" role="status" aria-live="polite"></span>
+            <div id="reply-reference" class="reply-reference" hidden role="note" aria-label="Reply being referenced">
+                <strong>In reply to Sol</strong>
+                <p id="reply-excerpt"></p>
+                <button id="reply-remove" type="button" aria-label="Remove reply reference">Remove reference</button>
+            </div>
             <div class="chat-composer">
                 <input id="question" class="field" type="text" placeholder="Ask Sol something specific (optional)…" autocomplete="off"/>
                 <button id="ask">Ask Sol</button>
@@ -669,7 +677,7 @@
             <div class="stack">
             <p id="glass-evidence"></p>
             <p id="glass-approach"></p>
-            <button id="glass-correct" type="button">Correct Sol's understanding</button>
+            <button id="glass-correct" type="button">Ask Sol about this reply</button>
             </div>
         </details>
         </div>

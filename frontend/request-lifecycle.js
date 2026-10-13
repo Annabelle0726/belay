@@ -27,7 +27,12 @@ globalThis.belayRequestJSON = async function (url, options = {}, { timeoutMs = 9
     const response = await fetch(url, { cache:"no-store", ...options, signal: controller.signal });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
-      const code = data?.detail?.code;
+      // FastAPI validation fails before admission. Keep its rejected receipt,
+      // but never expose validation input (which may contain learner content).
+      const validationRejected = response.status === 422 && Array.isArray(data?.detail) &&
+        data.detail.length > 0 && data.detail.every(e => typeof e?.type === "string" &&
+          Array.isArray(e.loc) && ["body", "query", "path", "header"].includes(e.loc[0]));
+      const code = validationRejected ? "request_invalid" : data?.detail?.code;
       // A generic 5xx/coordinator outage may have happened after dispatch.
       const denied = ["verified_execution_required", "invalid_controls_mode", "controls_not_initialized",
         "jobs_disabled", "jobs_not_configured"];

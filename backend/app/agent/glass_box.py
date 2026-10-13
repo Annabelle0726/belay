@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 _APPROACH = {
+    "clarify": "I asked which part you mean so I do not guess your question.",
     "co_reason": "I asked a question so we can reason through the next step together.",
     "revisit": "I returned to this idea with a different question before suggesting a change.",
     "diagnose": "I focused on a possible cause and a small next check.",
@@ -30,15 +31,19 @@ def student_glass_box(released: dict, payload: dict) -> dict[str, str]:
         for item in recent
     )
     if isinstance(pack, dict) and pack.get("execution_status") == "student_error":
-        evidence = "Your latest code run reported an error."
+        evidence = "The code run supplied with this request reported an error."
     elif isinstance(result, dict) and result.get("goalMet") is False:
-        evidence = "Your latest run completed, and an exercise check needs attention."
+        evidence = (
+            "The run supplied with this request completed, and an exercise check needs attention."
+        )
     elif isinstance(result, dict) and result.get("ok") is True:
-        evidence = "Your latest code run completed."
+        evidence = "The code run supplied with this request completed."
     elif submitted_question:
         evidence = "I used the question you submitted about this exercise."
     else:
         evidence = "I did not have a confirmed code run to refer to."
+    if payload.get("reply_to"):
+        evidence = "I referred to the Sol reply you quoted and your follow-up. " + evidence
     intervention = released.get("intervention")
     return {
         "evidence": evidence,

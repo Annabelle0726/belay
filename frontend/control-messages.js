@@ -3,6 +3,7 @@
 globalThis.belayControlMessage = function (detail, retryAfter) {
   const code = detail && typeof detail === "object" ? detail.code : "";
   const messages = {
+    request_not_admitted: "The previous request was not accepted and is now closed. No question was resent. You can choose Ask Sol to submit your current question or discuss the latest run.",
     publication_unavailable: "Saved publication could not be verified. Check status later; do not resubmit this request.",
     conversation_conflict: "This conversation changed or its turn lease ended. Refresh history before a new request.",
     conversation_unavailable: "This conversation is unavailable, expired, deleted or no longer authorized. Its old request will not be resubmitted.",
@@ -17,6 +18,9 @@ globalThis.belayControlMessage = function (detail, retryAfter) {
     rate_limited: "Requests are arriving too quickly. Please try again shortly.",
     queue_full: "The tutor is busy. Please try again shortly.",
     concurrency_limited: "The tutor is busy. Please try again shortly.",
+    reply_unavailable: "The quoted reply is no longer available. Remove the reference to ask a new question, or choose an available reply.",
+    reply_protocol_unavailable: "This server needs an update before it can accept quoted questions. Your draft is unchanged and no new question was submitted. Remove the reference to ask without it, or contact course support.",
+    request_invalid: "The server did not accept this request. Your draft is unchanged. Check the reference or contact course support before trying again.",
     coordinator_unavailable: "The tutor is temporarily unavailable. Please try again later.",
     verified_execution_required: "The tutor is not ready for requests. Please contact your course support team.",
     unresolved_overrun: "The tutor is temporarily unavailable. Please contact your course support team.",

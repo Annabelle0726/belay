@@ -22,6 +22,7 @@ class Element {
   querySelectorAll() { return []; }
   addEventListener(event,handler) { this.listeners[event]=handler; }
   setAttribute(key,value) { this[key]=value; }
+  getAttribute(key) { return this[key] ?? null; }
   async fire(event) { return this.listeners[event]?.({key:'Enter',preventDefault(){}}); }
 }
 const root=path.join(__dirname,'..');
@@ -47,6 +48,7 @@ async function setup(state={}) {
   }
   for(const id of ['backend','exercise','mode','source','question','status','result','prompt','chat-feed',
     'conversation-controls','ask','run','glass-evidence','glass-approach','glass-correct',
+    'reply-reference','reply-excerpt','reply-remove',
     'feedback-loading','feedback-announcement','glass-box','signals-storage']) {
     nodes[id]=dom ? dom.window.document.getElementById(id) : new Element(id==='exercise'?'select':'div');
     if(dom) nodes[id].listeners={};
@@ -73,17 +75,21 @@ async function setup(state={}) {
     if(url.endsWith('/api/curriculum')) result={modules:[{exercises:[{id:'echo-1',title:'Echo',prompt:'Learn loops',starter:'print(1)'}]}]};
     else if(url.endsWith('/jobs/config')) {
       if(state.jobsConfigCode) {status=503;result={detail:{code:state.jobsConfigCode}};}
-      else result={recovery_scope:'a'.repeat(64),learner_id:state.identity.learner_id,
+      else result={...(state.missingRecovery ? {missing_request_recovery:1} : {}),...(state.legacyJobs ? {} : {reply_references:{version:1,passages:false}}),recovery_scope:'a'.repeat(64),learner_id:state.identity.learner_id,
         assignments:{'echo-1':'v1'},poll_seconds:1,result_seconds:300,notice:'Temporary recovery'};
     }
     else if(url.includes('/jobs/by-request/')) {
-      if(state.pollStates?.length) result={id:'b'.repeat(64),state:state.pollStates.shift(),result:null};
+      if(url.endsWith('/reconcile') && state.missingRecovery) result={id:'b'.repeat(64),state:'failed',reason:'request_not_admitted',result:null};
+      else if(state.pollStates?.length) result={id:'b'.repeat(64),state:state.pollStates.shift(),result:null};
       else if(state.pollTerminal) result={id:'b'.repeat(64),state:state.pollTerminal,reason:state.pollReason||'execution_failed',result:null};
       else if(state.unknown) result={id:'b'.repeat(64),state:'unknown',result:null};
       else if(url.includes('/conversations/')) result=state.savedResult;
       else result={id:'b'.repeat(64),state:'completed',result:{message:state.reply||'Live answer',glass_box:{evidence:'I used the question you submitted about this exercise.',approach:'I asked a question so we can reason through the next step together.'}}};
     }
-    else if(url.endsWith('/api/sol/jobs')) result={id:'b'.repeat(64),state:'queued'};
+    else if(url.endsWith('/api/sol/jobs')) {
+      if(state.rejectQuote && body.reply_to) {status=422;result={detail:[{type:'extra_forbidden',loc:['body','reply_to'],msg:'Extra inputs not permitted'}]};}
+      else result={id:'b'.repeat(64),state:'queued'};
+    }
     else if(url.endsWith('/config')) result={controlled:!!state.controlled,recovery_scope:'a'.repeat(64),enabled:true,policy_id:'test-only',retention_seconds:300,
       identity:state.identity,assignments:{'echo-1':'v1'}};
     else if(url.endsWith('/conversations')) {
@@ -95,7 +101,7 @@ async function setup(state={}) {
       if(!attempt) status=404;
       else if(options.method==='DELETE') {state.attempts.delete(cid);status=204;}
       else if(url.endsWith('/jobs')) {
-        attempt.messages.push({request_id:body.request_id,role:'student',text:body.message,status:'completed'},{request_id:body.request_id,role:'assistant',text:state.reply||'Controlled answer',status:'completed'});
+        attempt.messages.push({request_id:body.request_id,role:'student',text:body.message,status:'completed',reply_to:body.reply_to?{...body.reply_to,excerpt:'Controlled answer'}:null},{request_id:body.request_id,role:'assistant',text:state.reply||'Controlled answer',status:'completed'});
         attempt.revision+=2;
         state.savedResult={id:'b'.repeat(64),state:'completed',result:{message:state.reply||'Controlled answer',conversation_id:cid,revision:attempt.revision,
           glass_box:{evidence:'I used the question you submitted about this exercise.',approach:'I asked a question so we can reason through the next step together.'}}};
@@ -573,8 +579,8 @@ test('unknown original request is recovered into its original group without clai
  assert.equal(env.calls.filter(c=>c.url.endsWith('/api/sol/jobs')).length,1);
  assert.equal(groups(env).filter(g=>g['data-request-id']===id).length,1);
  assert.match(groupText(groups(env)[0]),/Live answer/);
- assert.doesNotMatch(groupText(groups(env).at(-1)),/Live answer/);
- assert.match(groupText(groups(env).at(-1)),/No new feedback submitted/);
+ assert.equal(groups(env).length,1);
+ assert.equal(env.nodes.question.value,'New input');
 });
 
 test('saved history retains stable request grouping across refresh and repeated restore',async()=>{
@@ -661,7 +667,7 @@ test('only newest completed reply owns a collapsed inline Glass Box; new round r
  assert.doesNotMatch(feed.textContent,/Submitted code|Request UUID|Checking request status/);
 });
 
-test('Glass Box uses student explanations and correction becomes the next Ask',async()=>{
+test('Glass Box prepares an explicit quoted follow-up without overwriting or sending the draft',async()=>{
  const env=await setup({withMarkdown:true});
  env.nodes.question.value='Why does this fail?';await env.nodes.ask.fire('click');
  const box=env.nodes['glass-box'];
@@ -669,12 +675,21 @@ test('Glass Box uses student explanations and correction becomes the next Ask',a
  assert.equal(box.open,false);
  assert.match(box.textContent,/question you submitted/i);
  assert.doesNotMatch(box.textContent,/confidence|planner_note|co_reason|leak_risk|\d+%/i);
+ env.nodes.question.value='I meant the category mean, not the row count.';
+ const before=env.calls.length;
  await env.nodes['glass-correct'].fire('click');
- assert.match(env.nodes.question.value,/Correction:/);
- env.nodes.question.value='Correction: I meant the category mean, not the row count.';
+ assert.equal(env.calls.length,before);
+ assert.equal(env.nodes.question.value,'I meant the category mean, not the row count.');
+ assert.equal(env.nodes['reply-reference'].hidden,false);
+ assert.match(env.nodes['reply-excerpt'].textContent,/Live answer/);
+ await env.nodes['reply-remove'].fire('click');
+ assert.equal(env.nodes['reply-reference'].hidden,true);
+ await env.nodes['glass-correct'].fire('click');
  await env.nodes.ask.fire('click');
  const calls=env.calls.filter(c=>c.url.endsWith('/api/sol/jobs'));
  assert.match(JSON.parse(calls.at(-1).options.body).recent.at(-1).text,/category mean/);
+ assert.equal(JSON.parse(calls.at(-1).options.body).reply_to.request_id,JSON.parse(calls[0].options.body).request_id);
+ assert.match(env.nodes['chat-feed'].textContent,/In reply to Sol/);
 });
 
 
@@ -688,4 +703,102 @@ test('desktop columns share equal width and bounded height; workspace corners ar
  assert.match(html,/\.col-right \{ contain: size; min-height: 0/);
  assert.doesNotMatch(html,/@media \(min-width: 900px\) and \(min-height:/);
  assert.match(html,/\.conversation-card \{ flex: 1; min-height: 0; overflow: hidden/);
+});
+
+
+test('empty quoted draft never sends and long quote is bounded and safe',async()=>{
+ const env=await setup({withMarkdown:true,reply:'<img src=x onerror=alert(1)> '+ 'Long original reply. '.repeat(100)});
+ env.nodes.question.value='Original';await env.nodes.ask.fire('click');
+ await env.nodes['glass-correct'].fire('click');
+ const count=env.calls.length;
+ assert.equal(env.nodes.question.value,'');
+ await env.nodes.ask.fire('click');
+ assert.equal(env.calls.length,count);
+ assert.equal(env.nodes['reply-excerpt'].querySelector('img'),null);
+ assert.equal(env.nodes['reply-excerpt'].textContent.length,360);
+ assert.equal(env.nodes.question.getAttribute('placeholder'),'What would you like to ask about this reply?');
+ env.nodes.question.value='Draft to keep';await env.nodes['reply-remove'].fire('click');
+ assert.equal(env.nodes.question.value,'Draft to keep');
+ assert.equal(env.nodes['reply-reference'].hidden,true);
+});
+
+test('saved restored reply can be referenced and its quote stays in restored history',async()=>{
+ const env=await setup({withMarkdown:true,controlled:true});
+ const check=env.controls().check;check.checked=true;await check.fire('change');
+ env.nodes.question.value='Original question';await env.nodes.ask.fire('click');
+ const restored=await setup(env.state);
+ const follow=restored.nodes['chat-feed'].querySelector('.reply-followup');
+ assert.ok(follow);
+ restored.nodes.question.value='Please explain the category mean.';
+ await follow.fire('click');
+ assert.equal(restored.nodes['reply-reference'].hidden,false);
+ await restored.nodes.ask.fire('click');
+ const post=restored.calls.find(c=>c.url.endsWith('/jobs')&&c.options.method==='POST');
+ const body=JSON.parse(post.options.body);
+ assert.ok(body.reply_to.conversation_id);
+ const again=await setup(restored.state);
+ assert.match(again.nodes['chat-feed'].textContent,/In reply to Sol/);
+ assert.equal(again.calls.some(c=>c.options.method==='POST'),false);
+});
+
+
+test('repeated checks for an unknown request do not create extra operation groups',async()=>{
+ const env=await setup({withMarkdown:true,unknown:true});
+ env.nodes.question.value='Original';await env.nodes.ask.fire('click');
+ const original=env.nodes['chat-feed'].querySelector('.request-record').getAttribute('data-request-id');
+ env.nodes.question.value='Draft to keep';
+ await env.nodes.ask.fire('click');await env.nodes.ask.fire('click');
+ assert.equal(env.nodes['chat-feed'].querySelectorAll('.request-record').length,1);
+ assert.equal(env.nodes['chat-feed'].querySelector('.request-record').getAttribute('data-request-id'),original);
+ assert.equal(env.nodes.question.value,'Draft to keep');
+ assert.equal(env.calls.filter(c=>c.url.endsWith('/jobs')&&c.options.method==='POST').length,1);
+});
+
+
+test('422 then remove reference preserves draft and permits exactly one deliberate new request',async()=>{
+ const env=await setup({withMarkdown:true});
+ env.nodes.question.value='Original';await env.nodes.ask.fire('click');
+ await env.nodes['glass-correct'].fire('click');
+ env.nodes.question.value='Explain this answer';env.state.rejectQuote=true;
+ await env.nodes.ask.fire('click');
+ assert.equal(env.nodes.ask.textContent,'Ask Sol');
+ assert.equal(env.nodes.question.value,'Explain this answer');
+ const denied=JSON.parse(env.calls.filter(c=>c.url.endsWith('/api/sol/jobs')).at(-1).options.body).request_id;
+ assert.equal(env.calls.some(c=>c.url.endsWith('/by-request/'+denied)),false);
+ await env.nodes['reply-remove'].fire('click');
+ assert.equal(env.nodes.question.value,'Explain this answer');
+ await env.nodes.ask.fire('click');
+ assert.equal(env.calls.filter(c=>c.url.endsWith('/api/sol/jobs')).length,3);
+ assert.equal(env.calls.some(c=>c.url.endsWith('/by-request/'+denied)),false);
+ const restored=await setup(env.state);
+ assert.equal(restored.calls.some(c=>c.options.method==='POST'),false);
+});
+
+test('legacy server cannot receive an incompatible quoted POST',async()=>{
+ const env=await setup({withMarkdown:true,legacyJobs:true});
+ env.nodes.question.value='Original';await env.nodes.ask.fire('click');
+ await env.nodes['glass-correct'].fire('click');env.nodes.question.value='Follow up';
+ await env.nodes.ask.fire('click');
+ assert.equal(env.calls.filter(c=>c.url.endsWith('/api/sol/jobs')).length,1);
+ assert.equal(env.nodes.question.value,'Follow up');
+ assert.match(env.nodes['chat-feed'].textContent,/server needs an update/);
+ assert.equal(env.nodes.ask.textContent,'Ask Sol');
+});
+
+test('Run after a missing legacy request preserves output and offers an explicit fresh Ask',async()=>{
+ const env=await setup({withMarkdown:true,unknown:true});
+ await env.nodes.ask.fire('click');
+ env.state.missingRecovery=true;
+ env.nodes.question.value='Explain my new run';
+ await env.nodes.run.fire('click');
+ assert.equal(env.calls.filter(c=>c.url.endsWith('/api/sol/jobs')).length,1);
+ assert.match(env.nodes.result.textContent,/Code ran/);
+ assert.equal(env.nodes.ask.textContent,'Ask Sol');
+ assert.equal(env.nodes.question.value,'Explain my new run');
+ assert.doesNotMatch(env.nodes['chat-feed'].textContent,/is being recovered/);
+ assert.match(env.nodes['chat-feed'].textContent,/previous request was not accepted/);
+ env.state.unknown=false;
+ await env.nodes.ask.fire('click');
+ assert.equal(env.calls.filter(c=>c.url.endsWith('/api/sol/jobs')).length,2);
+ assert.match(env.nodes['chat-feed'].textContent,/Live answer/);
 });
