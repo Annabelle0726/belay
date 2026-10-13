@@ -7,8 +7,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.agent.glass_box import student_glass_box
 from app.config import settings
-from app.conversations.router import PLACEHOLDER, build_router, live_signals
+from app.conversations.router import PLACEHOLDER, build_router
 from app.core.registry import get_active_pack
 from app.store import ConsentRouter, InMemoryStore
 from tests.http_auth import configure, token
@@ -20,7 +21,7 @@ dialogue = dialogue_fixture
 
 @pytest.mark.parametrize("content", ["learner@example.com", "I want to die", "x" * 513])
 def test_live_summaries_screen_sensitive_and_oversize_content(content):
-    summary = live_signals({"planner_note": content, "components": {"draft": "hidden"}}, 8192)
+    summary = student_glass_box({"planner_note": content, "components": {"draft": "hidden"}}, {})
     assert content not in str(summary)
     assert "hidden" not in str(summary)
 
@@ -33,11 +34,33 @@ def test_live_summaries_are_bounded_and_ignore_arbitrary_fields():
         "memory": {"grasped": ["loops"], "raw": "hidden"},
         "components": {"draft": "hidden", "timings_ms": {"planner_ms": 12, "raw": "hidden"}},
     }
-    assert live_signals(released, 1) == {}
-    signals = live_signals(released, 8192)
-    assert signals["planner_note"] == "A small check"
+    signals = student_glass_box(released, {"recent": [{"who": "student", "text": "Help"}]})
+    assert "planner_note" not in str(signals)
+    assert "confidence" not in str(signals)
     assert "hidden" not in str(signals) and "released" not in str(signals)
-    assert signals["components"]["timings_ms"] == {"planner_ms": 12}
+    assert "question you submitted" in signals["evidence"]
+
+
+@pytest.mark.parametrize(
+    ("payload", "evidence"),
+    [
+        ({"result": {"pack": {"execution_status": "student_error"}}}, "reported an error"),
+        ({"result": {"goalMet": False}}, "check needs attention"),
+        (
+            {"recent": [{"who": "sol", "text": "Earlier answer"}]},
+            "did not have a confirmed code run",
+        ),
+        ({}, "did not have a confirmed code run"),
+    ],
+)
+def test_glass_box_uses_only_confirmed_student_visible_evidence(payload, evidence):
+    explanation = student_glass_box(
+        {"intervention": "co_reason", "affective_state": "frustrated", "planner_note": "hidden"},
+        payload,
+    )
+    assert evidence in explanation["evidence"]
+    assert "reason through" in explanation["approach"]
+    assert "frustrated" not in str(explanation) and "hidden" not in str(explanation)
 
 
 @pytest.mark.parametrize(

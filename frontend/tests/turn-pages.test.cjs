@@ -84,7 +84,7 @@ for (const name of ["widget.html", "dev-client.html"]) {
     // The second click checks the existing pointer; it must not send another POST.
     ui.context.latestAnswer={message:"Recovered"};
     ui.nodes[widget ? "say" : "question"].value = "my question";
-    if (!widget) ui.nodes["signals-status"].textContent = "earlier valid answer";
+    if (!widget) ui.nodes["glass-evidence"].textContent = "earlier valid answer";
     await ui.click(send);
     assert.match(ui.nodes[status].textContent, /may still be running/);
     const preserved=ui.nodes[widget ? "say" : "question"].value;
@@ -99,7 +99,7 @@ for (const name of ["widget.html", "dev-client.html"]) {
       await ui.click(send);
       assert.match(ui.nodes[status].textContent, /valid answer was not received/);
       if (widget) assert.equal(ui.nodes.msgs.children.length, 0);
-      else assert.notEqual(ui.nodes["signals-status"].textContent, undefined);
+      else assert.notEqual(ui.nodes["glass-evidence"].textContent, undefined);
     }
   });
 
@@ -117,7 +117,7 @@ for (const name of ["widget.html", "dev-client.html"]) {
     await pending;
     assert.equal(calls, 1);
     if (widget) assert.equal(ui.nodes.msgs.children.length, 0);
-    else assert.notEqual(ui.nodes["signals-status"].textContent, "STALE");
+    else assert.notEqual(ui.nodes["glass-evidence"].textContent, "STALE");
     assert.equal(ui.nodes[send].disabled, false);
     // Stale reply never overwrites the current context.
   });

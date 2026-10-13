@@ -18,6 +18,7 @@ from sqlalchemy.engine import Connection
 
 from ..agent.context import _latest_student_message
 from ..agent.distress import extra_terms, frame_from_settings, has_distress_signal
+from ..agent.glass_box import student_glass_box
 from ..auth import ExecutionGrant, Identity, execution_grant, recheck_grant
 from ..config import settings
 from ..integrations.quad.pii import PIIRejected, assert_no_pii
@@ -196,6 +197,10 @@ class ExecutionData:
 
     def stage(self, job: dict, response: dict) -> str:
         value = SolTurnResponse.model_validate(response).model_dump()
+        try:
+            json.dumps(value, allow_nan=False)
+        except (ValueError, TypeError):
+            raise ControlError("invalid_execution_data", 422) from None
         if not value["message"].strip():
             raise ControlError("invalid_result", 502)
         with self.ledger.transaction() as conn:
@@ -203,6 +208,11 @@ class ExecutionData:
             identity = recheck_grant(self._grant(conn, job["id"]))
             conversation = saved.check(self, conn, job["id"], identity)
             payload = self._get(conn, job["id"], job["payload_ref"], "input")
+            value = {
+                "message": value["message"],
+                "check_question": value.get("check_question"),
+                "glass_box": student_glass_box(response, payload),
+            }
             if payload.get("_support"):
                 value = {**value, "_support_result": True, "message": "Support response available."}
             if conversation is not None:
@@ -214,6 +224,7 @@ class ExecutionData:
                 value = {
                     "message": PLACEHOLDER if screened else value["message"],
                     "check_question": None if screened else value.get("check_question"),
+                    **({} if screened else {"glass_box": value["glass_box"]}),
                 }
                 if payload.get("_support"):
                     value["_support_result"] = True
@@ -237,10 +248,7 @@ class ExecutionData:
             saved.check(self, conn, job["id"], identity)
             self._get(conn, job["id"], job["payload_ref"], "input")
             value = self._get(conn, job["id"], ref, "pending")
-            if saved.link(conn, job["id"]) is None:
-                if not SolTurnResponse.model_validate(value).message.strip():
-                    raise ControlError("invalid_result", 502)
-            elif not isinstance(value.get("message"), str) or not value["message"].strip():
+            if not isinstance(value.get("message"), str) or not value["message"].strip():
                 raise ControlError("invalid_result", 502)
             value = saved.complete(self, conn, job, identity, value)
             require_storable(value)

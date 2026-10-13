@@ -23,10 +23,7 @@
       2. Goals & reflect - opt-in, honored-not-authority (POST /quad/v1/goals,
                            /quad/v1/reflection); a goal is honored WITHIN limits,
                            never as a command.
-      3. Trace & signals - SIGNALS, not verdicts: a withheld solution shows as
-                           "held back, with a nudge"; self-eval + the wellbeing
-                           softener are observable indicators. Mastery framing,
-                           never a grade, never a ranking.
+      3. Student-facing explanation of visible evidence and tutoring approach.
 
     One customization knob (scaffolding level) proves the per-learner overlay seam
     end-to-end: it is opt-in and routed through the server-side floor check; it
@@ -139,8 +136,8 @@
     </div>
 
     <div class="pane signals-pane">
-      <h2 class="pane-heading">Trace &amp; signals <span class="note">(mastery framing, not a score)</span></h2>
-      <div id="signals"><p class="note">Signals from the latest turn appear here.</p></div>
+      <h2 class="pane-heading">How Sol is helping</h2>
+      <div id="signals"><p class="note">An explanation from the latest reply will appear here.</p></div>
     </div>
   </div>
 </div>
@@ -188,48 +185,25 @@ async function post(path, body) {
   return {status:200,data};
 }
 
-// SIGNALS, not verdicts. A withheld solution reads as "held back, with a nudge".
 function renderSignals(t) {
-  const c = (t.components || {});
-  const gov = t.governance || "none";
-  const govLabel = {
-    none: ['<span class="chip ok">on track</span>', "no intervention needed"],
-    withholding_solution: ['<span class="chip hold">held back, with a nudge</span>',
-      "kept the full answer back so the learning stays yours"],
-    redirect_answer_seeking: ['<span class="chip hold">redirected to your reasoning</span>',
-      "pointed back at your thinking instead of handing it over"],
-    flag_escalate: ['<span class="chip">flagged for a human</span>', "out of the tutor's depth"],
-    encourage_tone: ['<span class="chip ok">encouraging</span>', "meta-affective support"],
-  }[gov] || ['<span class="chip">' + escapeHtml(gov) + "</span>", ""];
-
-  const parts = [];
-  parts.push('<div class="sig">' + govLabel[0] + '<div class="note">' + govLabel[1] + "</div></div>");
-  parts.push('<div class="sig"><b>Move:</b> <span class="chip">' + escapeHtml(t.intervention || "-") +
-             '</span> <span class="note">' + escapeHtml(t.affective_state || "") + "</span></div>");
-  const se = c.self_eval || {};
-  if (se.leak_risk) parts.push('<div class="sig"><b>Self-check leak risk:</b> ' + escapeHtml(se.leak_risk) + "</div>");
-  // Calibrated confidence as a soft signal (a bar, never a grade or rank).
-  if (typeof t.confidence === "number") {
-    const pct = Math.round(t.confidence * 100);
-    parts.push('<div class="sig"><b>Tutor confidence (calibrated):</b> ' + pct + "%</div>");
+  const explanation = t.glass_box;
+  if (!explanation || typeof explanation.evidence !== "string" || typeof explanation.approach !== "string") {
+    $("signals").textContent = "No explanation is available for this turn.";
+    return;
   }
-  if (c.wellbeing_softened) {
-    parts.push('<div class="sig"><span class="chip soft">tone softened</span>' +
-               '<div class="note">an observable wellbeing backstop fired</div></div>');
+  $("signals").replaceChildren();
+  for (const line of [explanation.evidence, explanation.approach]) {
+    const paragraph = document.createElement("p");
+    paragraph.textContent = line;
+    $("signals").appendChild(paragraph);
   }
-  if (se.goal_alignment) {
-    parts.push('<div class="sig"><b>Goal alignment:</b> <span class="chip">' +
-               escapeHtml(se.goal_alignment) + "</span></div>");
-  }
-  parts.push('<p class="note">Signals describe how the tutor is helping. They are not a grade, a score, or a ranking.</p>');
-  $("signals").innerHTML = parts.join("");
 }
 
 const dialogue = window.BelayConversations.mount({
   container: $("conversation-controls"), compact: true, base: baseURL, prefix: "/quad/v1", exercise: () => $("ex").value,
   renderHistory(messages) {
     recent.length = 0;
-    $("signals").textContent = "Signals from the latest live turn appear here.";
+    $("signals").textContent = "An explanation from the latest reply will appear here.";
     if (!messages.length) { $("msgs").textContent = ""; return; }
     $("msgs").textContent = "";
     messages.forEach(m => addMsg(m.role === "student" ? "student" : "tutor", m.text +
@@ -263,8 +237,8 @@ $("send").addEventListener("click", async () => {
     if (data.unsaved_exchange) { addMsg("tutor", data.message); if (data.check_question) addMsg("tutor", data.check_question); }
     if (!data.recovered_request) $("say").value = "";
     $("send").textContent = "Send"; $("turnstatus").textContent = data.recovered_request ? "Recovered the original request. Your current input was not submitted." : "";
-    if (data.live_signals || data.components) renderSignals(data.live_signals || data);
-    else $("signals").textContent = "Historical replies have no saved live signals.";
+    if (data.glass_box) renderSignals(data);
+    else $("signals").textContent = "Explanations from earlier replies are not saved.";
   } catch (error) { if (currentGeneration === generation) {$("turnstatus").textContent = error.message; if (error.uncertain) $("send").textContent = "Check request status";} }
   finally { sending = false; $("send").disabled = false; }
 });

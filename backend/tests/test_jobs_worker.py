@@ -50,6 +50,9 @@ def test_real_loop_duplicate_http_executes_one_turn_and_recovers_result(worker):
     assert not run_one(store.admission, adapter)
     result = status(client, store, job_id)
     assert result["state"] == "completed" and result["result"]["message"].strip()
+    assert "confidence" not in str(result["result"])
+    assert "planner_note" not in str(result["result"])
+    assert result["result"]["glass_box"]["approach"]
     assert len(calls) == 3
     assert store.ledger.summary()["consumed"]["tokens"] == 45
     # A lost completed HTTP response followed by the same POST never reruns.
@@ -180,7 +183,7 @@ def test_control_and_distress_use_existing_deterministic_paths_without_model(wor
     store.ledger.clock = lambda: 106.0
     result = client.get("/api/sol/jobs/" + job_id).json()
     assert result["state"] == "completed"
-    assert result["result"]["affective_state"] == "distress" and calls == []
+    assert "affective_state" not in result["result"] and calls == []
 
 
 def test_queue_expiry_is_known_failure_not_execution(worker):

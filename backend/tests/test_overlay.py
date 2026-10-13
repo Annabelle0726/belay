@@ -388,10 +388,9 @@ def test_widget_targets_sidecar_and_renders_signals_not_grades():
         assert route in html, route
     assert "gh:12345" in html  # pseudonymous identity only
     assert "scaffolding" in html  # the one customization knob
-    # Signals, not verdicts: the held-back state is rendered; never a grade/ranking.
-    assert "held back" in html.lower()
-    # HTML formatting can split a phrase across adjacent source lines.
+    # Student explanations never render private model self-assessments.
     low = " ".join(html.lower().split())
-    assert "not a grade" in low and "ranking" in low
+    assert "t.glass_box" in low
+    assert "t.confidence" not in low and "t.affective_state" not in low
     # The widget never authenticates (host owns auth).
     assert "never authenticate" in low

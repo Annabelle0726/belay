@@ -35,6 +35,7 @@ from .agent import distress as distress_mod
 from .agent import get_llm, run_turn
 from .agent import goals as goals_mod
 from .agent import overlay as overlay_mod
+from .agent.glass_box import student_glass_box
 from .auth import authorize, denied
 from .config import settings
 from .controls.contracts import ControlError
@@ -51,7 +52,7 @@ from .schemas import (
     RunRequest,
     RunResult,
     SolTurnRequest,
-    SolTurnResponse,
+    StudentTurnResponse,
 )
 from .store import ConsentRouter, InMemoryStore, SqlStore, make_event
 from .store.scoped import ScopedStore, register, scoped_store
@@ -157,7 +158,7 @@ def run(request: Request, req: RunRequest):
     return result
 
 
-@app.post("/api/sol/turn", dependencies=[Depends(authorize)], response_model=SolTurnResponse)
+@app.post("/api/sol/turn", dependencies=[Depends(authorize)], response_model=StudentTurnResponse)
 def sol_turn(request: Request, req: SolTurnRequest):
     control_context()
     try:
@@ -180,7 +181,12 @@ def sol_turn(request: Request, req: SolTurnRequest):
     # Route events + learner-state writes to durable or ephemeral by consent.
     store = scoped_store(_router, request.state.identity)
     try:
-        return run_turn(payload, _llm(), store)
+        released = run_turn(payload, _llm(), store)
+        return {
+            "message": released["message"],
+            "check_question": released.get("check_question"),
+            "glass_box": student_glass_box(released, payload),
+        }
     except ControlError as e:
         raise control_http_error(e) from e
     except HTTPException:

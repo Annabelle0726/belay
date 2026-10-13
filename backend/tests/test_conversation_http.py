@@ -127,10 +127,14 @@ def test_authorized_save_resume_and_retry(http_dialogue, prefix):
     assert result.status_code == 200, result.text
     assert result.json()["response"] == {"message": "Released answer", "check_question": "Why?"}
     live = result.json()
-    assert live["live_signals"]["confidence"] == 0.7
+    assert "confidence" not in str(live)
+    assert "planner_note" not in str(live)
+    assert "self_eval" not in str(live)
+    assert live["glass_box"]["evidence"]
+    assert live["glass_box"]["approach"]
     assert "unreleased" not in str(live)
     replay = client.post(url + "/turns", headers=auth(), json=body).json()
-    assert replay == {key: value for key, value in live.items() if key != "live_signals"}
+    assert replay == {key: value for key, value in live.items() if key != "glass_box"}
     assert len(calls) == 1
     assert calls[0]["recent"] == [{"who": "student", "text": "Explain loops"}]
     history = client.get(url + "/messages", headers=auth()).json()

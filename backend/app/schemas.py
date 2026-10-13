@@ -72,6 +72,17 @@ class SolTurnResponse(BaseModel):
     components: dict[str, Any] = {}
 
 
+class StudentGlassBox(BaseModel):
+    evidence: str
+    approach: str
+
+
+class StudentTurnResponse(BaseModel):
+    message: str
+    check_question: str | None = None
+    glass_box: StudentGlassBox
+
+
 class GoalRequest(BaseModel):
     participant_id: str
     text: str = ""  # the student's own words; empty clears the goals

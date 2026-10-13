@@ -70,8 +70,8 @@ def test_embed_demo_turn_against_skeleton(monkeypatch):
     )
     assert out.status_code == 200, out.text
     body = out.json()
-    assert body["components"]["pack"] == "_skeleton"
-    assert "intervention" in body and "message" in body
+    assert "message" in body and body["glass_box"]["approach"]
+    assert "components" not in body and "intervention" not in body
 
 
 def test_embed_demo_page_targets_controlled_quad_jobs_and_skeleton():
