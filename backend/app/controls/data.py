@@ -13,12 +13,14 @@ import uuid
 from contextlib import nullcontext
 
 from cryptography.fernet import Fernet, InvalidToken
-from sqlalchemy import Column, Float, Integer, String, Table, Text, select
+from fastapi import HTTPException
+from sqlalchemy import Column, Float, Integer, String, Table, Text, func, select
 from sqlalchemy.engine import Connection
 
 from ..agent.context import _latest_student_message
 from ..agent.distress import extra_terms, frame_from_settings, has_distress_signal
 from ..agent.glass_box import student_glass_box
+from ..agent.reply_context import reply_metadata
 from ..auth import ExecutionGrant, Identity, execution_grant, recheck_grant
 from ..config import settings
 from ..integrations.quad.pii import PIIRejected, assert_no_pii
@@ -26,7 +28,7 @@ from ..schemas import SolTurnResponse
 from . import saved
 from .admission import Admission, jobs
 from .contracts import Amount, ControlError, Scope
-from .ledger import Ledger, metadata
+from .ledger import Ledger, attempts, metadata
 
 bindings = Table(
     "control_bindings",
@@ -148,6 +150,7 @@ class ExecutionData:
         route: str,
         *,
         connection: Connection | None = None,
+        conversation_id: str | None = None,
     ) -> dict:
         grant = execution_grant(identity)
         stored = temporary_input(payload)
@@ -164,10 +167,14 @@ class ExecutionData:
             existing = conn.execute(select(jobs).where(jobs.c.id == job_id)).mappings().first()
             if existing:
                 self._owned(conn, job_id, identity)
+                if existing["reason"] == "request_not_admitted":
+                    raise ControlError("request_not_admitted", 409)
                 saved.check(self, conn, job_id, identity, reading=True)
                 if existing["fingerprint"] != fingerprint:
                     raise ControlError("operation_conflict", 409)
                 return self.admission._public(dict(existing))
+            if stored.get("reply_to"):
+                self.resolve_reply(conn, identity, stored["reply_to"], conversation_id)
             policy = self.ledger.policy(conn)
             now = self.ledger.now(conn)
             ref = self._put(
@@ -188,11 +195,63 @@ class ExecutionData:
                 connection=conn,
             )
 
+    def resolve_reply(
+        self, conn, identity: Identity, reference: dict, conversation_id=None
+    ) -> dict:
+        try:
+            cid = reference.get("conversation_id")
+            # Do not copy a saved reply into a different retention/deletion scope.
+            if cid != conversation_id:
+                raise ControlError("reply_unavailable", 409)
+            if cid:
+                return dict(
+                    saved.repository(self).reply(
+                        identity, cid, reference["request_id"], connection=conn
+                    )
+                )
+            original_id = self.job_id(identity, reference["request_id"])
+            grant = self._owned(conn, original_id, identity)
+            if (grant.exercise_id, grant.exercise_version) != (
+                identity.exercise_id,
+                identity.exercise_version,
+            ):
+                raise ControlError("reply_unavailable", 409)
+            original = (
+                conn.execute(select(jobs).where(jobs.c.id == original_id)).mappings().one_or_none()
+            )
+            if (
+                original is None
+                or original["state"] != "completed"
+                or saved.link(conn, original_id)
+            ):
+                raise ControlError("reply_unavailable", 409)
+            value = self._get(conn, original_id, original["result_ref"], "result")
+            if value.get("unsaved_exchange"):
+                raise ControlError("reply_unavailable", 409)
+            text = value["message"] + (
+                "\n\n" + value["check_question"] if value.get("check_question") else ""
+            )
+            return {
+                **reply_metadata(reference, text),
+                "text": text,
+                "original_evidence": value.get("glass_box"),
+            }
+        except (ControlError, HTTPException):
+            raise ControlError("reply_unavailable", 409) from None
+
     def load(self, job: dict) -> tuple[Identity, dict]:
         with self.ledger.transaction() as conn:
             identity = recheck_grant(self._grant(conn, job["id"]))
             saved.check(self, conn, job["id"], identity)
             payload = self._get(conn, job["id"], job["payload_ref"], "input")
+            if payload.get("reply_to"):
+                binding = saved.link(conn, job["id"])
+                payload["_reply_context"] = self.resolve_reply(
+                    conn,
+                    identity,
+                    payload["reply_to"],
+                    binding["conversation"] if binding else None,
+                )
             return identity, payload
 
     def stage(self, job: dict, response: dict) -> str:
@@ -213,6 +272,15 @@ class ExecutionData:
                 "check_question": value.get("check_question"),
                 "glass_box": student_glass_box(response, payload),
             }
+            if payload.get("reply_to"):
+                binding = saved.link(conn, job["id"])
+                quote = self.resolve_reply(
+                    conn,
+                    identity,
+                    payload["reply_to"],
+                    binding["conversation"] if binding else None,
+                )
+                value["reply_to"] = reply_metadata(quote, quote["text"])
             if payload.get("_support"):
                 value = {**value, "_support_result": True, "message": "Support response available."}
             if conversation is not None:
@@ -225,6 +293,11 @@ class ExecutionData:
                     "message": PLACEHOLDER if screened else value["message"],
                     "check_question": None if screened else value.get("check_question"),
                     **({} if screened else {"glass_box": value["glass_box"]}),
+                    **(
+                        {}
+                        if screened or not value.get("reply_to")
+                        else {"reply_to": value["reply_to"]}
+                    ),
                 }
                 if payload.get("_support"):
                     value["_support_result"] = True
@@ -262,6 +335,70 @@ class ExecutionData:
             )
             self.admission.finish(job["id"], job["fence"], ref, authorized=True, connection=conn)
             self.cleanup_in(conn)
+
+    def reconcile_missing(self, identity: Identity, request_id: str) -> dict:
+        """Fence an absent unsaved request, never cancel or refund existing work.
+
+        The same coordinator lock serializes this with admission. GET absence
+        alone is not proof: the retained tombstone also rejects a delayed POST.
+        No learner content, model calls or budget reservations are created.
+        """
+        grant = execution_grant(identity)
+        job_id = self.job_id(identity, request_id)
+        with self.ledger.transaction() as conn:
+            recheck_grant(grant)
+            self.ledger.policy(conn)
+            row = conn.execute(select(jobs).where(jobs.c.id == job_id)).mappings().first()
+            if row is not None:
+                self._owned(conn, job_id, identity)
+                # This endpoint cannot recover a saved conversation through an
+                # unsaved URL, or reveal another original subject's request.
+                if saved.link(conn, job_id):
+                    raise ControlError("job_unavailable", 404)
+            else:
+                evidence = (
+                    conn.execute(select(bindings.c.id).where(bindings.c.id == job_id)).first()
+                    or conn.execute(select(data.c.id).where(data.c.job == job_id)).first()
+                    or conn.execute(
+                        select(attempts.c.id).where(
+                            (attempts.c.operation == job_id) | (attempts.c.id == "queue:" + job_id)
+                        )
+                    ).first()
+                    or saved.link(conn, job_id)
+                )
+                if evidence:
+                    raise ControlError("execution_unknown", 409)
+                now = self.ledger.now(conn)
+                conn.execute(bindings.insert().values(id=job_id, grant=grant.model_dump_json()))
+                conn.execute(
+                    jobs.insert().values(
+                        id=job_id,
+                        operation=request_id,
+                        scopes=list(self.scope(identity).keys()),
+                        fingerprint=hashlib.sha256(("not-admitted:" + job_id).encode()).hexdigest(),
+                        payload_ref=None,
+                        payload_bytes=0,
+                        result_ref=None,
+                        state="failed",
+                        reason="request_not_admitted",
+                        created=now,
+                        expires=now,
+                        lease=None,
+                        deadline=None,
+                        fence=0,
+                        last_poll=None,
+                        sequence=(conn.execute(select(func.max(jobs.c.sequence))).scalar() or 0)
+                        + 1,
+                    )
+                )
+            if row is None or row["reason"] == "request_not_admitted":
+                return {
+                    "id": job_id,
+                    "state": "failed",
+                    "reason": "request_not_admitted",
+                    "result": None,
+                }
+        return self.status(identity, job_id)
 
     def status(self, identity: Identity, job_id: str) -> dict:
         # Authorization precedes rate-limited status; a different principal cannot

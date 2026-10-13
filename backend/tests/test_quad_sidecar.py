@@ -200,6 +200,7 @@ def test_no_grade_write_route_exists():
         ("/quad/v1/jobs/config", ("GET",)),
         ("/quad/v1/jobs", ("POST",)),
         ("/quad/v1/jobs/by-request/{request_id}", ("GET",)),
+        ("/quad/v1/jobs/by-request/{request_id}/reconcile", ("POST",)),
         ("/quad/v1/jobs/{job_id}", ("GET",)),
     }
 

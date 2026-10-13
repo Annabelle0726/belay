@@ -244,7 +244,7 @@
           this.notify("Turn completed; refresh to reload saved history.");
         }
         if (result.unsaved_exchange) this.notify("This exchange was not saved; only neutral placeholders will restore.");
-        return {...result.response, request_id:requestId, glass_box:result.glass_box, history_unavailable:historyUnavailable,
+        return {...result.response, request_id:requestId, glass_box:result.glass_box, reply_to:result.reply_to, history_unavailable:historyUnavailable,
           unsaved_exchange: !!result.unsaved_exchange};
       } catch (error) {
         if (this.pending) error.request_id = this.pending.body.request_id;

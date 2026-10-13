@@ -8,7 +8,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.routing import APIRoute
-from pydantic import ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import create_engine
 
 from ..auth import authorize, denied
@@ -86,6 +86,13 @@ class AskSubmission(SolTurnRequest):
     exercise_version: str = Field(min_length=1, max_length=64)
 
 
+class RecoveryContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request_id: str = Field(pattern=r"^[A-Za-z0-9_-]{16,128}$")
+    exercise_id: str = Field(min_length=1, max_length=128)
+    exercise_version: str = Field(min_length=1, max_length=64)
+
+
 def build_jobs_router(prefix: str, pack) -> APIRouter:
     api = APIRouter(prefix=prefix, dependencies=[Depends(authorize)], route_class=BoundedJobRoute)
 
@@ -96,6 +103,8 @@ def build_jobs_router(prefix: str, pack) -> APIRouter:
         with store.ledger.transaction() as conn:
             policy = store.ledger.policy(conn)
         return {
+            "missing_request_recovery": 1,
+            "reply_references": {"version": 1, "passages": False},
             "recovery_scope": identity.grant_ref,
             "learner_id": identity.learner_id,
             "assignments": dict(identity.active_assignments),
@@ -120,6 +129,12 @@ def build_jobs_router(prefix: str, pack) -> APIRouter:
         return store.status(
             request.state.identity, store.job_id(request.state.identity, request_id)
         )
+
+    @api.post("/by-request/{request_id}/reconcile")
+    def reconcile(request: Request, request_id: str, body: RecoveryContext):
+        if request_id != body.request_id:
+            raise HTTPException(422, {"code": "request_invalid"})
+        return execution_store().reconcile_missing(request.state.identity, request_id)
 
     @api.get("/{job_id}")
     def status(request: Request, job_id: str):

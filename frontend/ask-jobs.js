@@ -36,7 +36,7 @@ globalThis.belayAskJobs = function ({ storage,
       throw e;
     }
     const key = "belay.ask.v1:" + JSON.stringify([base, prefix, config.recovery_scope, exercise, config.assignments[exercise]]);
-    return { base, prefix, key, config };
+    return { base, prefix, key, config, exercise };
   }
   function read(key) {
     let raw;
@@ -68,12 +68,20 @@ globalThis.belayAskJobs = function ({ storage,
   }
   async function poll(context, pointer, onStatus) {
     const deadline = Date.now() + timeoutMs;
+    let reconcile = context.recovering && pointer.pending && context.config.missing_request_recovery === 1;
     for (;;) {
       if (Date.now() >= deadline) throw error("request_timeout", true);
       let job;
       try {
-        job = await request(context.base, context.prefix + "/by-request/" + encodeURIComponent(pointer.request_id),
-          {}, validJob, deadline - Date.now());
+        // An authenticated transaction fences an absent ID before releasing it.
+        // This sends no question, never cancels existing work, and avoids a
+        // predictable lookup 404 for legacy pointers. Subsequent polls are GET.
+        const path = context.prefix + "/by-request/" + encodeURIComponent(pointer.request_id);
+        job = await request(context.base, path + (reconcile ? "/reconcile" : ""),
+          reconcile ? {method:"POST", body:JSON.stringify({request_id:pointer.request_id,
+            exercise_id:context.exercise, exercise_version:context.config.assignments[context.exercise]})} : {},
+          validJob, deadline - Date.now());
+        reconcile = false;
       } catch (e) {
         if (e.code === "poll_limited") {
           await wait(Math.min(deadline - Date.now(), (e.retryAfter || context.config.poll_seconds) * 1000));
@@ -92,8 +100,12 @@ globalThis.belayAskJobs = function ({ storage,
         return job.result;
       }
       if (["failed", "cancelled", "result_expired"].includes(job.state)) {
-        write(context.key, { request_id: pointer.request_id, pending: false });
-        throw error(job.reason || job.state);
+        const notSubmitted = job.reason === "request_not_admitted";
+        write(context.key, { request_id: pointer.request_id, pending: false,
+          ...(notSubmitted ? {not_submitted:true, reason:job.reason} : {}) });
+        const failure = error(job.reason || job.state);
+        if (notSubmitted) failure.notSubmitted = true;
+        throw failure;
       }
       if (["unknown", "cancel_requested"].includes(job.state)) {
         const code = ["execution_deadline", "worker_lost"].includes(job.reason) ? job.reason : "execution_unknown";
@@ -118,6 +130,9 @@ globalThis.belayAskJobs = function ({ storage,
       const context = await prepare(base, prefix, body.exercise_id);
       let pointer = read(context.key);
       if (pointer?.pending) return watch({...context,recovering:true}, pointer, onStatus);
+      if (body.reply_to && context.config.reply_references?.version !== 1) {
+        const e = error("reply_protocol_unavailable"); e.notSubmitted = true; throw e;
+      }
       pointer = { request_id: uuid(), pending: true };
       write(context.key, pointer); // Commit pointer BEFORE the only POST.
       if (onStatus) onStatus("preparing", context.config, {request_id:pointer.request_id, recovered:false});
@@ -129,8 +144,15 @@ globalThis.belayAskJobs = function ({ storage,
         await request(base, prefix, { method: "POST", body: JSON.stringify(payload) }, validJob);
       } catch (e) {
         e.request_id = pointer.request_id;
-        if (!e.uncertain && ["rate_limited", "queue_full", "payload_too_large", "content_not_storable", "invalid_execution_data", "conversation_conflict",
-          "jobs_disabled", "jobs_not_configured", "invalid_controls_mode", "controls_not_initialized", "verified_execution_required"].includes(e.code)) {
+        // This is the admission POST, not execution or a recovered GET. A 422
+        // cannot admit work on this endpoint; a generic lookup 404 proves nothing.
+        if (e.status === 422 && e.code === "request_failed") {
+          e.code = "request_invalid";
+          e.message = globalThis.belayControlMessage({code:e.code});
+        }
+        if (!e.uncertain && (e.status === 422 || ["rate_limited", "queue_full", "payload_too_large", "content_not_storable", "invalid_execution_data", "conversation_conflict",
+          "jobs_disabled", "jobs_not_configured", "invalid_controls_mode", "controls_not_initialized", "verified_execution_required", "reply_unavailable", "request_invalid",
+          "budget_exhausted", "inference_window_expired", "concurrency_limited", "request_not_admitted"].includes(e.code))) {
           // Preserve the rejected request receipt. Only THIS newly generated ID
           // was definitely not admitted; an existing pending ID never enters here.
           write(context.key, {...pointer, pending:false, not_submitted:true, reason:e.code});

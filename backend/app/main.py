@@ -161,6 +161,8 @@ def run(request: Request, req: RunRequest):
 @app.post("/api/sol/turn", dependencies=[Depends(authorize)], response_model=StudentTurnResponse)
 def sol_turn(request: Request, req: SolTurnRequest):
     control_context()
+    if req.reply_to:
+        raise HTTPException(409, {"code": "reply_unavailable"})
     try:
         ex = _pack.get_exercise(req.exercise_id)
     except KeyError:

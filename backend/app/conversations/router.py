@@ -14,9 +14,11 @@ from starlette.concurrency import run_in_threadpool
 from ..agent import run_turn
 from ..agent.distress import extra_terms, has_distress_signal
 from ..agent.glass_box import student_glass_box
+from ..agent.reply_context import reply_metadata
 from ..auth import _bearer, authorize, denied
 from ..config import settings
 from ..integrations.quad.pii import PIIRejected, assert_no_pii
+from ..schemas import ReplyReference
 from ..store.scoped import scoped_store
 from .bounds import BoundedProvider, bounded_route, recent_window
 from .policy import Policy
@@ -34,6 +36,7 @@ class CreateAttempt(BaseModel):
 
 
 class NewTurn(BaseModel):
+    reply_to: ReplyReference | None = None
     model_config = ConfigDict(extra="forbid", strict=True)
     request_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
     expected_revision: int = Field(ge=0)
@@ -155,6 +158,7 @@ def build_router(
             "result": body.result,
             "overlay": body.overlay,
             "recent": [{"who": "student", "text": body.message}],
+            "reply_to": body.reply_to.model_dump() if body.reply_to else None,
         }
         return submit(
             execution_store(),
@@ -184,6 +188,7 @@ def build_router(
             "poll_seconds": policy.poll_seconds,
             "result_seconds": policy.result_seconds,
             "notice": "Saved Ask uses bounded temporary execution data. Saved dialogue keeps its existing creation-based retention.",
+            "reply_references": {"version": 1, "passages": False},
         }
 
     @api.post("/{cid}/jobs", status_code=202)
@@ -220,6 +225,14 @@ def build_router(
         if len(body.message.encode()) > repository.policy.max_message_bytes:
             raise HTTPException(413, "message limit exceeded")
         screened = private_content(body.message) or private_content(body.source)
+        quote = None
+        if body.reply_to:
+            if body.reply_to.conversation_id != cid:
+                raise HTTPException(409, {"code": "reply_unavailable"})
+            try:
+                quote = repository.reply(identity, cid, body.reply_to.request_id)
+            except HTTPException:
+                raise HTTPException(409, {"code": "reply_unavailable"}) from None
         replay = repository.begin(
             identity,
             cid,
@@ -227,6 +240,7 @@ def build_router(
             digest(body.model_dump(exclude={"expected_revision"})),
             body.expected_revision,
             PLACEHOLDER if screened else body.message,
+            reply_to=reply_metadata(quote, quote["text"]) if quote and not screened else None,
         )
         if replay is not None:
             return replay
@@ -244,6 +258,8 @@ def build_router(
                 "result": body.result,
                 "overlay": body.overlay,
                 "recent": recent,
+                "_reply_context": quote,
+                "reply_to": body.reply_to.model_dump() if body.reply_to else None,
             }
             provider = llm_factory()
             bounded = BoundedProvider(provider, repository.policy) if provider is not None else None

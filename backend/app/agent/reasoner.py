@@ -16,6 +16,7 @@ from ..core.registry import get_active_pack
 from . import context as ctx_mod
 from .llm import LLMClient
 from .prompts import TEACH_ADDENDUM, reasoner_system
+from .reply_context import FOLLOWUP_GUIDANCE
 
 
 def respond(
@@ -33,8 +34,14 @@ def respond(
     persona = get_active_pack().persona
     base = reasoner_system(persona, stance, goals=ctx.get("goals"), overlay=ctx.get("overlay"))
     system = base + (("\n\n" + TEACH_ADDENDUM) if ctx["mode"] == "teach" else "")
+    if ctx.get("quoted_prior_reply"):
+        system += "\n" + FOLLOWUP_GUIDANCE
     result = ctx.get("last_result")
-    if isinstance(result, dict) and result.get("execution_status") == "student_error":
+    if (
+        isinstance(result, dict)
+        and result.get("execution_status") == "student_error"
+        and not ctx.get("quoted_prior_reply")
+    ):
         system += (
             "\nThe current run raised a student error. Explain its meaning, the reported student "
             "line if available, and one suitable next check. Ground the explanation in the current "

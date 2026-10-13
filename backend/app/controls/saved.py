@@ -13,6 +13,7 @@ from pathlib import Path
 from fastapi import HTTPException
 from sqlalchemy import Column, Integer, String, Table, inspect, select
 
+from ..agent.reply_context import reply_metadata
 from ..conversations.repository import ConversationStore
 from .contracts import ControlError
 from .ledger import metadata
@@ -109,7 +110,12 @@ def submit(store, identity, cid, request_id, revision, payload, route):
             raise ControlError("operation_conflict", 409)
         # Route + target + revision are part of the immutable operation signature.
         result = store.submit(
-            identity, request_id, payload, f"{route}:{cid}:{revision}", connection=conn
+            identity,
+            request_id,
+            payload,
+            f"{route}:{cid}:{revision}",
+            connection=conn,
+            conversation_id=cid,
         )
         if previous is None:
             conn.execute(
@@ -147,6 +153,9 @@ def begin(store, job, identity, payload):
             binding["revision"],
             PLACEHOLDER if payload.get("_support") else message,
             connection=conn,
+            reply_to=reply_metadata(payload["_reply_context"], payload["_reply_context"]["text"])
+            if payload.get("_reply_context") and not payload.get("_support")
+            else None,
         )
         if replay is not None:
             raise ControlError(

@@ -332,6 +332,22 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
             )
             return _injection_turn(ctx, store, pid, exercise, mode, stance, pack, verdict)
 
+    if payload.get("_reply_context") and not any(
+        c.isalnum() for c in _latest_student_message(payload.get("recent", []))
+    ):
+        return {
+            "affective_state": "neutral",
+            "affect_reasoning": "",
+            "confidence": 0.0,
+            "intervention": "clarify",
+            "planner_note": "",
+            "self_critique": "",
+            "governance": "none",
+            "memory": {},
+            "message": "Which part of this reply would you like to ask about? You can ask for an explanation, add information, or point out something I misunderstood.",
+            "check_question": None,
+            "components": {},
+        }
     if stance == "control":
         return _control_turn(payload, ctx, store, pid, exercise, mode, pack)
 
