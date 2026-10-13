@@ -64,8 +64,8 @@ def test_turn_runs_control_stance():
     )
     assert r.status_code == 200, r.text
     out = r.json()
-    assert out["components"]["stance"] == "control"
-    assert "message" in out
+    assert "message" in out and out["glass_box"]["approach"]
+    assert "components" not in out
 
 
 def test_events_acks_clean_payload():

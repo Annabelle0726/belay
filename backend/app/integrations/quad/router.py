@@ -29,6 +29,7 @@ from ...agent import distress as _distress
 from ...agent import get_llm, run_turn
 from ...agent import goals as _goals
 from ...agent import overlay as _overlay
+from ...agent.glass_box import student_glass_box
 from ...auth import authorize, denied
 from ...config import settings
 from ...controls.contracts import ControlError
@@ -173,7 +174,12 @@ def build_router(
             register(consent_router, request.state.identity, req.consent)
         store = scoped_store(consent_router, request.state.identity)
         try:
-            return run_turn(turn_payload, _llm(), store)
+            released = run_turn(turn_payload, _llm(), store)
+            return {
+                "message": released["message"],
+                "check_question": released.get("check_question"),
+                "glass_box": student_glass_box(released, turn_payload),
+            }
         except ControlError as e:
             raise control_http_error(e) from e
         except HTTPException:

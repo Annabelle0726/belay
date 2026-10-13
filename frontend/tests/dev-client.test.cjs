@@ -46,7 +46,7 @@ async function setup(state={}) {
       dom.window.eval(fs.readFileSync(path.join(root,'vendor',file),'utf8'));
   }
   for(const id of ['backend','exercise','mode','source','question','status','result','prompt','chat-feed',
-    'conversation-controls','ask','run','affect','interv','planner','selfeval','gov','mem','timings','conf','confbar','signals-status',
+    'conversation-controls','ask','run','glass-evidence','glass-approach','glass-correct',
     'feedback-loading','feedback-announcement','glass-box','signals-storage']) {
     nodes[id]=dom ? dom.window.document.getElementById(id) : new Element(id==='exercise'?'select':'div');
     if(dom) nodes[id].listeners={};
@@ -81,7 +81,7 @@ async function setup(state={}) {
       else if(state.pollTerminal) result={id:'b'.repeat(64),state:state.pollTerminal,reason:state.pollReason||'execution_failed',result:null};
       else if(state.unknown) result={id:'b'.repeat(64),state:'unknown',result:null};
       else if(url.includes('/conversations/')) result=state.savedResult;
-      else result={id:'b'.repeat(64),state:'completed',result:{message:state.reply||'Live answer',components:{},memory:{}}};
+      else result={id:'b'.repeat(64),state:'completed',result:{message:state.reply||'Live answer',glass_box:{evidence:'I used the question you submitted about this exercise.',approach:'I asked a question so we can reason through the next step together.'}}};
     }
     else if(url.endsWith('/api/sol/jobs')) result={id:'b'.repeat(64),state:'queued'};
     else if(url.endsWith('/config')) result={controlled:!!state.controlled,recovery_scope:'a'.repeat(64),enabled:true,policy_id:'test-only',retention_seconds:300,
@@ -97,7 +97,8 @@ async function setup(state={}) {
       else if(url.endsWith('/jobs')) {
         attempt.messages.push({request_id:body.request_id,role:'student',text:body.message,status:'completed'},{request_id:body.request_id,role:'assistant',text:state.reply||'Controlled answer',status:'completed'});
         attempt.revision+=2;
-        state.savedResult={id:'b'.repeat(64),state:'completed',result:{message:state.reply||'Controlled answer',conversation_id:cid,revision:attempt.revision}};
+        state.savedResult={id:'b'.repeat(64),state:'completed',result:{message:state.reply||'Controlled answer',conversation_id:cid,revision:attempt.revision,
+          glass_box:{evidence:'I used the question you submitted about this exercise.',approach:'I asked a question so we can reason through the next step together.'}}};
         result={id:'b'.repeat(64),state:'queued'};
         if(state.loseReply) {state.loseReply=false;throw new Error('connection lost');}
       }
@@ -107,9 +108,8 @@ async function setup(state={}) {
             {request_id:body.request_id,role:'assistant',text:'Released answer',status:'completed'});
           attempt.revision+=2;
           attempt.turns.set(body.request_id,{revision:attempt.revision,response:{message:'Released answer'},
-            live_signals:{affective_state:'curious',confidence:0.7,planner_note:'Offer a small check',
-              self_critique:'Check assumptions',governance:'none',memory:{grasped:['grouping']},
-              components:{self_eval:{leak_risk:'none'},timings_ms:{planner_ms:12}}}});
+            glass_box:{evidence:'I used the question you submitted about this exercise.',
+              approach:'I asked a question so we can reason through the next step together.'}});
         }
         result=attempt.turns.get(body.request_id);
         if(state.loseReply) {state.loseReply=false;throw new Error('connection lost');}
@@ -117,7 +117,7 @@ async function setup(state={}) {
         if(state.failHistory) {state.failHistory=false;throw new Error('History connection lost');}
         result={messages:attempt.messages,revision:attempt.revision,pending:false,before:null};
       }
-    } else if(url.endsWith('/api/sol/jobs')) result={message:state.reply||'Live answer',components:{},memory:{}};
+    } else if(url.endsWith('/api/sol/jobs')) result={message:state.reply||'Live answer',glass_box:{evidence:'I used the question you submitted about this exercise.',approach:'I asked a question so we can reason through the next step together.'}};
     else if(url.endsWith('/api/run')) result=state.runResult||{ok:true,pack:{id:'datascience',stdout:'Done'}};
     else throw new Error('unexpected endpoint '+url);
     return {ok:status<400,status,headers:new Headers(),json:async()=>result};
@@ -168,15 +168,12 @@ test('saved bubbles restore after reload without resending client history or dup
   assert.equal(body.message,'A saved question'); assert.equal(body.expected_revision,0);
   assert.equal(body.recent,undefined);
   assert.equal(bubbles(first).length,2);
-  assert.match(first.nodes.planner.textContent,/Offer a small check/);
-  assert.equal(first.nodes.conf.textContent,'70%');
+  assert.match(first.nodes['glass-evidence'].textContent,/question you submitted/);
   const restored=await setup(first.state);
   assert.equal(bubbles(restored).length,2);
   assert.match(restored.nodes['chat-feed'].textContent,/A saved question/);
   assert.equal(restored.calls.some(c=>c.url.endsWith('/turns')),false);
-  assert.equal(restored.nodes.planner.textContent,'—');
-  assert.equal(restored.nodes.conf.textContent,'—');
-  assert.match(restored.nodes['signals-status'].textContent,/Saved replies restored/);
+  assert.equal(restored.nodes['glass-evidence'].textContent,'');
   assert.ok(!JSON.stringify([...first.state.entries]).includes('A saved question'));
   assert.ok(!JSON.stringify([...first.state.entries]).includes('short-lived-token'));
 });
@@ -184,13 +181,11 @@ test('saved bubbles restore after reload without resending client history or dup
 test('same-attempt refresh retains live signals in RAM; new attempt clears them',async()=>{
   const env=await setup(),check=env.controls().check;check.checked=true;await check.fire('change');
   env.nodes.question.value='Explain grouping';await env.nodes.ask.fire('click');
-  assert.equal(env.nodes.conf.textContent,'70%');
+  assert.match(env.nodes['glass-approach'].textContent,/reason through/);
   await env.controls().button('Refresh history').fire('click');
-  assert.equal(env.nodes.conf.textContent,'70%');
-  assert.match(env.nodes.planner.textContent,/Offer a small check/);
+  assert.match(env.nodes['glass-approach'].textContent,/reason through/);
   await env.controls().button('New conversation').fire('click');
-  assert.equal(env.nodes.conf.textContent,'—');
-  assert.doesNotMatch(env.nodes['signals-status'].textContent,/latest live reply/);
+  assert.equal(env.nodes['glass-approach'].textContent,'');
 });
 
 test('missing saved history after reload permits a new explicit attempt or unsaved tutoring',async()=>{
@@ -237,7 +232,7 @@ test('a history network failure after completion keeps the successful live Sol r
   env.state.failHistory=true;env.nodes.question.value='A completed question';await env.nodes.ask.fire('click');
   assert.equal(bubbles(env).length,2);
   assert.equal(bubbles(env)[1].innerHTML,'Released answer');
-  assert.equal(env.nodes.conf.textContent,'70%');
+  assert.match(env.nodes['glass-approach'].textContent,/reason through/);
   await env.controls().button('Refresh history').fire('click');
   assert.equal(bubbles(env).length,2);
 });
@@ -356,7 +351,7 @@ test('controlled saved UI restores a lost admission using GET and shows no inven
  const restored=await setup(first.state);
  assert.equal(restored.calls.filter(c=>c.options.method==='POST'&&c.url.endsWith('/jobs')).length,0);
  assert.equal(bubbles(restored).length,2);
- assert.equal(restored.nodes.planner.textContent,'—');
+ assert.equal(restored.nodes['glass-approach'].textContent,'');
  restored.nodes.question.value='Another';await restored.nodes.ask.fire('click');
  assert.equal(bubbles(restored).length,4);
 });
@@ -664,6 +659,22 @@ test('only newest completed reply owns a collapsed inline Glass Box; new round r
  assert.ok(feed.querySelector('pre code .hljs-built_in'));
  assert.equal(feed.querySelectorAll('strong').length,2);
  assert.doesNotMatch(feed.textContent,/Submitted code|Request UUID|Checking request status/);
+});
+
+test('Glass Box uses student explanations and correction becomes the next Ask',async()=>{
+ const env=await setup({withMarkdown:true});
+ env.nodes.question.value='Why does this fail?';await env.nodes.ask.fire('click');
+ const box=env.nodes['glass-box'];
+ assert.ok(env.nodes['chat-feed'].contains(box));
+ assert.equal(box.open,false);
+ assert.match(box.textContent,/question you submitted/i);
+ assert.doesNotMatch(box.textContent,/confidence|planner_note|co_reason|leak_risk|\d+%/i);
+ await env.nodes['glass-correct'].fire('click');
+ assert.match(env.nodes.question.value,/Correction:/);
+ env.nodes.question.value='Correction: I meant the category mean, not the row count.';
+ await env.nodes.ask.fire('click');
+ const calls=env.calls.filter(c=>c.url.endsWith('/api/sol/jobs'));
+ assert.match(JSON.parse(calls.at(-1).options.body).recent.at(-1).text,/category mean/);
 });
 
 

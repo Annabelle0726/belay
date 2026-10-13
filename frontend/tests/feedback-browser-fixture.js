@@ -28,7 +28,8 @@
    const reply=error?`**Local model stub**: ${error.startsWith('SyntaxError')?'SyntaxError means Python cannot parse line 1. Check the punctuation on that line before rerunning.':'ValueError means an operation received an unsuitable value on line 1. Check that this code uses the selected exercise’s files and expected input shape.'}`:'**Local model stub**: Your code executed and the fixed check passed.\n\n- Check the category mean.\n- Inspect `result`.\n\n```python\nprint(result)\n```\n\nWhat does each category’s mean represent?';
    const history=cid?conversations.get(cid):null;
    if(history) history.push({sequence:history.length+1,request_id:body.request_id,role:'student',text:body.message,status:'completed'}, {sequence:history.length+2,request_id:body.request_id,role:'assistant',text:reply,status:'completed'});
-   const turn={message:reply,confidence:.8,planner_note:'Fixed offline signal',components:{self_eval:{}},memory:{},...(cid?{conversation_id:cid,revision:history.length}:{})};
+   const turn={message:reply,glass_box:{evidence:error?'Your latest code run reported an error.':'Your latest code run completed.',
+    approach:'I focused on a possible cause and a small next check.'},...(cid?{conversation_id:cid,revision:history.length}:{})};
    const job={id,state:body.source?.includes('BUDGET_BLOCK')?'failed':'completed',reason:body.source?.includes('BUDGET_BLOCK')?'budget_exhausted':null,result:turn};jobs.set(body.request_id,job);
    data={id,state:'queued'};status=202;
   } else if(path.includes('/by-request/')) {data=jobs.get(decodeURIComponent(path.split('/').at(-1)));if(!data){status=404;data={detail:{code:'job_unavailable'}};}}

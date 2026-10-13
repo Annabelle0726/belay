@@ -154,15 +154,12 @@
     }
     feed.scrollTop = feed.scrollHeight;
   }
-  function clearTelemetry(note = "Run code or ask Sol to see signals from a new reply.") {
+  function clearTelemetry() {
     liveContext = null; glassOwner = null;
     const box = glassBox;
     if (box) {box.open = false; $("signals-storage").appendChild(box);}
-    $("signals-status").textContent = note;
-    for (const id of ["affect", "interv", "planner", "selfeval", "gov", "mem", "timings"]) {
-      $(id).textContent = "—"; $(id).title = "";
-    }
-    $("confbar").style.width = "0%"; $("conf").textContent = "—";
+    $("glass-evidence").textContent = "";
+    $("glass-approach").textContent = "";
   }
   function clearTransient() {
     records = []; activeRecord = null; requestTarget = null; feedMessages = [];
@@ -184,33 +181,23 @@
     historyContext = JSON.stringify([session.key, session.cid, session.revision]);
     if (savedView) {
       if (liveContext !== historyContext) clearTelemetry(messages.length
-        ? "Saved replies restored. Live signals are not saved; ask Sol for fresh signals."
+        ? "Saved replies restored. Explanations from earlier replies are not saved."
         : undefined);
       renderFeed(messages);
     }
     else renderFeed(temporaryMessages);
   }
   function telemetry(out, owner = activeRecord) {
-    out = out.live_signals || out;
-    if (!out.components) {
-      clearTelemetry("This reply has no live signals. History and retry responses do not include them; privacy screening can also omit them.");
+    const explanation = out.glass_box;
+    if (!explanation || typeof explanation.evidence !== "string" || typeof explanation.approach !== "string") {
+      clearTelemetry();
       return;
     }
     if (!owner || owner !== activeRecord || owner.feedback === "unknown") return;
     glassOwner = owner; if (glassBox) glassBox.open = false;
     liveContext = historyContext;
-    $("signals-status").textContent = "Signals from the latest live reply in this page session.";
-    $("affect").textContent = "affect: " + (out.affective_state || "—");
-    $("interv").textContent = "intervention: " + (out.intervention || "—");
-    const confidence = typeof out.confidence === "number" ? Math.round(out.confidence * 100) : null;
-    $("confbar").style.width = (confidence ?? 0) + "%";
-    $("conf").textContent = confidence === null ? "—" : confidence + "%";
-    $("planner").textContent = out.planner_note || "—";
-    const selfEval = out.components.self_eval || {};
-    $("selfeval").textContent = `${out.self_critique || "—"} (leak_risk=${selfEval.leak_risk ?? "—"})`;
-    $("gov").textContent = out.components.governance?.prose || out.governance || "—";
-    $("mem").textContent = `grasped: ${(out.memory?.grasped || []).join(", ") || "—"} | shaky: ${(out.memory?.shaky || []).join(", ") || "—"}`;
-    $("timings").textContent = Object.entries(out.components.timings_ms || {}).map(([k,v]) => `${k}=${v}`).join(" ") || "—";
+    $("glass-evidence").textContent = explanation.evidence;
+    $("glass-approach").textContent = explanation.approach;
     renderFeed(feedMessages);
   }
   async function json(path, body) {
@@ -440,6 +427,12 @@
   $("backend").addEventListener("change", loadCurriculum);
   $("run").addEventListener("click", async () => { if (await run()) await ask("run"); });
   $("ask").addEventListener("click", () => ask());
+  $("glass-correct").addEventListener("click", () => {
+    if (busy) return;
+    const question = $("question");
+    if (!question.value.trim()) question.value = "Correction: ";
+    question.focus?.();
+  });
   $("question").addEventListener("keydown", event => {
     if (event.key === "Enter" && !event.isComposing) { event.preventDefault(); ask(); }
   });
