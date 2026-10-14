@@ -75,7 +75,7 @@ async function setup(state={}) {
     if(url.endsWith('/api/curriculum')) result={modules:[{exercises:[{id:'echo-1',title:'Echo',prompt:'Learn loops',starter:'print(1)'}]}]};
     else if(url.endsWith('/jobs/config')) {
       if(state.jobsConfigCode) {status=503;result={detail:{code:state.jobsConfigCode}};}
-      else result={...(state.missingRecovery ? {missing_request_recovery:1} : {}),...(state.legacyJobs ? {} : {reply_references:{version:1,passages:false}}),recovery_scope:'a'.repeat(64),learner_id:state.identity.learner_id,
+      else result={operator_continuations:state.operatorContinuations||[],...(state.missingRecovery ? {missing_request_recovery:1} : {}),...(state.legacyJobs ? {} : {reply_references:{version:1,passages:false}}),recovery_scope:'a'.repeat(64),learner_id:state.identity.learner_id,
         assignments:{'echo-1':'v1'},poll_seconds:1,result_seconds:300,notice:'Temporary recovery'};
     }
     else if(url.includes('/jobs/by-request/')) {
@@ -330,6 +330,10 @@ test('Run keeps a prior unknown tutor request and does not submit feedback for t
  assert.equal(env.calls.filter(c=>c.url.endsWith('/api/run')).length,2);
  assert.equal(env.calls.filter(c=>c.url.endsWith('/api/sol/jobs')).length,1);
  assert.equal(JSON.stringify([...env.state.entries]),before);
+ const latest=groupText(groups(env).at(-1));
+ assert.match(latest,/previous request is unresolved/);
+ assert.match(latest,/does not send your current question/);
+ assert.doesNotMatch(latest,/is being recovered/);
  assert.match(env.nodes.status.textContent,/previous tutor request.*no feedback for this run was submitted/);
  assert.equal(env.nodes.ask.textContent,'Check request status');
  assert.match(env.nodes.result.textContent,/Code ran successfully/);
@@ -715,7 +719,8 @@ test('empty quoted draft never sends and long quote is bounded and safe',async()
  await env.nodes.ask.fire('click');
  assert.equal(env.calls.length,count);
  assert.equal(env.nodes['reply-excerpt'].querySelector('img'),null);
- assert.equal(env.nodes['reply-excerpt'].textContent.length,360);
+ assert.equal(env.nodes['reply-excerpt'].textContent.length,281);
+ assert.ok(env.nodes['reply-excerpt'].textContent.endsWith('\u2026'));
  assert.equal(env.nodes.question.getAttribute('placeholder'),'What would you like to ask about this reply?');
  env.nodes.question.value='Draft to keep';await env.nodes['reply-remove'].fire('click');
  assert.equal(env.nodes.question.value,'Draft to keep');
@@ -801,4 +806,57 @@ test('Run after a missing legacy request preserves output and offers an explicit
  await env.nodes.ask.fire('click');
  assert.equal(env.calls.filter(c=>c.url.endsWith('/api/sol/jobs')).length,2);
  assert.match(env.nodes['chat-feed'].textContent,/Live answer/);
+});
+
+test('confirmed authentication failure restores Ask Sol and preserves draft',async()=>{
+ const env=await setup({pollTerminal:'failed',pollReason:'provider_auth_failed'});
+ env.nodes.question.value='Please explain my result';
+ await env.nodes.ask.fire('click');
+ assert.equal(env.nodes.ask.textContent,'Ask Sol');
+ assert.equal(env.nodes.question.value,'Please explain my result');
+ assert.match(env.nodes.status.textContent,/rejected its credentials/);
+ assert.equal(env.calls.filter(c=>c.url.endsWith('/api/sol/jobs')).length,1);
+});
+
+test('refresh of unresolved feedback labels the action as status checking',async()=>{
+ const first=await setup({unknown:true});
+ await first.nodes.ask.fire('click');
+ const restored=await setup(first.state);
+ assert.equal(restored.nodes.ask.textContent,'Check request status');
+ assert.equal(restored.calls.filter(c=>c.options.method==='POST'&&c.url.endsWith('/api/sol/jobs')).length,0);
+});
+
+
+test('approved earlier unknown restores Ask Sol and preserves the old record when a new question succeeds',async()=>{
+ const first=await setup({unknown:true});await first.nodes.ask.fire('click');
+ const pointer=JSON.parse([...first.state.entries.values()].find(v=>v.includes('pending')));
+ first.state.operatorContinuations=[pointer.request_id];
+ const restored=await setup(first.state);
+ assert.equal(restored.nodes.ask.textContent,'Ask Sol');
+ assert.equal(restored.calls.filter(c=>c.options.method==='POST').length,0);
+ restored.nodes.question.value='A separate new question';
+ // Recheck old unknown, then the newly submitted request completes.
+ restored.state.unknown=false;restored.state.pollStates=['unknown'];
+ await restored.nodes.ask.fire('click');
+ assert.equal(restored.calls.filter(c=>c.url.endsWith('/api/sol/jobs')).length,1);
+ assert.match(groupText(groups(restored).at(-1)),/Live answer/);
+ assert.ok([...restored.state.entries.keys()].some(k=>k.endsWith(':unresolved:'+pointer.request_id)));
+});
+
+
+test('quotation preview renders safe inline formatting and uses a compact remove control',async()=>{
+ const env=await setup({withMarkdown:true,reply:'**Category mean** uses `result`. <img src=x onerror=alert(1)> [unsafe](javascript:alert(1))'});
+ await env.nodes.ask.fire('click');env.nodes.question.value='My draft';
+ const before=env.calls.length;await env.nodes['glass-correct'].fire('click');
+ const quote=env.nodes['reply-excerpt'];
+ assert.equal(quote.tagName,'BLOCKQUOTE');
+ assert.equal(quote.querySelector('strong').textContent,'Category mean');
+ assert.equal(quote.querySelector('code').textContent,'result');
+ assert.equal(quote.querySelector('img,a,script,[onerror]'),null);
+ assert.equal(env.nodes['reply-remove'].textContent,'\u00d7');
+ assert.equal(env.nodes['reply-remove'].getAttribute('aria-label'),'Remove reply reference');
+ assert.equal(env.calls.length,before);
+ assert.equal(env.nodes.question.value,'My draft');
+ await env.nodes['reply-remove'].fire('click');
+ assert.equal(env.nodes['reply-reference'].hidden,true);
 });

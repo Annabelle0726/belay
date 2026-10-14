@@ -84,7 +84,10 @@ globalThis.belayAskJobs = function ({ storage,
         reconcile = false;
       } catch (e) {
         if (e.code === "poll_limited") {
-          await wait(Math.min(deadline - Date.now(), (e.retryAfter || context.config.poll_seconds) * 1000));
+          const retryAfter = e.retryAfter || context.config.poll_seconds;
+          if (onStatus) onStatus("poll_limited", context.config,
+            {request_id:pointer.request_id, recovered:!!context.recovering, retry_after:retryAfter});
+          await wait(Math.max(0, Math.min(deadline - Date.now(), retryAfter * 1000)));
           continue;
         }
         // A missing operation after a lost POST can be a race with admission.
@@ -109,7 +112,13 @@ globalThis.belayAskJobs = function ({ storage,
       }
       if (["unknown", "cancel_requested"].includes(job.state)) {
         const code = ["execution_deadline", "worker_lost"].includes(job.reason) ? job.reason : "execution_unknown";
-        throw globalThis.belayRequestError(code, true, globalThis.belayControlMessage({code}));
+        const failure = globalThis.belayRequestError(code, true, globalThis.belayControlMessage({code}));
+        failure.continuationAllowed = job.state === "unknown" &&
+          Array.isArray(context.config.operator_continuations) &&
+          context.config.operator_continuations.includes(pointer.request_id);
+        if (failure.continuationAllowed) failure.message =
+          "The earlier request remains unresolved. Support has enabled a separate new question. Choose Ask Sol to send your current question; the earlier request will not be resent.";
+        throw failure;
       }
       await wait(Math.min(Math.max(0, deadline - Date.now()), context.config.poll_seconds * 1000));
     }
@@ -129,7 +138,22 @@ globalThis.belayAskJobs = function ({ storage,
     async ask(base, prefix, body, onStatus) {
       const context = await prepare(base, prefix, body.exercise_id);
       let pointer = read(context.key);
-      if (pointer?.pending) return watch({...context,recovering:true}, pointer, onStatus);
+      if (pointer?.pending) {
+        if (!Array.isArray(context.config.operator_continuations) ||
+            !context.config.operator_continuations.includes(pointer.request_id)) {
+          return watch({...context,recovering:true}, pointer, onStatus);
+        }
+        // Only an explicit Ask/Run enters here. Recheck the approved old request;
+        // refresh never archives it or submits work. Preserve its pending receipt.
+        try {
+          const recovered = await watch({...context,recovering:true}, pointer);
+          if (onStatus) onStatus("completed", context.config, {request_id:pointer.request_id, recovered:true});
+          return recovered;
+        } catch (e) {
+          if (!e.continuationAllowed) throw e;
+          write(context.key + ":unresolved:" + pointer.request_id, pointer);
+        }
+      }
       if (body.reply_to && context.config.reply_references?.version !== 1) {
         const e = error("reply_protocol_unavailable"); e.notSubmitted = true; throw e;
       }
