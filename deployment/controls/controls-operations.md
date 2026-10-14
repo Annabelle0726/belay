@@ -242,3 +242,33 @@ An enabled distress short circuit retains only content-free support routing; its
 institution-configured response is rendered live at result lookup. No distressing
 utterance, contact configuration, category or token is retained. The core detector,
 support routing policy, research consent and R2 saved-dialogue strategy are unchanged.
+
+
+## Explicit continuity for an unresolved unsaved request
+
+An owner-approved temporary capacity change may keep an unresolved operation and
+its execution/financial reservations intact while permitting a separate new Ask.
+Use a new policy version; never mark the old operation stopped without evidence.
+This is an exception for deliberate new work, not a retry of uncertain work.
+
+The default `CONTROLS_OPERATOR_CONTINUATIONS` is empty. An operator may set it to
+JSON with `policy_version` and `request_ids` only after approving the continuity
+policy. The authenticated unsaved jobs config exposes only matching unknown IDs
+owned by that original principal, with a current valid grant. The approval must
+match the active policy version, and every active-job/model-call scope must have
+capacity of at least two. Wrong policy, foreign ownership, revoked grant,
+malformed approval, or an unlisted ID cannot enable continuation.
+
+Refresh only checks the old request and offers Ask Sol. On the next deliberate
+Ask/Run, the client rechecks it; only an approved unknown is archived under the
+same recovery scope with an `:unresolved:<request_id>` suffix before a fresh
+request ID is written and submitted. Storage failure prevents submission. The
+old backend job, slots and budget hold are never changed. A successful/terminal
+old result follows ordinary recovery instead. A new unknown is not automatically
+approved by the older grant. Existing authenticated status lookup remains
+available for the retained earlier request.
+
+To revoke this allowance, remove the operator approval (or change policy version)
+and restart the runtime. Restore concurrency to one using a new policy version
+only when it will not block legitimate outstanding work. Do not reset usage,
+re-prepare the installation, or manufacture a zero-cost settlement.
