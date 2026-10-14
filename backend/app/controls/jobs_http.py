@@ -3,17 +3,20 @@
 
 from __future__ import annotations
 
+import json
+import re
 from functools import lru_cache
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.routing import APIRoute
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 
 from ..auth import authorize, denied
 from ..config import settings
 from ..schemas import SolTurnRequest
+from .admission import jobs
 from .contracts import ControlError
 from .data import ExecutionData
 from .http import control_http_error
@@ -102,7 +105,37 @@ def build_jobs_router(prefix: str, pack) -> APIRouter:
         identity = request.state.identity
         with store.ledger.transaction() as conn:
             policy = store.ledger.policy(conn)
+            continuations = []
+            try:
+                approval = json.loads(settings.controls_operator_continuations or "{}")
+            except (ValueError, TypeError):
+                approval = {}
+            candidates = approval.get("request_ids", []) if isinstance(approval, dict) else []
+            if (
+                isinstance(approval, dict)
+                and approval.get("policy_version") == policy.version
+                and isinstance(candidates, list)
+                and len(candidates) <= 32
+                and all(cap.active_jobs >= 2 and cap.model_calls >= 2 for cap in policy.traffic())
+            ):
+                for request_id in candidates:
+                    if not isinstance(request_id, str) or not re.fullmatch(
+                        r"[A-Za-z0-9_-]{16,128}", request_id
+                    ):
+                        continue
+                    job_id = store.job_id(identity, request_id)
+                    state = conn.execute(
+                        select(jobs.c.state).where(jobs.c.id == job_id)
+                    ).scalar_one_or_none()
+                    if state != "unknown":
+                        continue
+                    try:
+                        store._owned(conn, job_id, identity)
+                    except (ControlError, HTTPException):
+                        continue
+                    continuations.append(request_id)
         return {
+            "operator_continuations": continuations,
             "missing_request_recovery": 1,
             "reply_references": {"version": 1, "passages": False},
             "recovery_scope": identity.grant_ref,

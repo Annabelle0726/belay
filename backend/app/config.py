@@ -30,6 +30,11 @@ class Settings:
     controls_jobs_enabled: bool = field(
         default_factory=lambda: _envbool("CONTROLS_JOBS_ENABLED", False)
     )
+    # Explicit operator continuity grant, scoped to a policy and owned request IDs.
+    # Does not close old work, release slots, refund usage, or replay a request.
+    controls_operator_continuations: str = field(
+        default_factory=lambda: _env("CONTROLS_OPERATOR_CONTINUATIONS", "")
+    )
     controls_database_url: str = field(default_factory=lambda: _env("CONTROLS_DATABASE_URL", ""))
     controls_deployment_id: str = field(default_factory=lambda: _env("CONTROLS_DEPLOYMENT_ID", ""))
     controls_data_key_file: str = field(default_factory=lambda: _env("CONTROLS_DATA_KEY_FILE", ""))

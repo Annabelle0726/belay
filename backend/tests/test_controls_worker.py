@@ -205,3 +205,49 @@ def test_http_enforcement_cannot_trust_body_identity(monkeypatch, path, payload)
         expected = "jobs_disabled" if path == "/api/run" else "verified_execution_required"
         assert result.json()["detail"]["code"] == expected
         assert client.get("/api/curriculum").status_code == 200
+
+
+@pytest.mark.parametrize("status", [401, 403, 500])
+def test_provider_auth_rejection_finishes_but_uncertain_failure_stays_blocked(
+    ledger, caplog, status
+):
+    import httpx
+    from openai import APIStatusError
+    from sqlalchemy import select
+
+    from app.controls.admission import slots
+
+    ledger.update_policy(policy(version="v2", deployment=Limits(tokens=100000)))
+    service, job = queue(ledger)
+
+    class Rejected(Adapter):
+        def execute(self, job):
+            self.executed += 1
+
+            def call():
+                request = httpx.Request("POST", "https://example.invalid/chat/completions")
+                raise APIStatusError(
+                    "PRIVATE_SECRET_AND_PROMPT",
+                    response=httpx.Response(status, request=request),
+                    body=None,
+                )
+
+            return model_call(call, "private prompt", 10, lambda result: (1, 1))
+
+    adapter = Rejected()
+    assert run_one(service, adapter)
+    result = service.status(SCOPE, job["id"])
+    assert result["state"] == ("failed" if status in {401, 403} else "unknown")
+    assert result["reason"] == (
+        "provider_auth_failed" if status in {401, 403} else "execution_unknown"
+    )
+    assert ledger.summary()["reserved"]["tokens"] > 0  # No invented zero-usage refund.
+    with ledger.transaction() as conn:
+        slot = conn.execute(select(slots)).mappings().one()
+    assert slot["state"] == ("released" if status in {401, 403} else "unknown")
+    assert not run_one(service, adapter)
+    assert adapter.executed == 1
+    assert "PRIVATE_SECRET_AND_PROMPT" not in caplog.text
+    assert "private prompt" not in caplog.text
+    assert "example.invalid" not in caplog.text
+    assert "model_call_failed" in caplog.text

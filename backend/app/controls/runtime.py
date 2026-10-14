@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import contextvars
+import logging
 import math
 import uuid
 from collections.abc import Callable, Iterator
@@ -116,9 +117,32 @@ def model_call(
     except BaseException as exc:
         # A lost response or interrupted thread is not proof of zero usage.
         context.ledger.settle(attempt_id, None)
-        # An explicit format rejection completed the request, although its
-        # billable usage may still be unknown. It can safely free concurrency.
-        admission.release_slot(slot, stopped=getattr(exc, "status_code", None) in {400, 422})
+        # An explicit authentication/format rejection is a finished request,
+        # not a possibly running call. Keep unknown usage reserved separately.
+        status = getattr(exc, "status_code", None)
+        rejected_auth = type(status) is int and status in {401, 403}
+        admission.release_slot(slot, stopped=rejected_auth or status in {400, 422})
+        category = (
+            "provider_auth_failed"
+            if rejected_auth
+            else (
+                "provider_timeout"
+                if isinstance(exc, TimeoutError) or type(exc).__name__ == "APITimeoutError"
+                else "provider_connection_failed"
+                if type(exc).__name__ == "APIConnectionError"
+                else "provider_call_failed"
+            )
+        )
+        # Content-free incident evidence: no exception text, URL, key or prompt.
+        logging.getLogger(__name__).warning(
+            "model_call_failed operation=%s attempt=%s category=%s http_status=%s",
+            context.operation,
+            attempt_id,
+            category,
+            status if type(status) is int else None,
+        )
+        if rejected_auth:
+            raise ControlError("provider_auth_failed", 503) from None
         raise
     admission.release_slot(slot, stopped=True)
     if type(prompt) is not int or type(completion) is not int or prompt < 0 or completion < 0:

@@ -111,6 +111,10 @@ window.BELAY_GET_ACCESS_TOKEN = async () => {{
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, directory=str(directory), **kwargs)
 
+            def end_headers(self):
+                self.send_header("Cache-Control", "no-store")
+                super().end_headers()
+
             def log_message(self, format, *args):
                 # No request paths, credentials, learner content or source in logs.
                 pass
@@ -153,7 +157,6 @@ window.BELAY_GET_ACCESS_TOKEN = async () => {{
                 self.send_response(200)
                 self.send_header("Content-Type", content_type)
                 self.send_header("Content-Length", str(len(body)))
-                self.send_header("Cache-Control", "no-store")
                 self.send_header("X-Content-Type-Options", "nosniff")
                 self.end_headers()
                 return io.BytesIO(body)
