@@ -16,14 +16,38 @@
   let savedConversation = null, glassOwner = null;
   let selectedReply = null;
   const defaultQuestionPlaceholder = $("question").getAttribute("placeholder") || "Ask Sol something specific (optional)…";
-  function replyExcerpt(text) {
-    let plain = String(text || "");
-    if (window.marked && window.DOMPurify) {
-      const rendered = document.createElement("div");
-      rendered.innerHTML = renderSafeMarkdown(plain);
-      plain = rendered.textContent;
+  function renderQuote(target, source) {
+    const text = String(source || "");
+    // Quote preview is formatting only: no links, images, attributes or active HTML.
+    // Trim the rendered text nodes, so a cut never breaks Markdown/code delimiters.
+    if (window.marked && window.DOMPurify && document.createTreeWalker) {
+      target.innerHTML = window.DOMPurify.sanitize(window.marked.parse(text), {
+        ALLOWED_TAGS:["p", "br", "strong", "em", "code", "del"], ALLOWED_ATTR:[]
+      });
+      const walker = document.createTreeWalker(target, 4), nodes = [];
+      let node;
+      while ((node = walker.nextNode())) nodes.push(node);
+      const truncated = target.textContent.length > 280;
+      let remaining = 280, last = null;
+      for (const item of nodes) {
+        if (remaining <= 0) { item.remove(); continue; }
+        item.textContent = item.textContent.slice(0, remaining);
+        remaining -= item.textContent.length;
+        last = item;
+      }
+      if (truncated && last) last.textContent += "\u2026";
+    } else {
+      const plain = text.replace(/\s+/g, " ").trim();
+      target.textContent = plain.slice(0, 280) + (plain.length > 280 ? "\u2026" : "");
     }
-    return plain.replace(/\s+/g, " ").trim().slice(0, 360);
+  }
+  function quoteBlock(excerpt) {
+    const quote = document.createElement("blockquote"); quote.className = "reply-reference";
+    quote.setAttribute("aria-label", "In reply to Sol");
+    const label = document.createElement("span"); label.className = "quote-label";
+    label.textContent = "In reply to Sol"; quote.appendChild(label);
+    const content = document.createElement("div"); renderQuote(content, excerpt);
+    quote.appendChild(content); return quote;
   }
   function removeReply() {
     selectedReply = null;
@@ -41,8 +65,8 @@
       return;
     }
     selectedReply = {request_id:requestId, conversation_id:savedView ? savedConversation : null,
-      excerpt:replyExcerpt(answer.text)};
-    $("reply-excerpt").textContent = selectedReply.excerpt;
+      excerpt:answer.text};
+    renderQuote($("reply-excerpt"), selectedReply.excerpt);
     $("reply-reference").hidden = false;
     $("question").setAttribute("placeholder", "What would you like to ask about this reply?");
     $("question").focus?.();
@@ -68,7 +92,11 @@
     }
     record.job_id = ref.job_id || record.job_id;
     record.feedback = state;
-    if (state === "completed") {record.note = ""; record.code = null;}
+    if (state === "completed" || record.code === "poll_limited") {record.note = ""; record.code = null;}
+    if (state === "poll_limited") {
+      record.code = state;
+      record.note = globalThis.belayControlMessage({code:state}, String(ref.retry_after));
+    }
     if (ref.recovered && requestTarget && requestTarget !== record) {
       if (requestTarget.event === "chat" && !requestTarget.request_id) {
         // Checking an existing request is not a new conversation turn.
@@ -77,7 +105,7 @@
         requestTarget = record;
       } else {
         requestTarget.feedback = "not_submitted";
-        requestTarget.note = "No new feedback submitted. The original request is being recovered in its own record.";
+        requestTarget.note = "No feedback was submitted for this run. The previous request status is shown in its original record.";
       }
     }
     renderFeed(feedMessages);
@@ -88,6 +116,11 @@
     record.feedback = error.uncertain ? "unknown" : error.code === "result_expired" ? "result_expired" : "blocked";
     record.note = error.message;
     record.code = error.code;
+    if (error.recovered_request && error.uncertain && fallback && fallback !== record && fallback.event === "run") {
+      fallback.feedback = "not_submitted";
+      fallback.note = "No feedback was submitted for this run because the previous request is unresolved. " +
+        "Check request status only checks that earlier request; it does not send your current question. " + error.message;
+    }
     if (error.code === "request_not_admitted" && fallback && fallback !== record) {
       fallback.feedback = "not_submitted";
       fallback.note = "No tutor feedback was submitted for this run. The previous request is now closed. Choose Ask Sol to discuss this run.";
@@ -163,18 +196,14 @@
       group.setAttribute("data-feedback-state", record.feedback || "restored");
       if (record.request_id) group.setAttribute("data-request-id", record.request_id);
       if (record.reply_to && !record.messages.some(m => m.role === "student")) {
-        const quote = document.createElement("blockquote"); quote.className = "reply-reference";
-        quote.textContent = "In reply to Sol: " + replyExcerpt(record.reply_to.excerpt); group.appendChild(quote);
+        group.appendChild(quoteBlock(record.reply_to.excerpt));
       }
       if (record.question && record.request_id && !record.messages.some(m => m.role === "student"))
         bubble({role:"student", text:record.question}, group);
       record.messages.forEach(m => {
         const reference = m.reply_to || (m.role === "student" ? record.reply_to : null);
         if (reference) {
-          const quote = document.createElement("blockquote"); quote.className = "reply-reference";
-          quote.setAttribute("aria-label", "In reply to Sol");
-          quote.textContent = "In reply to Sol: " + replyExcerpt(reference.excerpt);
-          group.appendChild(quote);
+          group.appendChild(quoteBlock(reference.excerpt));
         }
         bubble(m, group);
         if (m.role === "assistant" && (!m.status || m.status === "completed") && record !== glassOwner) {
@@ -464,7 +493,7 @@
           message = (lastResult?.ok ? "Code ran. " : "Your code raised an error. ") + context + message;
         }
         $("status").textContent = message;
-        $("ask").textContent = error.uncertain ? "Check request status" : "Ask Sol";
+        $("ask").textContent = error.uncertain && !error.continuationAllowed ? "Check request status" : "Ask Sol";
       }
     }
     finally { setBusy(false); }
@@ -496,7 +525,10 @@
         askJobs.acknowledge(answer);
         $("status").textContent = "Recovered the same request. No request was resubmitted.";
       }
-    } catch (error) { if (current === generation) {recordFailure(error, null); $("status").textContent = error.message;} }
+    } catch (error) { if (current === generation) {
+      recordFailure(error, null); $("status").textContent = error.message;
+      $("ask").textContent = error.uncertain && !error.continuationAllowed ? "Check request status" : "Ask Sol";
+    } }
     finally { setBusy(false); }
   }
   $("exercise").addEventListener("change", pick);

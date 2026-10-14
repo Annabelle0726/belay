@@ -69,7 +69,7 @@ test("queued/running polling and Retry-After keep one admission", async () => {
     ? reply({id:completed.id,state:"queued"},202) : states.shift(), {wait:async (ms) => waits.push(ms)});
   assert.equal((await value.jobs.ask("https://test","/jobs",body,(state) => visible.push(state))).message,"useful answer");
   assert.equal(value.calls.filter((c) => c.opts.method === "POST").length,1);
-  assert.deepEqual(visible,["preparing","queued","running","completed"]);
+  assert.deepEqual(visible,["preparing","poll_limited","queued","running","completed"]);
   assert.deepEqual(waits,[1000,1000,1000]);
 });
 
@@ -257,5 +257,77 @@ test("unconfirmed reconciliation keeps the original ID blocked without model sub
     await assert.rejects(recovery.jobs.recover('https://test','/jobs','echo-1'),{uncertain:true});
     assert.equal(JSON.stringify([...store.values]),before);
     assert.equal(recovery.calls.filter(c=>c.opts.method==='POST'&&!c.url.endsWith('/reconcile')).length,0);
+  }
+});
+
+test('reconcile 429 respects Retry-After and never resends the question',async()=>{
+ const store=storage();
+ const lost=client(store,async()=>{throw TypeError('lost');});
+ await assert.rejects(lost.jobs.ask('https://test','/jobs',body));
+ const waits=[],visible=[];let checks=0;
+ const recovery=client(store,async(url,opts)=>{
+  assert.ok(url.endsWith('/reconcile'));
+  assert.equal(opts.method,'POST');
+  assert.equal(JSON.parse(opts.body).source,undefined);
+  return ++checks===1 ? reply({detail:{code:'poll_limited'}},429,{'Retry-After':'3'})
+   : reply({id:completed.id,state:'unknown',reason:'execution_unknown'});
+ },{config:{...config,missing_request_recovery:1},wait:async ms=>waits.push(ms)});
+ await assert.rejects(recovery.jobs.recover('https://test','/jobs','echo-1',(s,c,r)=>visible.push([s,r.retry_after])),{uncertain:true,code:'execution_unknown'});
+ assert.deepEqual(waits,[3000]);
+ assert.ok(visible.some(([s,delay])=>s==='poll_limited'&&delay===3));
+ assert.equal(checks,2);
+ assert.equal(JSON.parse([...store.values.values()][0]).pending,true);
+ assert.equal(recovery.calls.filter(c=>c.opts.method==='POST'&&!c.url.endsWith('/reconcile')).length,0);
+});
+
+test('confirmed provider auth failure closes pending and preserves a useful error',async()=>{
+ const store=storage();let posts=0;
+ const value=client(store,async(url,opts)=>{
+  if(opts.method==='POST'){posts++;return reply({id:completed.id,state:'queued'});}
+  return reply({id:completed.id,state:'failed',reason:'provider_auth_failed',result:null});
+ });
+ await assert.rejects(value.jobs.ask('https://test','/jobs',body),e=>{
+  assert.equal(e.code,'provider_auth_failed');assert.equal(e.uncertain,false);
+  assert.match(e.message,/rejected its credentials/);return true;
+ });
+ assert.equal(JSON.parse([...store.values.values()][0]).pending,false);
+ assert.equal(posts,1);
+});
+
+
+test("operator continuation archives only its approved unknown and sends once on deliberate Ask", async () => {
+  const store = storage(), sent = [];
+  const key = "belay.ask.v1:" + JSON.stringify(["https://test", "/jobs", config.recovery_scope, "echo-1", "v1"]);
+  const old = {request_id:"approved_unknown_001", pending:true};
+  store.setItem(key, JSON.stringify(old));
+  const value = client(store, async (url, opts) => {
+    if (url.endsWith(old.request_id)) return reply({...completed,state:"unknown",result:null});
+    if (opts.method === "POST") {sent.push(JSON.parse(opts.body));return reply({id:completed.id,state:"queued"});}
+    return reply(completed);
+  }, {config:{...config,operator_continuations:[old.request_id]}});
+  await assert.rejects(value.jobs.recover("https://test","/jobs","echo-1"),{uncertain:true,continuationAllowed:true});
+  assert.equal(sent.length,0);
+  assert.equal(store.values.size,1);
+  const answer=await value.jobs.ask("https://test","/jobs",body);
+  assert.equal(sent.length,1);
+  assert.notEqual(sent[0].request_id,old.request_id);
+  assert.deepEqual(JSON.parse(store.getItem(key+":unresolved:"+old.request_id)),old);
+  value.jobs.acknowledge(answer);
+  assert.equal(JSON.parse(store.getItem(key)).pending,false);
+  assert.equal(JSON.parse(store.getItem(key+":unresolved:"+old.request_id)).pending,true);
+});
+
+test("unapproved uncertainty and failed archive storage cannot send a new request", async () => {
+  for (const blocked of [false,true]) {
+    const store=storage();
+    const key="belay.ask.v1:"+JSON.stringify(["https://test","/jobs",config.recovery_scope,"echo-1","v1"]);
+    const old={request_id:"approved_unknown_002",pending:true};store.setItem(key,JSON.stringify(old));
+    const put=store.setItem;
+    if(blocked) store.setItem=(k,v)=>{if(k.includes(":unresolved:"))throw Error("storage blocked");put(k,v);};
+    const value=client(store,async()=>reply({...completed,state:"unknown",result:null}),
+      {config:{...config,operator_continuations:[blocked?old.request_id:"another_request_001"]}});
+    await assert.rejects(value.jobs.ask("https://test","/jobs",body),{uncertain:true});
+    assert.equal(value.calls.filter(c=>c.opts.method==="POST").length,0);
+    assert.deepEqual(JSON.parse(store.getItem(key)),old);
   }
 });

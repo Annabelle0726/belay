@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+    <meta name="belay-client-build" content="20261014-quotation-2"/>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <title>Sol — backend dev client</title>
@@ -255,9 +256,16 @@
         .connection-settings summary { color: var(--muted); font-size: .75rem; cursor: pointer; }
         .connection-settings .row { margin-top: 8px; }
         .telemetry summary { cursor: pointer; }
-        .conversation-card .reply-reference { margin: 6px 0; padding: 8px 12px; border-left: 3px solid var(--border); border-radius: 6px; background: var(--surface-2); overflow-wrap: anywhere; }
-        .conversation-card .reply-reference p { margin: 4px 0 8px; max-height: 4.5em; overflow: auto; }
-        .conversation-card .reply-followup { font-size: 0.85rem; margin: 4px 0 8px; padding: 4px 8px; }
+        .conversation-card .reply-reference { position: relative; margin: 6px 0; padding: 4px 8px; border-left: 2px solid var(--border-strong); border-radius: 0; background: transparent; overflow-wrap: anywhere; font-size: .75rem; line-height: 1.45; color: var(--muted); }
+        #reply-reference { padding-right: 32px; }
+        .reply-reference[hidden] { display: none; }
+        .reply-reference .quote-label { display: block; margin-bottom: 3px; font-size: .6875rem; font-weight: 600; }
+        .reply-reference .quote-label::after { content: " \00b7  excerpt"; font-weight: 400; }
+        .reply-reference blockquote, .reply-reference p { margin: 0; padding: 0; border: 0; font: inherit; max-height: none; overflow: visible; }
+        .reply-reference code { font-size: .95em; padding: 0 2px; background: var(--surface-2); border-radius: 2px; }
+        .conversation-card #reply-remove { position: absolute; top: 0; right: 0; width: 26px; height: 26px; min-height: 26px; padding: 0; border: 0; background: transparent; font-size: 1rem; line-height: 1; color: var(--muted); }
+        .conversation-card .reply-followup, #glass-correct { align-self: flex-start; width: fit-content; min-height: 28px; font-size: .75rem; font-weight: 500; line-height: 1.4; margin: 4px 0; padding: 4px 10px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface-2); color: inherit; cursor: pointer; }
+        .reply-reference strong { font-weight: 600; }
         .telemetry summary::after { content: "+"; margin-left: auto; }
         .telemetry[open] summary::after { content: "−"; }
         .telemetry > .stack { margin-top: 12px; max-height: 32vh; overflow-y: auto; }
@@ -660,9 +668,9 @@
             <div id="feedback-loading" class="feedback-loading" aria-hidden="true" hidden></div>
             <span id="feedback-announcement" class="sr-only" role="status" aria-live="polite"></span>
             <div id="reply-reference" class="reply-reference" hidden role="note" aria-label="Reply being referenced">
-                <strong>In reply to Sol</strong>
-                <p id="reply-excerpt"></p>
-                <button id="reply-remove" type="button" aria-label="Remove reply reference">Remove reference</button>
+                <span class="quote-label">In reply to Sol</span>
+                <blockquote id="reply-excerpt"></blockquote>
+                <button id="reply-remove" type="button" aria-label="Remove reply reference" title="Remove reference">&times;</button>
             </div>
             <div class="chat-composer">
                 <input id="question" class="field" type="text" placeholder="Ask Sol something specific (optional)…" autocomplete="off"/>
@@ -687,10 +695,10 @@
 
 
 <script src="auth-client.js"></script>
-<script src="control-messages.js"></script>
-<script src="request-lifecycle.js"></script>
-<script src="ask-jobs.js"></script>
-<script src="conversation-client.js"></script>
-<script src="dev-client.js"></script>
+<script src="control-messages.js?v=20261014-quotation-2"></script>
+<script src="request-lifecycle.js?v=20261014-quotation-2"></script>
+<script src="ask-jobs.js?v=20261014-quotation-2"></script>
+<script src="conversation-client.js?v=20261014-quotation-2"></script>
+<script src="dev-client.js?v=20261014-quotation-2"></script>
 </body>
 </html>

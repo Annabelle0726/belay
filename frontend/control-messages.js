@@ -3,6 +3,8 @@
 globalThis.belayControlMessage = function (detail, retryAfter) {
   const code = detail && typeof detail === "object" ? detail.code : "";
   const messages = {
+    poll_limited: "Status was checked too recently. Waiting before checking the same request again; your draft has not been sent.",
+    provider_auth_failed: "Sol could not generate feedback because the model service rejected its credentials. Please contact course support. Your draft has been kept.",
     request_not_admitted: "The previous request was not accepted and is now closed. No question was resent. You can choose Ask Sol to submit your current question or discuss the latest run.",
     publication_unavailable: "Saved publication could not be verified. Check status later; do not resubmit this request.",
     conversation_conflict: "This conversation changed or its turn lease ended. Refresh history before a new request.",
