@@ -122,8 +122,9 @@ test('delete removes current saved attempt without silently creating another', a
 test('all three demos mount the shared restoration controls',()=>{
   for (const file of ['widget.html','dev-client.html','embed-demo.html']) {
     const source=fs.readFileSync(path.join(__dirname,'..',file),'utf8');
-    assert.match(source,/src="conversation-client\.js"/);
-    const external=source.includes('src="dev-client.js"');
+    // Cache-version query parameters do not change which local client is mounted.
+    assert.match(source,/src="conversation-client\.js(?:\?[^"\s]*)?"/);
+    const external=/src="dev-client\.js(?:\?[^"\s]*)?"/.test(source);
     const client=external?fs.readFileSync(path.join(__dirname,'..','dev-client.js'),'utf8'):source;
     assert.match(client,/BelayConversations\.mount/); assert.match(client,/dialogue\.send/);
     if(external) new vm.Script(client);
