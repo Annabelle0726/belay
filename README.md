@@ -36,6 +36,10 @@ Three properties distinguish it:
 
 ## Authentication required
 
+For the proposed platform handoff and Portage integration, see the
+[platform integration contract v0.1 and gap checklist](docs/platform-integration-v0.1.md).
+This is a review draft; proposed interfaces are not implemented endpoints.
+
 All learner/resource API routes now require a short-lived signed bearer plus
 operator-owned institution/class/learner and assignment-version grants. The
 production default refuses protected requests with missing configuration (503).
