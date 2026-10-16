@@ -211,8 +211,6 @@ def test_http_enforcement_cannot_trust_body_identity(monkeypatch, path, payload)
 def test_provider_auth_rejection_finishes_but_uncertain_failure_stays_blocked(
     ledger, caplog, status
 ):
-    import httpx
-    from openai import APIStatusError
     from sqlalchemy import select
 
     from app.controls.admission import slots
@@ -220,17 +218,19 @@ def test_provider_auth_rejection_finishes_but_uncertain_failure_stays_blocked(
     ledger.update_policy(policy(version="v2", deployment=Limits(tokens=100000)))
     service, job = queue(ledger)
 
+    # The shared runtime consumes status_code across providers; constructing an
+    # SDK HTTP response would unnecessarily couple this worker test to httpx.
+    class ProviderStatusError(Exception):
+        def __init__(self):
+            super().__init__("PRIVATE_SECRET_AND_PROMPT https://example.invalid/chat/completions")
+            self.status_code = status
+
     class Rejected(Adapter):
         def execute(self, job):
             self.executed += 1
 
             def call():
-                request = httpx.Request("POST", "https://example.invalid/chat/completions")
-                raise APIStatusError(
-                    "PRIVATE_SECRET_AND_PROMPT",
-                    response=httpx.Response(status, request=request),
-                    body=None,
-                )
+                raise ProviderStatusError()
 
             return model_call(call, "private prompt", 10, lambda result: (1, 1))
 
