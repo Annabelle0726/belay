@@ -34,7 +34,19 @@ def _http_behavior_credentials(request, monkeypatch, tmp_path):
                         "institution_id": "test-institution",
                         "class_id": "test-class",
                         "learner_id": pid,
-                        "assignments": assignments,
+                        "assignments": {
+                            ex: {
+                                "version": version,
+                                "generation": "fixture-v1",
+                                "policy_revision": 1,
+                                "allowed_pairs": [
+                                    {"mode": mode, "stance": stance}
+                                    for mode in ["study", "teach"]
+                                    for stance in ["peer", "oracle", "control"]
+                                ],
+                            }
+                            for ex, version in assignments.items()
+                        },
                     }
                 ]
                 for pid in ("gh:12345", "gh:7", "gh:9")

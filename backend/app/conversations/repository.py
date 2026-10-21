@@ -16,7 +16,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session, sessionmaker
 
-from ..auth import Identity, denied
+from ..auth import Identity, check_receipt, denied
 from .bounds import wire_size
 from .ledger import DeletionLedger
 from .models import Bucket, Conversation, Message, SchemaVersion, Turn
@@ -178,6 +178,15 @@ class ConversationStore:
                 status = turn.status if turn else "failed"
                 if status == "pending" and row.pending_until <= int(self.clock()):
                     status = "failed"
+                if identity.subject and msg.role == "assistant":
+                    check_receipt(
+                        replace(
+                            identity,
+                            exercise_id=row.exercise_id,
+                            exercise_version=row.exercise_version,
+                        ),
+                        (turn.response or {}).get("_authorization") if turn else None,
+                    )
                 item = {
                     "sequence": msg.sequence,
                     "role": msg.role,
@@ -215,6 +224,13 @@ class ConversationStore:
                 .order_by(Message.sequence.desc())
                 .limit(self.policy.max_messages)
             ).all()
+            if identity.subject:
+                for message in rows:
+                    if message.role == "assistant":
+                        turn = session.get(Turn, (cid, message.request_id))
+                        check_receipt(
+                            identity, (turn.response or {}).get("_authorization") if turn else None
+                        )
             return [{"role": m.role, "text": m.text} for m in reversed(rows)]
 
     def begin(
@@ -243,7 +259,10 @@ class ConversationStore:
                 if existing.digest != signature:
                     raise HTTPException(409, "request identifier reused with different input")
                 if existing.status == "completed":
-                    return dict(existing.response or {})
+                    result = dict(existing.response or {})
+                    if identity.subject:
+                        check_receipt(identity, result.pop("_authorization", None))
+                    return result
                 if existing.status == "pending" and row.pending_until <= int(self.clock()):
                     existing.status = "failed"
                     row.pending_id = None
@@ -285,7 +304,15 @@ class ConversationStore:
             )
         return None
 
-    def complete(self, identity: Identity, cid: str, request_id: str, response: dict) -> dict:
+    def complete(
+        self,
+        identity: Identity,
+        cid: str,
+        request_id: str,
+        response: dict,
+        *,
+        authorization: dict | None = None,
+    ) -> dict:
         self._ready()
         message = response["message"]
         question = response.get("check_question")
@@ -314,11 +341,12 @@ class ConversationStore:
                 "revision": row.revision,
                 "response": {"message": message, "check_question": question},
             }
-            retained_size = len(text.encode()) + wire_size(result)
+            stored = {**result, "_authorization": authorization} if authorization else result
+            retained_size = len(text.encode()) + wire_size(stored)
             if row.byte_count + retained_size > self.policy.max_stored_bytes:
                 raise HTTPException(409, "conversation storage limit reached")
             row.byte_count += retained_size
-            turn.response = result
+            turn.response = stored
             session.add(
                 Message(
                     id=uuid.uuid4().hex,

@@ -37,6 +37,7 @@ from .agent import overlay as overlay_mod
 from .auth import authorize, denied
 from .config import settings
 from .core.registry import get_active_pack
+from .pedagogy import authorized_turn
 from .schemas import (
     GoalRequest,
     OverlayRequest,
@@ -157,7 +158,13 @@ def sol_turn(request: Request, req: SolTurnRequest):
     # Route events + learner-state writes to durable or ephemeral by consent.
     store = scoped_store(_router, request.state.identity)
     try:
-        return run_turn(payload, _llm(), store)
+        return authorized_turn(
+            run_turn,
+            payload,
+            None if req.stance == "control" else _llm(),
+            store,
+            request.state.identity,
+        )
     except HTTPException:
         raise
     except Exception as e:  # surface a clean error; the front-end shows a graceful note

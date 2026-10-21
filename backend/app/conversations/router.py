@@ -12,9 +12,10 @@ from starlette.concurrency import run_in_threadpool
 
 from ..agent import run_turn
 from ..agent.distress import extra_terms, has_distress_signal
-from ..auth import _bearer, authorize, denied
+from ..auth import _bearer, authorize, behavior_receipt, denied, recheck_behavior
 from ..config import settings
 from ..integrations.quad.pii import PIIRejected, assert_no_pii
+from ..pedagogy import authorized_turn
 from ..store.scoped import scoped_store
 from .bounds import BoundedProvider, bounded_route, recent_window, wire_size
 from .policy import Policy
@@ -184,6 +185,8 @@ def build_router(
             raise denied() from None
         if len(body.message.encode()) > repository.policy.max_message_bytes:
             raise HTTPException(413, "message limit exceeded")
+        recheck_behavior(identity, body.mode, body.stance)
+        receipt = behavior_receipt(identity, body.mode, body.stance)
         screened = private_content(body.message) or private_content(body.source)
         replay = repository.begin(
             identity,
@@ -194,6 +197,7 @@ def build_router(
             PLACEHOLDER if screened else body.message,
         )
         if replay is not None:
+            recheck_behavior(identity, body.mode, body.stance)
             return replay
         try:
             recent = recent_window(
@@ -210,10 +214,15 @@ def build_router(
                 "overlay": body.overlay,
                 "recent": recent,
             }
-            provider = llm_factory()
+            provider = None if body.stance == "control" else llm_factory()
             bounded = BoundedProvider(provider, repository.policy) if provider is not None else None
             released = await run_in_threadpool(
-                tutor, payload, bounded, scoped_store(consent_router, identity)
+                authorized_turn,
+                tutor,
+                payload,
+                bounded,
+                scoped_store(consent_router, identity),
+                identity,
             )
             # Only the final learner-facing response released by the existing gate.
             message = str(released["message"])
@@ -226,8 +235,13 @@ def build_router(
                 message, question = PLACEHOLDER, None
             # Re-read credentials and current membership after the model call.
             fresh = await authorize(request, await _bearer(request))
+            recheck_behavior(identity, body.mode, body.stance)
             result = repository.complete(
-                fresh, cid, body.request_id, {"message": message, "check_question": question}
+                fresh,
+                cid,
+                body.request_id,
+                {"message": message, "check_question": question},
+                authorization=receipt,
             )
             if not screened and message != PLACEHOLDER:
                 # First delivery only. DB completion/replays contain released dialogue alone.
