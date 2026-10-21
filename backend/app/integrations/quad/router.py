@@ -32,6 +32,7 @@ from ...agent import overlay as _overlay
 from ...auth import authorize, denied
 from ...config import settings
 from ...core.registry import get_active_pack
+from ...pedagogy import authorized_turn
 from ...store import ConsentRouter, InMemoryStore, SqlStore
 from ...store.scoped import register, scoped_store
 from .pii import PIIRejected, assert_no_pii
@@ -165,7 +166,13 @@ def build_router(
             register(consent_router, request.state.identity, req.consent)
         store = scoped_store(consent_router, request.state.identity)
         try:
-            return run_turn(turn_payload, _llm(), store)
+            return authorized_turn(
+                run_turn,
+                turn_payload,
+                None if req.stance == "control" else _llm(),
+                store,
+                request.state.identity,
+            )
         except HTTPException:
             raise
         except Exception as e:  # surface a clean error

@@ -32,7 +32,19 @@ def boundary(monkeypatch, tmp_path):
             "institution_id": institution,
             "class_id": class_id,
             "learner_id": learner,
-            "assignments": {"echo-1": "v1"} if assignments is None else assignments,
+            "assignments": {
+                "echo-1": {
+                    "version": "v1",
+                    "generation": "fixture-v1",
+                    "policy_revision": 1,
+                    "allowed_pairs": [
+                        {"mode": "study", "stance": "peer"},
+                        {"mode": "study", "stance": "control"},
+                    ],
+                }
+            }
+            if assignments is None
+            else assignments,
         }
 
     authorization = {

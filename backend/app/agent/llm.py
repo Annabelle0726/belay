@@ -32,6 +32,7 @@ import time
 from typing import Protocol, runtime_checkable
 
 from ..config import settings
+from ..pedagogy import check_current
 from . import telemetry as _tel
 
 
@@ -97,7 +98,9 @@ class OpenAICompatProvider:
     def __init__(self) -> None:
         from openai import OpenAI  # lazy import
 
-        self._client = OpenAI(base_url=settings.openai_base_url, api_key=settings.openai_api_key)
+        self._client = OpenAI(
+            base_url=settings.openai_base_url, api_key=settings.openai_api_key, max_retries=0
+        )
 
     def model_for(self, tier: str) -> str:
         return _model_for(tier)
@@ -145,9 +148,11 @@ class OpenAICompatProvider:
 
         # Prefer JSON mode; some endpoints reject it — fall back silently.
         kwargs_json = dict(kwargs, response_format={"type": "json_object"})
+        check_current()
         try:
             resp = self._client.chat.completions.create(**kwargs_json)
         except Exception:
+            check_current()
             resp = self._client.chat.completions.create(**kwargs)
 
         text = self._extract_text(resp)
@@ -164,6 +169,7 @@ class OpenAICompatProvider:
                     "content": "Return ONLY the JSON object. No prose, no markdown fences.",
                 },
             ]
+            check_current()
             try:
                 resp = self._client.chat.completions.create(
                     model=model,
@@ -199,9 +205,9 @@ class AnthropicProvider:
         from anthropic import Anthropic  # lazy import
 
         self._client = (
-            Anthropic(api_key=settings.anthropic_api_key)
+            Anthropic(api_key=settings.anthropic_api_key, max_retries=0)
             if settings.anthropic_api_key
-            else Anthropic()
+            else Anthropic(max_retries=0)
         )
 
     def model_for(self, tier: str) -> str:
@@ -233,6 +239,7 @@ class AnthropicProvider:
             # requires the default temperature (so we omit temperature here).
             kwargs["max_tokens"] = max(max_tokens, budget + 512)
             kwargs["thinking"] = {"type": "enabled", "budget_tokens": budget}
+        check_current()
         resp = self._client.messages.create(**kwargs)
         text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
         parsed = parse_json(text)

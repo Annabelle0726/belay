@@ -299,6 +299,20 @@ def test_launcher_real_auth_course_and_optional_dialogue(tmp_path, saving):
         status, credentials = request("/__belay_local__/token", origin=frontend)
         assert status == 200
         headers = {"Authorization": "Bearer " + credentials["access_token"]}
+        auth_path = tmp_path / "authorization.json"
+        authority = json.loads(auth_path.read_text())
+        for memberships in authority["subjects"].values():
+            for member in memberships:
+                member["assignments"] = {
+                    exercise: {
+                        "version": version,
+                        "generation": "offline-test-v1",
+                        "policy_revision": 1,
+                        "allowed_pairs": [{"mode": "study", "stance": "control"}],
+                    }
+                    for exercise, version in member["assignments"].items()
+                }
+        auth_path.write_text(json.dumps(authority))
         assert request("/api/curriculum", headers=headers)[0] == 200
         status, config = request("/api/conversations/config", headers=headers)
         assert status == 200 and config["enabled"] is saving
