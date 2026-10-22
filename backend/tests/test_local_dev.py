@@ -273,7 +273,13 @@ def test_launcher_real_auth_course_and_optional_dialogue(tmp_path, saving, contr
         backend = output.get(timeout=30).split(";")[0].removeprefix("Backend: ")
         assert frontend.startswith("http://127.0.0.1:") and backend.startswith("http://127.0.0.1:")
 
+        health_probe_failed = False
+
         def request(path, body=None, headers=None, origin=backend):
+            nonlocal health_probe_failed
+            if path == "/healthz" and not health_probe_failed:
+                health_probe_failed = True
+                raise TimeoutError("synthetic readiness probe timeout")
             data = json.dumps(body).encode() if body is not None else None
             req = Request(
                 origin + path,
@@ -294,10 +300,11 @@ def test_launcher_real_auth_course_and_optional_dialogue(tmp_path, saving, contr
             try:
                 assert request("/healthz")[0] == 200
                 break
-            except URLError:
+            except (URLError, TimeoutError):
                 if time.monotonic() > deadline:
                     raise
                 time.sleep(0.05)
+        assert health_probe_failed
         assert request("/api/curriculum")[0] == 401
         status, credentials = request("/__belay_local__/token", origin=frontend)
         assert status == 200

@@ -21,7 +21,13 @@ from ..agent.context import _latest_student_message
 from ..agent.distress import extra_terms, frame_from_settings, has_distress_signal
 from ..agent.glass_box import student_glass_box
 from ..agent.reply_context import reply_metadata
-from ..auth import ExecutionGrant, Identity, execution_grant, recheck_grant
+from ..auth import (
+    ExecutionGrant,
+    Identity,
+    capture_assignment_access,
+    execution_grant,
+    recheck_grant,
+)
 from ..config import settings
 from ..integrations.quad.pii import PIIRejected, assert_no_pii
 from ..schemas import SolTurnResponse
@@ -66,14 +72,17 @@ class ExecutionData:
             (self.scope(identity).keys()[-1] + ":" + request_id).encode()
         ).hexdigest()
 
-    def _grant(self, conn: Connection, job_id: str) -> ExecutionGrant:
+    def _grant(self, conn: Connection, job_id: str, *, tutoring: bool = False) -> ExecutionGrant:
         raw = conn.execute(
             select(bindings.c.grant).where(bindings.c.id == job_id)
         ).scalar_one_or_none()
         if raw is None:
             raise ControlError("job_unavailable", 404)
         try:
-            return ExecutionGrant.model_validate_json(raw)
+            grant = ExecutionGrant.model_validate_json(raw)
+            if tutoring and grant.purpose != "tutor":
+                raise ControlError("job_unavailable", 404)
+            return grant
         except ValueError:
             raise ControlError("job_unavailable", 404) from None
 
@@ -246,7 +255,7 @@ class ExecutionData:
 
     def load(self, job: dict) -> tuple[Identity, dict]:
         with self.ledger.transaction() as conn:
-            identity = recheck_grant(self._grant(conn, job["id"]))
+            identity = recheck_grant(self._grant(conn, job["id"], tutoring=True))
             saved.check(self, conn, job["id"], identity)
             payload = self._get(conn, job["id"], job["payload_ref"], "input")
             if payload.get("reply_to"):
@@ -269,7 +278,7 @@ class ExecutionData:
             raise ControlError("invalid_result", 502)
         with self.ledger.transaction() as conn:
             self.admission._live(conn, job["id"], job["fence"])
-            identity = recheck_grant(self._grant(conn, job["id"]))
+            identity = recheck_grant(self._grant(conn, job["id"], tutoring=True))
             conversation = saved.check(self, conn, job["id"], identity)
             payload = self._get(conn, job["id"], job["payload_ref"], "input")
             value = {
@@ -322,7 +331,7 @@ class ExecutionData:
     def publish(self, job: dict, ref: str) -> None:
         with self.ledger.transaction() as conn:
             self.admission._live(conn, job["id"], job["fence"])
-            identity = recheck_grant(self._grant(conn, job["id"]))
+            identity = recheck_grant(self._grant(conn, job["id"], tutoring=True))
             saved.check(self, conn, job["id"], identity)
             self._get(conn, job["id"], job["payload_ref"], "input")
             value = self._get(conn, job["id"], ref, "pending")
@@ -348,7 +357,7 @@ class ExecutionData:
         alone is not proof: the retained tombstone also rejects a delayed POST.
         No learner content, model calls or budget reservations are created.
         """
-        grant = execution_grant(identity)
+        grant = capture_assignment_access(identity, "recovery_fence")
         job_id = self.job_id(identity, request_id)
         with self.ledger.transaction() as conn:
             recheck_grant(grant)
