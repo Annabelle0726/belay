@@ -49,3 +49,10 @@ The later full SQLite run at e4af0a7 had 991 passed, one failed and 18 skipped: 
 ## Pinned browser asset bytes
 
 The complete frontend suite exposed CRLF conversions in the committed vendored JS. Restore the three assets from their already installed, version-pinned npm package sources, assert that only line endings differ, and prevent Git text conversion for these files. The byte-equality assertion remains unchanged. This preserves browser behavior and does not change the student layout or interaction.
+
+
+## Final validation observations
+
+At f988044, the final PostgreSQL target executed 118 cases with no failures or skips; frontend regression executed 126 cases with no failures or skips. Global Ruff lint/format and mypy passed, with the final fixture-only lint comment checked separately. The remaining launcher-poll and executable-evidence cases also passed as an isolated two-case repeat.
+
+Full e4af0a7 results remain SQLite 991 passed / 1 failed / 18 skipped and PostgreSQL 1000 passed / 3 failed / 7 skipped. A later SQLite target had 110 passed and one polling timeout. These failures are preserved and their precise underlying causes are not established by passing repeats. See pr-repair-summary.md for exact source versions, branch heads, prior failures, and remaining CI/DCO/platform gates. No clean final full-suite run is claimed.
