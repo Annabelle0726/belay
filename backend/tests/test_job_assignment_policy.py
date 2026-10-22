@@ -262,7 +262,10 @@ def test_recovery_fence_cannot_be_loaded_as_a_tutor_job(job_boundary, monkeypatc
 
 @pytest.mark.parametrize("mode", ["development_bypass", "enforced"])
 def test_code_result_delivery_rechecks_assignment_access(
-    job_boundary, grant_boundary, monkeypatch, mode
+    job_boundary,
+    grant_boundary,
+    monkeypatch,
+    mode,  # noqa: F811 - imported pytest fixture
 ):
     from fastapi import HTTPException
 
