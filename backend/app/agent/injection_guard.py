@@ -1,4 +1,4 @@
-# backend/app/agent/injection_guard.py
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Prompt injection / jailbreak detection guardrail.
 
@@ -12,6 +12,7 @@ Follows CC-B1 isolation requirements:
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 
 from openai import OpenAI  # Direct connection to Portage Sovereign endpoint
@@ -46,6 +47,7 @@ class SovereignLLMClient:
         self._client = OpenAI(
             base_url=self.endpoint,
             api_key="sovereign-internal-token",
+            max_retries=0,
         )
 
     def json(self, system: str, user: str, max_tokens: int = 100) -> dict | None:
@@ -129,14 +131,21 @@ class InjectionGuard:
             if not isinstance(response, dict):
                 raise ValueError("MALFORMED_RESPONSE")
 
-            flagged = bool(response.get("flagged", False))
-            score = float(response.get("confidence", 0.0))
-            score = max(0.0, min(1.0, score))
+            flagged = response.get("flagged")
+            score = response.get("confidence")
+            if (
+                type(flagged) is not bool
+                or type(score) not in (int, float)
+                or not 0 <= score <= 1
+                or not math.isfinite(score)
+            ):
+                raise ValueError("MALFORMED_RESPONSE")
+            score = float(score)
 
             return flagged, score, "flagged" if flagged else "safe"
 
         except ValueError:
-            raise ValueError("MALFORMED_RESPONSE")  # noqa: B904
+            raise ValueError("MALFORMED_RESPONSE") from None
         except Exception:
             logger.error("LLM classification network or timeout error.")
             raise Exception("NETWORK_OR_TIMEOUT")  # noqa: B904
