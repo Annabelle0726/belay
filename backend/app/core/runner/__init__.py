@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 
 from app.config import settings
 
+from ._bounded import capture
 from ._utils import cleanup_workdir, collect_artifacts, prepare_workdir, safe_decode
 
 _CHILD = os.path.join(os.path.dirname(__file__), "_child.py")
@@ -106,31 +107,24 @@ def _run_subprocess(
         stdout: str = ""
         stderr: str = ""
 
-        try:
-            proc = subprocess.run(
-                [sys.executable, "-I", _CHILD, prog_path],
-                cwd=workdir,
-                env=env,
-                capture_output=True,
-                text=True,
-                errors="replace",  # Prevent thread crashes from non-UTF-8 output
-                timeout=wall_seconds,
-                start_new_session=True,
-            )
-            exit_code: int | None = proc.returncode
-            stdout = proc.stdout or ""
-            stderr = proc.stderr or ""
-        except subprocess.TimeoutExpired as exc:
-            timed_out = True
-            exit_code = None
-            stdout = safe_decode(exc.stdout)
-            stderr = safe_decode(exc.stderr)
-            error = f"wall timeout after {wall_seconds}s"
+        outcome = capture(
+            [sys.executable, "-I", _CHILD, prog_path],
+            cwd=workdir,
+            env=env,
+            limit=256 * 1024,
+            timeout=wall_seconds,
+        )
+        exit_code = outcome["exit_code"]
+        timed_out = outcome["timed_out"]
+        stdout = safe_decode(outcome["stdout"])
+        stderr = safe_decode(outcome["stderr"])
+        if timed_out or outcome["overflow"]:
+            error = "output limit exceeded" if outcome["overflow"] else "execution timeout"
         wall_ms = round((time.perf_counter() - t0) * 1000, 1)
 
         collected = collect_artifacts(workdir, artifacts or [])
 
-        ok = (not timed_out) and exit_code == 0
+        ok = (not timed_out) and exit_code == 0 and error is None
         return RunnerResult(
             ok=ok,
             exit_code=exit_code,
@@ -205,7 +199,7 @@ def _docker_available() -> bool:
             ["docker", "version", "--format", "{{.Server.Version}}"],
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=15,
         )
         return result.returncode == 0 and bool(result.stdout.strip())
     except (subprocess.SubprocessError, FileNotFoundError, OSError):

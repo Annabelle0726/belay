@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import json
 import os
-import platform
 import subprocess
 import tempfile
 
@@ -26,7 +25,7 @@ import pytest
 from app.config import settings
 from app.core import runner
 from app.core.runner import RunnerResult, run_python
-from conftest import requires_docker
+from tests.sandbox_helpers import requires_docker
 
 # ── sandbox properties ────────────────────────────────────────────────────────
 
@@ -204,30 +203,19 @@ except Exception as e:
 
 
 @pytest.mark.skipif(not settings.sandbox_runner_enabled, reason="Container runner not enabled")
-def test_subprocess_spawn_blocked():
-    """
-    Test that subprocess works but is contained within the container.
-
-    Uses artifacts (file output) instead of stdout, which is more reliable
-    in container environments.
-    """
-    prog = """
-import subprocess
-
-try:
-    result = subprocess.run(["echo", "hello"], capture_output=True, text=True)
-    with open("/output/result.txt", "w") as f:
-        f.write(f"SUBPROCESS_OK: {result.stdout}")
-except Exception as e:
-    with open("/output/result.txt", "w") as f:
-        f.write(f"BLOCKED: {e}")
-"""
-    r = run_python(prog, artifacts=["result.txt"])
-    assert r.ok, f"Process failed: {r.stderr}"
-
-    output = r.artifacts.get("result.txt", "")
-    assert output, f"Expected output in artifacts, got empty (stdout: {r.stdout!r})"
-    assert "SUBPROCESS_OK" in output or "BLOCKED" in output, f"Unexpected output: {output}"
+def test_subprocess_is_contained(tmp_path):
+    sentinel = tmp_path / "host-only.txt"
+    sentinel.write_text("synthetic-host-sentinel")
+    code = "import pathlib; print(pathlib.Path(" + repr(str(sentinel)) + ").exists())"
+    prog = (
+        "import subprocess,sys\np=subprocess.run([sys.executable,'-c',"
+        + repr(code)
+        + "],capture_output=True,text=True)\nprint(p.stdout)"
+    )
+    r = run_python(prog)
+    assert r.ok, r.error
+    assert r.stdout.strip() == "False"
+    assert sentinel.read_text() == "synthetic-host-sentinel"
 
 
 @pytest.mark.skipif(not settings.sandbox_runner_enabled, reason="Container runner not enabled")
@@ -268,11 +256,10 @@ except Exception as e:
 
 
 # ── Fork Bomb Test (Unix only) ──────────────────────────────────────────────
-# This test is skipped on Windows because os.fork() is not available.
+# os.fork runs inside the Linux container on every supported host.
 
 
 @pytest.mark.skipif(not settings.sandbox_runner_enabled, reason="Container runner not enabled")
-@pytest.mark.skipif(platform.system() == "Windows", reason="os.fork() is not available on Windows")
 def test_fork_bomb_capped():
     """
     Bypass: fork bomb can exhaust resources in the old runner.
@@ -312,7 +299,7 @@ fork_bomb()
 def _list_containers() -> list[str]:
     """List all running container names."""
     result = subprocess.run(
-        ["docker", "ps", "--format", "{{.Names}}"],
+        ["docker", "ps", "--filter", "name=ptf-sandbox-", "--format", "{{.Names}}"],
         capture_output=True,
         text=True,
     )
@@ -381,7 +368,8 @@ def test_docker_command_contains_readonly():
 
     assert "--read-only" in cmd_str, "--read-only flag missing"
     assert "/workspace:ro" in cmd_str, "/workspace should be mounted read-only"
-    assert "/output:rw" in cmd_str, "/output should be mounted read-write"
+    assert "/output:rw,size=8m" in cmd_str
+    assert "/tmp/out:/output" not in cmd_str
 
 
 def test_docker_command_contains_tmpfs_tmp():

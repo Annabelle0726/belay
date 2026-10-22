@@ -11,6 +11,7 @@ and verdict spoofing.
 from __future__ import annotations
 
 import json
+import math
 from typing import Any
 
 from app.core import runner
@@ -25,6 +26,16 @@ from contextlib import redirect_stdout, redirect_stderr
 
 MAX_COLLECTION_ITEMS = 10000
 MAX_DEPTH = 8
+
+class BoundedText(io.StringIO):
+    def __init__(self):
+        super().__init__()
+        self.size = 0
+    def write(self, text):
+        self.size += len(text.encode("utf-8"))
+        if self.size > 128 * 1024:
+            raise RuntimeError("student output limit exceeded")
+        return super().write(text)
 
 def to_jsonable(value, depth=0):
     if depth > MAX_DEPTH:
@@ -60,8 +71,8 @@ def to_jsonable(value, depth=0):
 
 def main():
     namespace = {}
-    stdout_buf = io.StringIO()
-    stderr_buf = io.StringIO()
+    stdout_buf = BoundedText()
+    stderr_buf = BoundedText()
     error_msg = None
 
     try:
@@ -91,13 +102,47 @@ def main():
 
     try:
         with open("/output/result.json", "w", encoding="utf-8") as f:
-            json.dump(payload, f)
+            size = 0
+            for chunk in json.JSONEncoder(allow_nan=False).iterencode(payload):
+                size += len(chunk.encode("utf-8"))
+                if size > 1024 * 1024:
+                    raise ValueError("result limit exceeded")
+                f.write(chunk)
     except Exception as exc:
-        sys.stderr.write(f"Failed to write result artifact: {exc}\\n")
+        sys.stderr.write("Result serialization failed\\n")
+        raise SystemExit(1)
 
 if __name__ == "__main__":
     main()
 """
+
+
+def _validate_result(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != {"stdout", "stderr", "error", "vars"}:
+        raise ValueError("invalid result fields")
+    if not isinstance(value["stdout"], str) or not isinstance(value["stderr"], str):
+        raise ValueError("invalid output fields")
+    if value["error"] is not None and not isinstance(value["error"], str):
+        raise ValueError("invalid error field")
+    if not isinstance(value["vars"], dict):
+        raise ValueError("invalid variables")
+    count = 0
+
+    def visit(item: Any, depth: int = 0) -> None:
+        nonlocal count
+        count += 1
+        if count > 20000 or depth > 12:
+            raise ValueError("result structure exceeded")
+        if isinstance(item, float) and not math.isfinite(item):
+            raise ValueError("nonfinite result")
+        if isinstance(item, (list, dict)):
+            if len(item) > 10000:
+                raise ValueError("result collection exceeded")
+            for child in item.values() if isinstance(item, dict) else item:
+                visit(child, depth + 1)
+
+    visit(value)
+    return value
 
 
 def run_student_in_sandbox(
@@ -128,19 +173,24 @@ def run_student_in_sandbox(
     )
 
     result_data = {}
+    valid = False
     if runner_res.ok and runner_res.artifacts.get("result.json"):
         try:
-            result_data = json.loads(runner_res.artifacts["result.json"])
-        except json.JSONDecodeError:
+            raw = runner_res.artifacts["result.json"]
+            if len(raw.encode()) > 3 * 1024 * 1024:
+                raise ValueError("result size exceeded")
+            result_data = _validate_result(json.loads(raw))
+            valid = True
+        except (ValueError, TypeError, RecursionError):
             pass
 
     return {
-        "ok": runner_res.ok,
+        "ok": runner_res.ok and valid,
         "exit_code": runner_res.exit_code,
         "stdout": runner_res.stdout,
         "stderr": runner_res.stderr,
         "timed_out": runner_res.timed_out,
-        "error": runner_res.error,
+        "error": runner_res.error if not runner_res.ok or valid else "invalid structured result",
         "artifacts": runner_res.artifacts,
         "result_data": result_data,
     }

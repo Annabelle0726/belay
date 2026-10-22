@@ -92,19 +92,15 @@ Source: `backend/app/agent/` (`orchestrator.py`, `planner.py`, `reasoner.py`,
 
 ## The sandbox runner
 
-Student code never executes directly in the main process or host OS environment. The runner 
-(`core/runner/run_python`) routes submissions through an isolated Docker container 
-(`core/runner/_sandbox.py`) when enabled, with resource limits (CPU, memory, wall clock) 
-and network blocking applied. When container execution is unavailable, it falls back to a 
-local process with standard limits if explicitly allowed (`SANDBOX_ALLOW_INSECURE=true`).
-
-Grading logic runs safely on the host via pack harnesses (`packs/datascience/_harness.py`), 
-exchanging structured input/output (`result.json`) with student code executing inside 
-the container.
+Student code never executes in the main process. The runner (`core/runner/run_python`)
+routes submissions through a separate child process (`core/runner/_child.py`) that sets
+resource limits (`_set_limits`) and blocks network (`_block_network`), returning a
+structured `RunnerResult`. The datascience grader runs the grading harness through this
+runner.
 
 Source: `backend/app/core/runner/__init__.py` (`run_python`, `RunnerResult`),
-`backend/app/core/runner/_sandbox.py`, `backend/app/core/runner/_harness.py`,
-`backend/app/packs/datascience/_harness.py`, `backend/app/packs/datascience/grader.py`.
+`backend/app/core/runner/_child.py`, `backend/app/packs/datascience/grader.py`,
+`backend/app/packs/datascience/specs/GRADING_SPEC.md`.
 
 ## The governance gate
 
@@ -192,3 +188,8 @@ Source: `backend/app/main.py`, `backend/app/integrations/quad/` (`router.py`, `p
 - Licensing split and per-file SPDX: `LICENSING.md`.
 - Build-phase narrative, test inventory, and the canonical runbook: `VALIDATION.md`.
 - Forward work: `ROADMAP.md`.
+
+
+## CC-B4 sandbox replacement
+
+See `docs/reviews/pr7-sandbox.md` for bounded output, artifact isolation, host grading and real-container acceptance.

@@ -6,16 +6,19 @@ Container-based sandbox for untrusted student code (CC-B4).
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
-import tempfile
 import time
 import uuid
+from pathlib import Path
 
 from . import RunnerResult
-from ._utils import cleanup_workdir, collect_artifacts, prepare_workdir, safe_decode
+from ._artifacts import MAX_ARTIFACT_TOTAL, MAX_ARTIFACTS, parts
+from ._bounded import capture
+from ._utils import cleanup_workdir, prepare_workdir, safe_decode
 
-MAX_RESULT_BYTES = 1 * 1024 * 1024
+MAX_RESULT_BYTES = 8 * 1024 * 1024
 
 
 class ContainerSandbox:
@@ -48,65 +51,124 @@ class ContainerSandbox:
         - No network via --network none
         - Unique container name for reliable cleanup
         """
+        if len(artifacts) > MAX_ARTIFACTS:
+            raise ValueError("artifact count exceeded")
+        for name in artifacts:
+            parts(name)
         workdir = prepare_workdir(program, files, prefix="ptf_container_")
-        output_dir = tempfile.mkdtemp(prefix="ptf_output_")
+        container_name = f"ptf-sandbox-{uuid.uuid4().hex[:12]}"
 
-        container_name = f"ptf-sandbox-{uuid.uuid4().hex[:8]}"
+        def remove():
+            for attempt in range(2):
+                try:
+                    subprocess.run(
+                        ["docker", "rm", "-f", container_name], capture_output=True, timeout=15
+                    )
+                    return
+                except subprocess.TimeoutExpired:
+                    if attempt:
+                        raise RuntimeError("sandbox cleanup unavailable") from None
 
         try:
-            cmd = self._build_docker_command(workdir, output_dir, container_name)
-
-            t0 = time.perf_counter()
-            timed_out = False
-            error: str | None = None
-            stdout: str = ""
-            stderr: str = ""
-            exit_code: int | None = None
-
-            try:
-                result = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    errors="replace",
-                    timeout=self.wall_seconds,
-                )
-                stdout = result.stdout or ""
-                stderr = result.stderr or ""
-                exit_code = result.returncode
-            except subprocess.TimeoutExpired as exc:
-                timed_out = True
-                stdout = safe_decode(exc.stdout)
-                stderr = safe_decode(exc.stderr)
-                error = f"container timeout after {self.wall_seconds}s"
-                subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
-
-            wall_ms = round((time.perf_counter() - t0) * 1000, 1)
-
-            collected = collect_artifacts(output_dir, artifacts)
-
-            if len(stdout) > MAX_RESULT_BYTES:
-                stdout = stdout[:MAX_RESULT_BYTES] + "\n... (output truncated)"
-            if len(stderr) > MAX_RESULT_BYTES:
-                stderr = stderr[:MAX_RESULT_BYTES] + "\n... (output truncated)"
-
-            ok = (not timed_out) and exit_code == 0
-
-            return RunnerResult(
-                ok=ok,
-                exit_code=exit_code,
-                stdout=stdout,
-                stderr=stderr,
-                timed_out=timed_out,
-                wall_ms=wall_ms,
-                error=error,
-                artifacts=collected,
+            directory = Path(__file__).parent
+            helpers = "\n".join(
+                (directory / name).read_text(encoding="utf-8")
+                for name in ["_bounded.py", "_artifacts.py"]
             )
-
+            transport = (directory / "_transport.py").read_text(encoding="utf-8")
+            source = (
+                helpers
+                + "\nCHILD_WALL_SECONDS="
+                + repr(self.wall_seconds)
+                + "\nREQUESTED_ARTIFACTS="
+                + repr(artifacts)
+                + "\n"
+                + transport
+            )
+            Path(workdir, "__transport__.py").write_text(source, encoding="utf-8")
+            os.chmod(Path(workdir, "__transport__.py"), 0o644)
+            t0 = time.perf_counter()
+            result = capture(
+                self._build_docker_command(workdir, "", container_name),
+                limit=MAX_RESULT_BYTES,
+                timeout=self.wall_seconds,
+                stop=remove,
+            )
+            wall_ms = round((time.perf_counter() - t0) * 1000, 1)
+            if result["timed_out"] or result["overflow"]:
+                return RunnerResult(
+                    False,
+                    result["exit_code"],
+                    "",
+                    safe_decode(result["stderr"]),
+                    result["timed_out"],
+                    wall_ms,
+                    "output limit exceeded" if result["overflow"] else "execution timeout",
+                    {},
+                )
+            try:
+                data = json.loads(result["stdout"])
+                if not isinstance(data, dict) or set(data) != {
+                    "exit_code",
+                    "stdout",
+                    "stderr",
+                    "timed_out",
+                    "error",
+                    "artifacts",
+                }:
+                    raise ValueError
+                if (
+                    type(data["exit_code"]) is not int
+                    or type(data["timed_out"]) is not bool
+                    or not isinstance(data["stdout"], str)
+                    or not isinstance(data["stderr"], str)
+                    or data["error"]
+                    not in (
+                        None,
+                        "output limit exceeded",
+                        "execution timeout",
+                        "artifact boundary rejected",
+                    )
+                    or not isinstance(data["artifacts"], dict)
+                    or len(data["artifacts"]) > MAX_ARTIFACTS
+                    or any(
+                        k not in artifacts or not isinstance(v, str)
+                        for k, v in data["artifacts"].items()
+                    )
+                    or sum(len(v.encode()) for v in data["artifacts"].values())
+                    > MAX_ARTIFACT_TOTAL * 3
+                    or len(data["stdout"].encode()) + len(data["stderr"].encode()) > 256 * 1024 * 3
+                ):
+                    raise ValueError
+            except (ValueError, TypeError):
+                return RunnerResult(
+                    False,
+                    result["exit_code"],
+                    "",
+                    safe_decode(result["stderr"]),
+                    False,
+                    wall_ms,
+                    "invalid execution envelope",
+                    {},
+                )
+            return RunnerResult(
+                result["exit_code"] == 0
+                and data["exit_code"] == 0
+                and not data["timed_out"]
+                and data["error"] is None,
+                data["exit_code"],
+                data["stdout"],
+                data["stderr"],
+                data["timed_out"],
+                wall_ms,
+                data["error"],
+                data["artifacts"],
+            )
         finally:
-            subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
-            cleanup_workdir(workdir)
-            cleanup_workdir(output_dir)
+            try:
+                remove()
+            finally:
+                cleanup_workdir(workdir)
 
     def _build_docker_command(
         self, workdir: str, output_dir: str, container_name: str
@@ -127,7 +189,7 @@ class ContainerSandbox:
         """
         image = "belay-sandbox:0.1.0"
 
-        uid = os.getuid() if hasattr(os, "getuid") else 1000
+        uid = (os.getuid() or 65534) if hasattr(os, "getuid") else 1000
         gid = os.getgid() if hasattr(os, "getgid") else 1000
 
         cmd = [
@@ -159,8 +221,8 @@ class ContainerSandbox:
             container_name,
             "-v",
             f"{workdir}:/workspace:ro",
-            "-v",
-            f"{output_dir}:/output:rw",
+            "--tmpfs",
+            "/output:rw,size=8m,mode=1777,nodev,nosuid,noexec",
             "-w",
             "/workspace",
         ]
@@ -174,7 +236,7 @@ class ContainerSandbox:
                 "python",
                 "-u",
                 "-I",
-                "/workspace/__program__.py",
+                "/workspace/__transport__.py",
             ]
         )
 

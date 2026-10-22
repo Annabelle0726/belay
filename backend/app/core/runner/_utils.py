@@ -4,6 +4,8 @@ import os
 import shutil
 import tempfile
 
+from ._artifacts import collect_safe, parts
+
 
 def safe_decode(data: bytes | str | None) -> str:
     """Safely decode subprocess output to string, replacing invalid characters."""
@@ -17,26 +19,25 @@ def _write_files_to_dir(workdir: str, program: str, files: dict[str, str | bytes
     Internal helper: write program and files to a directory.
     Sets appropriate permissions for container compatibility.
     """
-    # Write program
-    prog_path = os.path.join(workdir, "__program__.py")
-    with open(prog_path, "w", encoding="utf-8") as fh:
-        fh.write(program)
-    os.chmod(prog_path, 0o644)
-
-    # Write additional files
+    if len(program.encode()) > 1024 * 1024:
+        raise ValueError("program limit exceeded")
+    size = len(program.encode())
     for name, content in (files or {}).items():
-        dest = os.path.join(workdir, name)
-        parent = os.path.dirname(dest)
-        if parent:
-            os.makedirs(parent, exist_ok=True)
-            os.chmod(parent, 0o777)
-        if isinstance(content, bytes):
-            with open(dest, "wb") as fh:
-                fh.write(content)
-        else:
-            with open(dest, "w", encoding="utf-8") as fh:
-                fh.write(content)
-        os.chmod(dest, 0o644)
+        parts(name)
+        if name in {"__program__.py", "__transport__.py"}:
+            raise ValueError("reserved input path")
+        size += len(content.encode()) if isinstance(content, str) else len(content)
+        if size > 4 * 1024 * 1024:
+            raise ValueError("input file limit exceeded")
+    with open(os.path.join(workdir, "__program__.py"), "w", encoding="utf-8") as stream:
+        stream.write(program)
+    os.chmod(os.path.join(workdir, "__program__.py"), 0o644)
+    for name, content in (files or {}).items():
+        destination = os.path.join(workdir, *parts(name))
+        os.makedirs(os.path.dirname(destination), mode=0o755, exist_ok=True)
+        with open(destination, "wb") as stream:
+            stream.write(content.encode() if isinstance(content, str) else content)
+        os.chmod(destination, 0o644)
 
 
 def prepare_workdir(
@@ -52,11 +53,14 @@ def prepare_workdir(
     """
     workdir = tempfile.mkdtemp(prefix=prefix)
     # Allow all users to read/write/execute (for container mount compatibility)
-    os.chmod(workdir, 0o777)
+    os.chmod(workdir, 0o755)
 
-    _write_files_to_dir(workdir, program, files)
-
-    return workdir
+    try:
+        _write_files_to_dir(workdir, program, files)
+        return workdir
+    except Exception:
+        cleanup_workdir(workdir)
+        raise
 
 
 def write_program_to_dir(
@@ -73,17 +77,8 @@ def write_program_to_dir(
 
 
 def collect_artifacts(workdir: str, artifacts: list[str]) -> dict[str, str]:
-    """Collect artifact files from the workdir."""
-    collected: dict[str, str] = {}
-    for name in artifacts or []:
-        path = os.path.join(workdir, name)
-        if os.path.exists(path):
-            try:
-                with open(path, encoding="utf-8", errors="replace") as fh:
-                    collected[name] = fh.read()
-            except OSError:
-                pass
-    return collected
+    """Collect only bounded regular files through descriptor-relative access."""
+    return collect_safe(workdir, artifacts or [])
 
 
 def cleanup_workdir(workdir: str) -> None:
