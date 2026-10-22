@@ -110,12 +110,7 @@ It is supreme over everything, including a student goal that demands the answer.
 - **Leak gate** (`governance.check`, `governance.safe_rewrite`): the no-leak rule is an
   executable gate, not a prompt instruction. Leak detection has a ground-truth oracle (the
   pack's grader plus the known solution via `pack.leak_evidence`), so the gate decides
-  post-hoc and strips any full solution. Two evidence signals feed the one decision:
-  `is_solution` (the drafted code runs and meets the exercise goal) and `prose_disclosure`
-  (the prose names the answer). `safe_rewrite` therefore re-checks its **own output** with
-  that same oracle: a prose disclosure has no code to strip, so redaction alone would have
-  delivered the answer after a block that fired correctly, and the rewrite falls back to the
-  redirect alone when the remaining prose is what discloses.
+  post-hoc and strips any full solution.
 - **Leak-over-retrieval** (`governance.screen_passages`): every retrieved KB passage runs
   through the same `pack.leak_evidence` oracle before it can enter tutor context; any
   solution-bearing passage is dropped (id + reason recorded, never the leaking text).
@@ -141,19 +136,10 @@ rationale alone:
   `dl.acm.org/doi/10.1145/3641554.3701945`). Direct empirical evidence for why this gate is
   a ground-truth oracle and not a system-prompt instruction.
 - **"Evaluating Answer Leakage Robustness of LLM Tutors against Adversarial Student
-  Attacks"** (arXiv:2604.18660v1) builds a fine-tuned adversarial-student-agent
-  benchmark for jailbreaking tutors into leaking answers. Its **attack taxonomy** is now
-  reproduced here as a scripted regression suite (`backend/tests/adversarial/`,
-  `backend/tests/test_adversarial_leak.py`, prompt
-  `docs/prompts/CC-B2-adversarial-leak-benchmark.md`): the paper's six techniques run
-  through the real `run_turn` pipeline against a compromised-tutor double that hands over the
-  exercise's actual reference solution, and any leak fails the suite — with a *blocked* attack
-  (the gate rewrote the leak away) counted as success, not as a leak. What is *not* reproduced
-  is the paper's methodology end to end — its adversary SEARCHES for a winning strategy and is
-  fine-tuned, whereas these turns are fixed and the hand-off is scripted — so the suite
-  measures the GATE under load, not how often a real aligned model yields. See VALIDATION.md,
-  "CC-B2 — adversarial leak-gate regression benchmark", for the coverage statement and the real
-  defects the benchmark found in the gate it was testing.
+  Attacks"** (ACL 2026, arXiv 2604.18660) builds a fine-tuned adversarial-student-agent
+  benchmark for jailbreaking tutors into leaking answers — the reference methodology for
+  a regression suite against this gate. Not yet built here; queued as
+  `docs/prompts/CC-B2-adversarial-leak-benchmark.md`.
 - **"Auditable Release Control for Pedagogical Leakage in LLM Tutors"** (arXiv 2608.00515)
   describes a modular disclosure-control system — deterministic fast-checker plus optional
   semantic verifier, a graduated 5-level disclosure contract (A₀–A₄), fail-safe fallback on
@@ -202,3 +188,10 @@ Source: `backend/app/main.py`, `backend/app/integrations/quad/` (`router.py`, `p
 - Licensing split and per-file SPDX: `LICENSING.md`.
 - Build-phase narrative, test inventory, and the canonical runbook: `VALIDATION.md`.
 - Forward work: `ROADMAP.md`.
+
+
+## CC-B2 adversarial benchmark repair
+
+The benchmark evaluates final learner-visible output with scripted model doubles,
+including a governance-bypass mutation control. Narrow withholding exemptions
+retain affirmative prose-disclosure detection. See [review](docs/reviews/pr10-denial-scope.md).
