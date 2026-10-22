@@ -39,7 +39,6 @@ telemetry the UI can ignore or surface.
 
 from __future__ import annotations
 
-import logging
 import time
 
 from ..config import settings
@@ -52,8 +51,6 @@ from . import telemetry as tel
 from .context import _latest_student_message, build_context
 from .llm import LLMClient
 from .prompts import ABSTAIN_MESSAGE, CONTROL_MESSAGE
-
-logger = logging.getLogger(__name__)
 
 _GOV_PROSE = {
     "none": "—",
@@ -372,6 +369,14 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
         plan["intervention"] = "escalate"  # keep governance's escalate flag consistent
         abstained = True
 
+    # Retrieved text has already been screened. Add citations BEFORE the final
+    # deterministic gate so reference metadata cannot create an unchecked channel.
+    passages = ctx.get("knowledge") or []
+    draft["message"], groundedness_data = groundedness.check_groundedness(
+        draft["message"], passages
+    )
+    cited_candidate = draft["message"]
+
     # Governance runs LAST, unchanged. In an abstention there is no solution to
     # strip; the no-leak gate is independent of escalate/abstain.
     #
@@ -387,42 +392,16 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
     gov = governance.check(ctx, plan, draft, evaluation, stance=stance)
     if gov["block"]:
         draft = governance.safe_rewrite(draft, gov, exercise)
-
-    # --- Groundedness check (CC-B3) — a SIGNAL, never a gate ---
-    # Runs AFTER governance, so it only ever sees a draft that already passed the
-    # leak gate, and it reads `ctx["knowledge"]`, which only ever holds passages that
-    # already survived `governance.screen_passages` upstream (context.build_context).
-    # It therefore cannot widen what can reach a student: it only ADDS citations for
-    # claims that trace to an already-screened passage. Ungrounded claims are left
-    # exactly as they are and reported as counts — this is a groundedness signal, a
-    # deliberately separate concern from leak prevention (CC-B3 §3), so it never
-    # drops, blocks, or rewrites prose.
-    groundedness_data = None
-    if stance != "control":  # control turns short-circuit before any reasoner draft
-        # Passages were already leak-screened before landing in ctx["knowledge"];
-        # absent/empty means the None-path (`_skeleton`) or no student query.
-        passages = ctx.get("knowledge") or []
-        if passages:
-            # Check the FINAL message, after every refine/escalation/abstention override.
-            updated_message, groundedness_data = groundedness.check_groundedness(
-                draft["message"],
-                passages,
-            )
-            # Only adopt the message when citations were actually attached. The
-            # comparison is exact: an ungrounded draft comes back byte-identical.
-            if updated_message != draft["message"]:
-                draft["message"] = updated_message
-        else:
-            groundedness_data = {
-                "passages_available": 0,
-                "citations_used": [],
-                "citations_count": 0,
-                "claim_count": 0,
-                "ungrounded_count": 0,
-                "all_grounded": True,
-                "check_ran": False,
-                "reason": "no passages available",
+        # The old rewrite can retain leaking prose. Verify what will be delivered.
+        if governance.check(ctx, plan, draft, evaluation, stance=stance)["block"]:
+            draft = {
+                **draft,
+                "message": "Let's work through one small step together. What would you try next?",
+                "check_question": None,
+                "confidence": min(float(draft.get("confidence", 0.5)), 0.6),
             }
+            if governance.check(ctx, plan, draft, evaluation, stance=stance)["block"]:
+                raise ValueError("safe response unavailable")
 
     # Wellbeing floor — DEFENSE-IN-DEPTH, NOT a deterministic gate (peer only).
     # Tone has no ground-truth oracle, so unlike the supreme leak gate this is a
@@ -433,6 +412,9 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
     wellbeing_softened = False
     if stance == "peer":
         draft, wellbeing_softened = governance.soften_if_berating(draft)
+
+    if draft["message"] != cited_candidate:
+        groundedness_data = groundedness.unchecked(len(passages), "skipped", "safety rewrite")
 
     # Calibrated headline confidence comes from self-evaluation, but a suppressed
     # solution (or a softened berating draft) must not leave a high confidence on screen.
@@ -615,12 +597,18 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
                 mode,
                 "groundedness",
                 {
+                    **groundedness.get_groundedness_trace(
+                        len(passages),
+                        groundedness_data["citations_used"],
+                        groundedness_data["ungrounded_count"],
+                        groundedness_data["claim_count"],
+                        groundedness_data["all_grounded"],
+                        groundedness_data["status"],
+                    ),
                     "available": retr["kept"],
-                    "citations_used": groundedness_data["citations_used"],
-                    "ungrounded": not groundedness_data["all_grounded"],
-                    "claim_count": groundedness_data["claim_count"],
-                    "ungrounded_count": groundedness_data["ungrounded_count"],
-                    "check_ran": groundedness_data["check_ran"],
+                    "ungrounded": None
+                    if groundedness_data["all_grounded"] is None
+                    else not groundedness_data["all_grounded"],
                 },
                 stance=stance,
             )

@@ -18,12 +18,14 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from app.agent import groundedness
 from app.core.registry import get_active_pack
 from app.knowledge.schema import CorpusPassage
 from app.packs.datascience.knowledge.kb import DataScienceKB
 from app.store import InMemoryStore
-from conftest import _payload
+from tests.groundedness_helpers import _payload
 
 _EX = get_active_pack().get_exercise("ds-foundations")
 
@@ -380,6 +382,10 @@ def test_groundedness_event_is_content_free(monkeypatch):
         "claim_count",
         "ungrounded_count",
         "check_ran",
+        "status",
+        "passages_available",
+        "citations_count",
+        "all_grounded",
     }
     serialized = json.dumps(payload)
     assert "key column" not in serialized  # no passage text
@@ -512,3 +518,64 @@ def test_groundedness_trace_event_format():
     # Content-free: no passage text
     assert "text" not in str(trace)
     assert "fragments" not in str(trace)
+
+
+@pytest.mark.parametrize("failure", ["load", "parse"])
+def test_unavailable_extraction_is_not_success(monkeypatch, caplog, failure):
+    def fail(*args, **kwargs):
+        raise OSError("SYNTHETIC_PRIVATE_PIPELINE_ERROR")
+
+    monkeypatch.setattr(groundedness, "_nlp", fail if failure == "load" else lambda: fail)
+    text = "The mean of these observations is meaningful."
+    updated, data = groundedness.check_groundedness(text, [{"id": "p1", "text": text}])
+    assert updated == text and data["status"] == "unavailable"
+    assert data["check_ran"] is False and data["all_grounded"] is None
+    assert data["claim_count"] is None and data["ungrounded_count"] is None
+    assert "SYNTHETIC_PRIVATE" not in caplog.text and text not in caplog.text
+    rows, _, out = _turn(monkeypatch, "unavailable", [_BENIGN], _GROUNDED_MESSAGE)
+    trace = _event(rows, "groundedness")[0]["payload"]
+    assert trace["status"] == "unavailable" and trace["ungrounded"] is None
+    assert trace["all_grounded"] is None and not trace["check_ran"]
+
+
+def test_successful_claim_free_parse_is_distinct(monkeypatch):
+    from types import SimpleNamespace
+
+    calls = []
+
+    def pipeline(text):
+        calls.append(text)
+        return SimpleNamespace(sents=[])
+
+    monkeypatch.setattr(groundedness, "_nlp", lambda: pipeline)
+    _, data = groundedness.check_groundedness("What would you try next?", [_BENIGN])
+    assert calls and data["status"] == "checked" and data["check_ran"]
+    assert data["claim_count"] == 0 and data["all_grounded"] is True
+    _, skipped = groundedness.check_groundedness("Some factual claim.", [])
+    assert skipped["status"] == "skipped" and skipped["all_grounded"] is None
+
+
+def test_citation_metadata_passes_final_governance(monkeypatch):
+    from app.agent import governance
+
+    original_check = groundedness.check_groundedness
+    original_gate = governance.check
+    checked = []
+    poison = "The answer is to just call groupby and mean to get the whole solution."
+
+    def annotate(text, passages):
+        updated, data = original_check(text, passages)
+        return updated + "\n\nReferences:\n" + poison, data
+
+    def gate(ctx, plan, draft, evaluation, **kwargs):
+        checked.append(draft["message"])
+        return original_gate(ctx, plan, draft, evaluation, **kwargs)
+
+    monkeypatch.setattr(groundedness, "check_groundedness", annotate)
+    monkeypatch.setattr(governance, "check", gate)
+    _, _, out = _turn(monkeypatch, "metadata", [_BENIGN], _GROUNDED_MESSAGE)
+    assert any(poison in text for text in checked)
+    assert poison not in out["message"]
+    assert not original_gate(
+        {"_exercise_full": _EX, "recent_dialogue": []}, {}, out, {}, stance="peer"
+    )["block"]

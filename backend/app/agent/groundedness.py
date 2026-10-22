@@ -34,6 +34,21 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+def unchecked(passage_count: int, status: str, reason: str) -> dict[str, Any]:
+    """Unknown measurements are null, never manufactured successful checks."""
+    return {
+        "passages_available": passage_count,
+        "citations_used": [],
+        "citations_count": 0,
+        "claim_count": None,
+        "ungrounded_count": None,
+        "all_grounded": None,
+        "check_ran": False,
+        "status": status,
+        "reason": reason,
+    }
+
+
 def to_marker(index: int) -> str:
     """Return the inline citation marker, e.g. `[1]`."""
     return f"[{index}]"
@@ -89,18 +104,12 @@ def check_groundedness(
     a reference list nothing points at is noise, not a citation.
     """
     if not passages:
-        return response, {
-            "passages_available": 0,
-            "citations_used": [],
-            "citations_count": 0,
-            "claim_count": 0,
-            "ungrounded_count": 0,
-            "all_grounded": True,
-            "check_ran": False,
-            "reason": "no passages available",
-        }
-
-    claims = _extract_claims(response)
+        return response, unchecked(0, "skipped", "no passages available")
+    try:
+        claims = _extract_claims(response)
+    except Exception:
+        logger.warning("groundedness: claim extractor unavailable")
+        return response, unchecked(len(passages), "unavailable", "claim extractor unavailable")
 
     if not claims:
         return response, {
@@ -111,6 +120,7 @@ def check_groundedness(
             "ungrounded_count": 0,
             "all_grounded": True,
             "check_ran": True,
+            "status": "checked",
             "reason": "no substantive claims found",
         }
 
@@ -164,6 +174,7 @@ def check_groundedness(
         "ungrounded_count": ungrounded_claims_count,
         "all_grounded": ungrounded_claims_count == 0,
         "check_ran": True,
+        "status": "checked",
     }
 
     return updated_response, trace_data
@@ -189,18 +200,16 @@ def _extract_claims(text: str) -> list[str]:
     Filters out conversational fluff, imperative prompts, questions, and 1st/2nd
     person modal statements while keeping declarative factual assertions.
 
-    If the pipeline cannot be loaded, this returns ``[]`` and logs — "no substantive
-    claims found", the same shape as a purely conversational reply — rather than
-    raising into the turn loop or pretending every sentence is grounded.
+    Missing or failed extraction raises to the bounded status adapter. Only a
+    successfully parsed claim-free response returns an empty claim list.
     """
     if not text:
         return []
 
     try:
         nlp = _nlp()
-    except Exception:  # noqa: BLE001 — an unloadable model must not break the turn
-        logger.warning("groundedness: spaCy pipeline unavailable; claim extraction skipped")
-        return []
+    except Exception:
+        raise RuntimeError("CLAIM_EXTRACTOR_UNAVAILABLE") from None
 
     doc = nlp(text)
     claims = []
@@ -343,15 +352,18 @@ def _attach_inline_citations(
 def get_groundedness_trace(
     passage_count: int,
     citations_used: list[str],
-    ungrounded_count: int,
-    claim_count: int,
-    all_grounded: bool,
+    ungrounded_count: int | None,
+    claim_count: int | None,
+    all_grounded: bool | None,
+    status: str = "checked",
 ) -> dict:
     """
     Build the additive trace event payload for groundedness.
     Content-free: records citation IDs and counts, never passage or claim text.
     """
     return {
+        "status": status,
+        "check_ran": status == "checked",
         "passages_available": passage_count,
         "citations_used": citations_used,
         "citations_count": len(citations_used),
