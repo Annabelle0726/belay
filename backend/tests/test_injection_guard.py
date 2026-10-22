@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from app.agent import run_turn
 from app.agent.injection_guard import InjectionGuard, get_guard
 from app.agent.orchestrator import _injection_turn
@@ -167,7 +169,8 @@ def test_handles_malformed_json_response(monkeypatch):
 
     verdict = guard.check("test")
     assert verdict.flagged is False
-    assert verdict.status == "safe"  # If keys are missing, we default get() to False
+    assert verdict.status == "malformed"
+    assert verdict.error_category == "MALFORMED_JSON"
 
 
 def test_handles_non_dict_response(monkeypatch):
@@ -324,3 +327,75 @@ def test_disabled_guard_adds_nothing_to_a_control_turn(monkeypatch):
 
     assert "injection" not in out["components"]
     assert "injection" not in _events(store, "p_ctrl_off")[0]["payload"]["telemetry"]
+
+
+INVALID_VERDICTS = [
+    None,
+    [],
+    {},
+    {"flagged": False},
+    {"confidence": 0.1},
+    {"flagged": "false", "confidence": 0.1},
+    {"flagged": 0, "confidence": 0.1},
+    {"flagged": None, "confidence": 0.1},
+    {"flagged": False, "confidence": "0.1"},
+    {"flagged": False, "confidence": True},
+    {"flagged": False, "confidence": None},
+    {"flagged": False, "confidence": float("nan")},
+    {"flagged": False, "confidence": float("inf")},
+    {"flagged": False, "confidence": float("-inf")},
+    {"flagged": False, "confidence": -0.01},
+    {"flagged": False, "confidence": 1.01},
+    {"flagged": False, "confidence": 10**1000},
+]
+
+
+@pytest.mark.parametrize("response", INVALID_VERDICTS)
+@pytest.mark.parametrize("stance", ["peer", "control"])
+def test_malformed_classifier_stays_malformed_through_turn(monkeypatch, caplog, response, stance):
+    from app.agent import governance
+
+    _enable_guard(monkeypatch)
+    _reset_guard_singleton(monkeypatch)
+    client = MagicMock()
+    client.return_value.json.return_value = response
+    monkeypatch.setattr("app.agent.injection_guard.SovereignLLMClient", client)
+    checked = []
+    original = governance.check
+
+    def check(*args, **kwargs):
+        checked.append(True)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(governance, "check", check)
+    store = InMemoryStore()
+    text = "SYNTHETIC_PRIVATE_CLASSIFIER_INPUT"
+    out = run_turn(_payload("malformed", text, stance=stance), _CallStub(), store)
+    verdict = out["components"]["injection"]
+    assert verdict == {
+        "triggered": False,
+        "status": "malformed",
+        "score": 0.0,
+        "model": "llama-3-8b-instruct",
+        "error_category": "MALFORMED_JSON",
+    }
+    trace = store.export_jsonl("malformed")
+    assert '"status": "malformed"' in trace or '"status":"malformed"' in trace
+    assert text not in trace and text not in caplog.text
+    assert checked == ([True] if stance == "peer" else [])
+    assert out["message"]
+
+
+@pytest.mark.parametrize("flagged", [False, True])
+@pytest.mark.parametrize("confidence", [0, 0.5, 1])
+def test_strict_classifier_accepts_valid_boundaries(monkeypatch, flagged, confidence):
+    _enable_guard(monkeypatch)
+    guard = InjectionGuard()
+    guard._initialized = True
+    client = MagicMock()
+    client.json.return_value = {"flagged": flagged, "confidence": confidence}
+    guard._llm = client
+    verdict = guard.check("Synthetic")
+    assert verdict.flagged is flagged
+    assert verdict.score == confidence
+    assert verdict.status == ("flagged" if flagged else "safe")
