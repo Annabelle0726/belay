@@ -21,17 +21,12 @@ schedule or a commitment.
   the draft gate's own tests. ACL 2026's adversarial-student-agent methodology
   (arXiv 2604.18660) is a reusable reference design for one. Queued:
   `docs/prompts/CC-B2-adversarial-leak-benchmark.md`.
-- **Citation-grounded retrieval answers — DONE (CC-B3, Slice P).** The tutor's generated
-  answer is now checked post-generation against the passages that survived
-  `governance.screen_passages`: grounded claims get `Passage.citation` attached inline plus
-  a trailing `References:` block, and ungrounded claims are left untouched while the
-  additive `groundedness` trace event records the gap (ids + counts only). The check runs
-  in addition to the leak gate and opens no new path for a passage to reach a student.
-  Source: `backend/app/agent/groundedness.py`, `backend/app/agent/orchestrator.py`,
-  `backend/tests/test_groundedness.py`, `VALIDATION.md` Slice P.
-  Remaining edge: the claim extractor is a dependency-parsing heuristic, so a response
-  written entirely in imperative/prompt form yields no claims to check (recorded rather
-  than silently passed as grounded) — a stronger entailment check is a future option.
+- **Citation-grounded retrieval answers.** The datascience KB (`kb.py`) retrieves passages
+  but nothing constrains or attributes the tutor's generated answer back to a specific
+  retrieved passage — the "retrieve first, generate second, cite every claim" pattern
+  Perplexity's Sonar/Internal Knowledge Search popularized, buildable locally on the
+  existing hermetic corpus with no vendor dependency. Queued:
+  `docs/prompts/CC-B3-citation-grounded-retrieval.md`.
 - **Reasoner-prompt de-quantum.** The live reasoner prompt still carries quantum-shaped
   worked-example guidance (the DSL op list, the `expected_dist` / bitstring schema). The
   DS-shaped prompt is deferred; it is eval-gated because a prompt change alters model
@@ -125,3 +120,10 @@ schedule or a commitment.
 - As-built privacy and distress safety: `PRIVACY.md`.
 - System architecture: `ARCHITECTURE.md`.
 - Build-phase narrative and the canonical runbook: `VALIDATION.md`.
+
+
+## CC-B3 grounding repair
+
+Citation annotation precedes final governance. Checked, skipped and unavailable
+extraction have distinct status and unknown measurements remain null. Runtime
+NLP dependencies are pinned. See [review](docs/reviews/pr5-grounding.md).
