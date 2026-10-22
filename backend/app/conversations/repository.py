@@ -19,7 +19,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..agent.reply_context import reply_metadata
-from ..auth import Identity, denied
+from ..auth import Identity, check_receipt, denied
 from .bounds import wire_size
 from .ledger import DeletionLedger
 from .models import Bucket, Conversation, Message, SchemaVersion, Turn
@@ -219,6 +219,15 @@ class ConversationStore:
                 status = turn.status if turn else "failed"
                 if status == "pending" and row.pending_until <= int(self.clock()):
                     status = "failed"
+                if identity.subject and msg.role == "assistant":
+                    check_receipt(
+                        replace(
+                            identity,
+                            exercise_id=row.exercise_id,
+                            exercise_version=row.exercise_version,
+                        ),
+                        (turn.response or {}).get("_authorization") if turn else None,
+                    )
                 item = {
                     "sequence": msg.sequence,
                     "request_id": msg.request_id,
@@ -268,6 +277,8 @@ class ConversationStore:
                 or message.text == "[This exchange was not saved.]"
             ):
                 raise denied()
+            if identity.subject:
+                check_receipt(identity, (turn.response or {}).get("_authorization"))
             ref = {"conversation_id": cid, "request_id": request_id}
             return {
                 **reply_metadata(ref, message.text),
@@ -290,6 +301,13 @@ class ConversationStore:
                 .order_by(Message.sequence.desc())
                 .limit(self.policy.max_messages)
             ).all()
+            if identity.subject:
+                for message in rows:
+                    if message.role == "assistant":
+                        turn = session.get(Turn, (cid, message.request_id))
+                        check_receipt(
+                            identity, (turn.response or {}).get("_authorization") if turn else None
+                        )
             return [{"role": m.role, "text": m.text} for m in reversed(rows)]
 
     def begin(
@@ -321,7 +339,10 @@ class ConversationStore:
                 if existing.digest != signature:
                     raise HTTPException(409, "request identifier reused with different input")
                 if existing.status == "completed":
-                    return dict(existing.response or {})
+                    result = dict(existing.response or {})
+                    if identity.subject:
+                        check_receipt(identity, result.pop("_authorization", None))
+                    return result
                 if existing.status == "pending" and row.pending_until <= int(self.clock()):
                     existing.status = "failed"
                     row.pending_id = None
@@ -377,6 +398,7 @@ class ConversationStore:
         response: dict,
         *,
         connection: Connection | None = None,
+        authorization: dict | None = None,
     ) -> dict:
         self._ready()
         message = response["message"]
@@ -393,7 +415,10 @@ class ConversationStore:
             row = self._owned(session, identity, cid)
             prior = session.get(Turn, (cid, request_id))
             if connection is not None and prior is not None and prior.status == "completed":
-                return dict(prior.response or {})
+                result = dict(prior.response or {})
+                if identity.subject:
+                    check_receipt(identity, result.pop("_authorization", None))
+                return result
             if row.pending_id != request_id or row.pending_until <= int(self.clock()):
                 raise HTTPException(409, "turn lease is no longer valid")
             turn = session.get(Turn, (cid, request_id))
@@ -411,11 +436,12 @@ class ConversationStore:
             }
             if (turn.response or {}).get("reply_to"):
                 result["reply_to"] = turn.response["reply_to"]
-            retained_size = len(text.encode()) + wire_size(result)
+            stored = {**result, "_authorization": authorization} if authorization else result
+            retained_size = len(text.encode()) + wire_size(stored)
             if row.byte_count + retained_size > self.policy.max_stored_bytes:
                 raise HTTPException(409, "conversation storage limit reached")
             row.byte_count += retained_size
-            turn.response = result
+            turn.response = stored
             session.add(
                 Message(
                     id=uuid.uuid4().hex,

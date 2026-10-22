@@ -66,14 +66,65 @@ _GOV_PROSE = {
 
 
 def _control_turn(
-    payload: dict, ctx: dict, store: Store, pid: str, exercise: dict, mode: str, pack
+    payload: dict,
+    ctx: dict,
+    store: Store,
+    pid: str,
+    exercise: dict,
+    mode: str,
+    pack,
+    injection_telemetry: dict | None = None,
 ) -> dict:
     """Bypass the peer loop for the control condition.
 
     No planner/reasoner/self_eval calls are made. A fixed support message is
     returned and a trace event is emitted so condition integrity is auditable.
+
+    The CC-B1 injection screen runs BEFORE the stance dispatch, so a control turn already
+    computed a verdict; ``injection_telemetry`` carries it here for the same reason the
+    ordinary turn path carries it — the "every enabled check is recorded" guarantee has no
+    stance exemption, and a control turn must not be the one turn whose check left no
+    record.
     """
     learner = store.get_learner_state(pid)
+    components = {
+        "planner": {"target_concept": "—"},
+        "reasoner": {"raw_confidence": 1.0},
+        "self_eval": {"leak_risk": "none", "reasons": []},
+        "governance": {"prose": "—", "blocked": False, "reasons": []},
+        # Wellbeing softener never runs in control (no reasoner draft).
+        "wellbeing_softened": False,
+        # No overlay is consulted in control (no reasoner); nothing declined here.
+        "overlay_declined": [],
+        "refines": 0,
+        # Step 3 telemetry — no loop ran, so these are null/false by design.
+        "reasoning_effort": None,
+        "escalated": False,
+        "abstained": False,
+        "confidence_trajectory": {"planner": None, "reasoner": None, "self_eval": None},
+        # F6 exploratory telemetry — always null for control (no reasoner).
+        "misconception_id": None,
+        # Self-verifying worked examples — null for control (no reasoner).
+        "worked_example": None,
+        # Persistent learner model — null for control (no loop).
+        "learner_model": None,
+        "timings_ms": {},
+        # Per-component usage (additive §6): control runs no LLM calls.
+        "component_usage": {},
+        "model_tiers": settings.model_tiers,
+        # §6 pack-agnostic envelope: pack id + generic execution provider
+        # (replaces a former domain-specific execution-backend telemetry field).
+        "pack": pack.id,
+        "provider": settings.provider,
+        "stance": "control",
+    }
+
+    # CC-B1: an enabled injection check that did NOT flag is still recorded — content-free
+    # (bounded status/score/model only, never the learner's message), appended last so the
+    # disabled path keeps the exact key set and order it had before this layer existed.
+    if injection_telemetry:
+        components["injection"] = injection_telemetry
+
     final = {
         "affective_state": "curious",
         "affect_reasoning": "control condition — no peer loop",
@@ -85,37 +136,7 @@ def _control_turn(
         "memory": {"grasped": learner.get("grasped", []), "shaky": learner.get("shaky", [])},
         "message": CONTROL_MESSAGE,
         "check_question": None,
-        "components": {
-            "planner": {"target_concept": "—"},
-            "reasoner": {"raw_confidence": 1.0},
-            "self_eval": {"leak_risk": "none", "reasons": []},
-            "governance": {"prose": "—", "blocked": False, "reasons": []},
-            # Wellbeing softener never runs in control (no reasoner draft).
-            "wellbeing_softened": False,
-            # No overlay is consulted in control (no reasoner); nothing declined here.
-            "overlay_declined": [],
-            "refines": 0,
-            # Step 3 telemetry — no loop ran, so these are null/false by design.
-            "reasoning_effort": None,
-            "escalated": False,
-            "abstained": False,
-            "confidence_trajectory": {"planner": None, "reasoner": None, "self_eval": None},
-            # F6 exploratory telemetry — always null for control (no reasoner).
-            "misconception_id": None,
-            # Self-verifying worked examples — null for control (no reasoner).
-            "worked_example": None,
-            # Persistent learner model — null for control (no loop).
-            "learner_model": None,
-            "timings_ms": {},
-            # Per-component usage (additive §6): control runs no LLM calls.
-            "component_usage": {},
-            "model_tiers": settings.model_tiers,
-            # §6 pack-agnostic envelope: pack id + generic execution provider
-            # (replaces a former domain-specific execution-backend telemetry field).
-            "pack": pack.id,
-            "provider": settings.provider,
-            "stance": "control",
-        },
+        "components": components,
     }
     trace = {
         "event": ctx["event"],
@@ -208,6 +229,17 @@ def _injection_turn(
     call. Surfaces a neutral frame that routes to human review and suppresses
     normal tutoring. Content-free tracing only."""
     learner = store.get_learner_state(pid)
+
+    # Bounded injection telemetry
+    injection_data = {
+        "triggered": True,
+        "status": verdict.status,
+        "score": verdict.score,
+        "model": verdict.model_used,
+    }
+    if verdict.error_category:
+        injection_data["error_category"] = verdict.error_category
+
     final = {
         "affective_state": "neutral",
         "affect_reasoning": "injection signal — flagged for instructor review; tutoring paused",
@@ -230,12 +262,8 @@ def _injection_turn(
             },
             "wellbeing_softened": False,
             "overlay_declined": [],
-            # Content-free injection signal (no text, no PII)
-            "injection": {
-                "triggered": True,
-                "score": verdict.score,
-                "model": verdict.model_used,
-            },
+            # Content-free injection signal (no text, no PII, no raw exception)
+            "injection": injection_data,
             "refines": 0,
             "reasoning_effort": None,
             "escalated": True,
@@ -252,14 +280,14 @@ def _injection_turn(
             "stance": stance,
         },
     }
-    # Trace the injection event (content-free: only verdict, never the text)
+    # Trace the injection event (content-free: verdict parameters only, never student text)
     store.append_event(
         make_event(
             pid,
             exercise["id"],
             mode,
             "injection",
-            {"triggered": True, "score": verdict.score, "model": verdict.model_used},
+            injection_data,
             stance=stance,
         )
     )
@@ -321,16 +349,27 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
 
     # Run injection check on the student's latest message BEFORE any generation.
     # Off by default. If flagged, escalate to instructor (reuse existing path).
+    injection_telemetry = None
     if settings.injection_guard_enabled:
         student_msg = _latest_student_message(ctx.get("recent_dialogue", []))
         guard = get_guard()
-        verdict = guard.check(student_msg)
+        if guard is not None:
+            verdict = guard.check(student_msg)
 
-        if verdict.flagged:
-            logger.warning(
-                f"Injection flagged: score={verdict.score:.3f}, model={verdict.model_used}"
-            )
-            return _injection_turn(ctx, store, pid, exercise, mode, stance, pack, verdict)
+            injection_telemetry = {
+                "triggered": verdict.flagged,
+                "status": verdict.status,
+                "score": verdict.score,
+                "model": verdict.model_used,
+            }
+            if verdict.error_category:
+                injection_telemetry["error_category"] = verdict.error_category
+
+            if verdict.flagged:
+                logger.warning(
+                    f"Injection flagged: score={verdict.score:.3f}, model={verdict.model_used}"
+                )
+                return _injection_turn(ctx, store, pid, exercise, mode, stance, pack, verdict)
 
     if payload.get("_reply_context") and not any(
         c.isalnum() for c in _latest_student_message(payload.get("recent", []))
@@ -349,7 +388,7 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
             "components": {},
         }
     if stance == "control":
-        return _control_turn(payload, ctx, store, pid, exercise, mode, pack)
+        return _control_turn(payload, ctx, store, pid, exercise, mode, pack, injection_telemetry)
 
     timings: dict[str, float] = {}
 
@@ -585,6 +624,8 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
             "stance": stance,
         },
     }
+    if injection_telemetry:
+        final["components"]["injection"] = injection_telemetry
 
     trace = {
         "event": ctx["event"],

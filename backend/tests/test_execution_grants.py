@@ -12,7 +12,23 @@ from tests.http_auth import configure, token
 
 @pytest.fixture
 def grant_boundary(monkeypatch, tmp_path):
-    member = dict(institution_id="i", class_id="c", learner_id="gh:1", assignments={"echo-1": "v1"})
+    member = dict(
+        institution_id="i",
+        class_id="c",
+        learner_id="gh:1",
+        assignments={
+            "echo-1": {
+                "version": "v1",
+                "generation": "fixture-1",
+                "policy_revision": 1,
+                "allowed_pairs": [
+                    {"mode": m, "stance": s}
+                    for m in ["study", "teach"]
+                    for s in ["peer", "oracle", "control"]
+                ],
+            }
+        },
+    )
     auth = dict(
         exercise_versions={"echo-1": "v1"}, subjects={"original": [member], "other": [member]}
     )

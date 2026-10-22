@@ -21,6 +21,7 @@ from ..agent.orchestrator import _distress_turn
 from ..config import settings
 from ..conversations.bounds import BoundedProvider
 from ..core.registry import get_active_pack
+from ..pedagogy import authorized_turn
 from ..store import ConsentRouter, InMemoryStore, SqlStore
 from ..store.scoped import scoped_store
 from . import saved
@@ -90,10 +91,12 @@ class AskAdapter:
                 self.pack,
             )
         else:
-            response = run_turn(
+            response = authorized_turn(
+                run_turn,
                 {**payload, "exercise": exercise},
                 BoundedProvider(self.llm, policy) if policy else self.llm,
                 store,
+                identity,
             )
         self.check(job)
         return self.store.stage(job, response)

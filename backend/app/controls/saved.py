@@ -14,6 +14,7 @@ from fastapi import HTTPException
 from sqlalchemy import Column, Integer, String, Table, inspect, select
 
 from ..agent.reply_context import reply_metadata
+from ..auth import behavior_receipt
 from ..conversations.repository import ConversationStore
 from .contracts import ControlError
 from .ledger import metadata
@@ -182,6 +183,9 @@ def complete(store, conn, job, identity, value):
         job["id"],
         {"message": value["message"], "check_question": value.get("check_question")},
         connection=conn,
+        authorization=behavior_receipt(
+            identity, store._grant(conn, job["id"]).mode, store._grant(conn, job["id"]).stance
+        ),
     )
     return {**value, "conversation_id": binding["conversation"], "revision": result["revision"]}
 
