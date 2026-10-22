@@ -21,3 +21,10 @@ The operator file is a local authorization adapter, not a completed Cairn author
 Local token/cost amounts are operational estimates under configured conservative rates, not authoritative Portage receipts or a provider invoice. Verified Portage dispatch/receipt idempotency and reconciliation are not implemented by this patch. Keep Belay's shared ledger and workload protections until that handoff is demonstrated. This PR adds no administration dashboard or model roster and does not claim a verified end-to-end platform connection.
 
 All repair commits have DCO sign-off. Existing unsigned history is preserved for contributor/maintainer resolution; no force push, push or merge was performed.
+
+
+## Additional missing-verdict protection
+
+A resource-constrained validation run exposed an existing failure path: a runner with no grading verdict could be treated as a checked non-solution. The grader now records verification availability, and executable leak checks stop without a verdict when execution evidence is missing. Ordinary executed student errors remain distinct. No timeouts or budgets were increased.
+
+Focused PostgreSQL acceptance: 3 passed, zero failures/errors/skips. This includes synthetic unavailable/student-error controls and the relevant real regression cases. Full-suite results at the earlier code SHA (4f41538a) remain separately recorded; focused reruns do not rewrite those results.
