@@ -49,19 +49,17 @@ _IMPERATIVE = [
     )
 ]
 
-# Object-less paste/type/write also appears in DENIALS — the tutor explaining that
-# it will NOT do the thing it is being asked to do. Those are the opposite of a
-# disclosure, so a negation in the SAME clause flips the verdict for those verbs
-# only:
-#   "I don't want to just paste the whole thing"   → not a leak
-#   "Stop stalling. Just paste the code now."      → leak (new clause)
+# Only a complete, directly governing withholding prefix exempts a denial.
+# Unrelated negatives ("Do not hesitate to just paste...") never exempt a match.
 _NEGATED_IMPERATIVE = re.compile(r"\bjust (paste|type|write)\b", re.IGNORECASE)
-_NEGATION = re.compile(
-    r"\b(not|never|won'?t|isn'?t|can'?t|don'?t|doesn'?t)\b",
+_WITHHOLD_PREFIX = re.compile(
+    r"(?:(?:actually|sorry|instead)\s*[—–-]?\s*)?"
+    r"(?:(?:i|we)\s+(?:(?:do not|don't|don’t)\s+(?:want|intend|plan)\s+to"
+    r"|will not|won't|won’t|cannot|can't|can’t|do not|don't|don’t)"
+    r"|(?:i am|i'm|i’m|we are|we're|we’re)\s+not\s+going\s+to"
+    r"|(?:please\s+)?(?:do not|don't|don’t|never))\s*",
     re.IGNORECASE,
 )
-# Clause boundary: sentence or clause punctuation. A negation on the far side of
-# one of these does not govern the verb.
 _CLAUSE_BREAK = re.compile(r"[.!?;:,]")
 
 # How many distinct essential operation tokens in the prose trip disclosure.
@@ -90,19 +88,10 @@ def _word_present(token: str, text: str) -> bool:
 
 
 def _in_denial_frame(prose: str, start: int, end: int) -> bool:
-    """Does a denial in the same clause govern the imperative at [start, end)?
-
-    "I don't want to just paste the whole thing" tells the student the solution is
-    being WITHHELD. The gate's own redirect says exactly this, so reading it as a
-    disclosure makes the gate contradict itself on the text it just emitted. A
-    negation in the SAME clause owns the verb; a negation in an earlier clause does
-    not.
-    """
-    boundary = None
-    for b in _CLAUSE_BREAK.finditer(prose, 0, start):
-        boundary = b
-    clause_start = boundary.end() if boundary else 0
-    return bool(_NEGATION.search(prose, clause_start, end))
+    """Exempt a narrow direct denial, never arbitrary negation in the clause."""
+    boundaries = list(_CLAUSE_BREAK.finditer(prose, 0, start))
+    clause_start = boundaries[-1].end() if boundaries else 0
+    return _WITHHOLD_PREFIX.fullmatch(prose[clause_start:start].strip()) is not None
 
 
 def _imperative_fires(prose: str, pat: re.Pattern) -> bool:

@@ -32,7 +32,8 @@ from app.agent.llm import LLMClient
 from app.agent.orchestrator import run_turn
 from app.core.registry import get_active_pack
 from app.store import InMemoryStore
-from conftest import _payload
+
+from .helpers import _payload
 
 # Governance flags that mean the turn was intercepted rather than delivered as
 # drafted. `flag_escalate` is a routing signal, not a leak interception.
