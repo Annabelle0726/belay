@@ -74,6 +74,7 @@ def grade(source: str, exercise: Exercise) -> RunResult:
                 "stdout": grade_obj.get("stdout", ""),
                 "summary": err,
                 "timed_out": False,
+                "verification_unavailable": bool(grade_obj.get("verification_unavailable")),
             },
         }
 

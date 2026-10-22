@@ -100,7 +100,7 @@ _CANNED = RunnerResult(
     timed_out=False,
     wall_ms=1.0,
     error=None,
-    artifacts={},
+    artifacts={"result.json": json.dumps({"stdout": "", "stderr": "", "error": None, "vars": {}})},
 )
 
 

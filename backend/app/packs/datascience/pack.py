@@ -162,7 +162,11 @@ class DataSciencePack:
         is_solution = False
         if ex_id and _grader.has_spec(ex_id):
             for cand in candidates:
-                if _grader.grade(cand, exercise).get("goalMet"):
+                graded = _grader.grade(cand, exercise)
+                if graded.get("pack", {}).get("verification_unavailable"):
+                    # Missing execution evidence is not a successful no-leak check.
+                    raise RuntimeError("safety verification unavailable")
+                if graded.get("goalMet"):
                     is_solution = True
                     break
         prose = _leak.prose_discloses(draft, ex_id) if ex_id else False
