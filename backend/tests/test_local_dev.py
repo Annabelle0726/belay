@@ -311,7 +311,10 @@ def test_launcher_real_auth_course_and_optional_dialogue(tmp_path, saving, contr
                         "version": version,
                         "generation": "offline-test-v1",
                         "policy_revision": 1,
-                        "allowed_pairs": [{"mode": "study", "stance": "control"}],
+                        "allowed_pairs": [
+                            {"mode": "study", "stance": "peer"},
+                            {"mode": "study", "stance": "control"},
+                        ],
                     }
                     for exercise, version in member["assignments"].items()
                 }

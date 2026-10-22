@@ -1005,6 +1005,7 @@ function python { $global:LASTEXITCODE=0; ConvertTo-Json -Compress -InputObject 
         cwd=tmp_path,
         capture_output=True,
         text=True,
+        errors="replace",
         timeout=30,
     )
     assert result.returncode == 0, result.stderr
@@ -1042,6 +1043,7 @@ function python { $global:LASTEXITCODE=0; ConvertTo-Json -Compress -InputObject 
         cwd=tmp_path,
         capture_output=True,
         text=True,
+        errors="replace",
         timeout=30,
     )
     assert missing.returncode != 0 and "Runtime EnvFile is missing" in missing.stderr
