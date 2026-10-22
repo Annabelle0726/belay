@@ -14,3 +14,21 @@ Unrelated CORS, classifier, logging, seed and global fixture changes were remove
 A resource-constrained validation run exposed an existing failure path: a runner with no grading verdict could be treated as a checked non-solution. The grader now records verification availability, and executable leak checks stop without a verdict when execution evidence is missing. Ordinary executed student errors remain distinct. No timeouts or budgets were increased.
 
 Focused PostgreSQL acceptance: 51 passed, zero failures/errors/skips. This includes synthetic unavailable/student-error controls and the relevant real regression cases. Full-suite results at the earlier code SHA (bff7ce73) remain separately recorded; focused reruns do not rewrite those results.
+
+
+## Recorded validation
+
+Full validation source: `bff7ce73be6205bf33b77b1e3202ff71c5427cc3`.
+
+| Gate | Passed | Failed/errors | Skipped |
+| --- | --- | --- | --- |
+| sqlite | 414 | 0 | 7 |
+| postgres | 413 | 1 | 7 |
+
+Ruff lint, format check and configured mypy passed for that full-run source. Seven full-suite skips are the opt-in live evaluation and unavailable sibling-contract schema cases. No paid model request was used.
+
+After the missing-verdict repair `f93f2bce6238f104a487e25a82068d1fd49148b8`, 51 focused PostgreSQL cases and configured mypy passed, with zero failed/error/skipped cases. The focused selection includes the relevant real regressions and previously failing cases. It does not rewrite the older full-suite outcome.
+
+The first full PostgreSQL run failed an executable verifier after Docker became unavailable. A full repeat also reported one Docker availability failure during an output-flood case. The later focused real-container/CLI acceptance passed without skips. No application timeout or resource boundary was relaxed. A new Dockerfile build and gVisor execution remain unverified locally.
+
+Existing unsigned commits in the original PR history: 1. New repair/documentation commits are signed off. The old history has not been rewritten. The repair head has not been pushed, merged, or run through hosted CI. No command to start, stop or restart the actual API/worker service was issued. Live serving state was not revalidated.
