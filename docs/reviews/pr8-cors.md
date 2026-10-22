@@ -19,3 +19,17 @@ origins explicitly. No operating .env or service was changed by this repair.
 
 SQLite/PostgreSQL and quality outcomes are recorded in the final repair summary.
 Hosted CI has not been rerun because these commits are local only.
+
+
+## Recorded validation
+
+Full validation source: `d3ea8d5b173d34ce58147639ef9d014c1c58918f`.
+
+| Gate | Passed | Failed/errors | Skipped |
+| --- | --- | --- | --- |
+| sqlite | 384 | 0 | 7 |
+| postgres | 384 | 0 | 7 |
+
+Ruff lint, format check and configured mypy passed for that full-run source. Seven full-suite skips are the opt-in live evaluation and unavailable sibling-contract schema cases. No paid model request was used.
+
+Existing unsigned commits in the original PR history: 0. New repair/documentation commits are signed off. The old history has not been rewritten. The repair head has not been pushed, merged, or run through hosted CI. No command to start, stop or restart the actual API/worker service was issued. Live serving state was not revalidated.
