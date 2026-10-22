@@ -86,7 +86,7 @@ def grade(source: str, exercise: Exercise) -> RunResult:
     res = runner.run_python(_harness_source(), files=files)
     grade_obj = _parse_grade(res.stdout)
 
-    if grade_obj is None:
+    if not res.ok or res.timed_out or grade_obj is None:
         # Harness produced no verdict: crash, timeout, or resource kill.
         err = (
             res.error
@@ -104,6 +104,7 @@ def grade(source: str, exercise: Exercise) -> RunResult:
                 "stdout": res.stdout[-500:],
                 "summary": err,
                 "timed_out": res.timed_out,
+                "verification_unavailable": True,
             },
         }
 
