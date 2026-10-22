@@ -135,10 +135,11 @@ class InjectionGuard:
             score = response.get("confidence")
             if (
                 type(flagged) is not bool
-                or type(score) not in (int, float)
-                or not 0 <= score <= 1
-                or not math.isfinite(score)
+                or not isinstance(score, (int, float))
+                or isinstance(score, bool)
             ):
+                raise ValueError("MALFORMED_RESPONSE")
+            if not 0 <= score <= 1 or not math.isfinite(score):
                 raise ValueError("MALFORMED_RESPONSE")
             score = float(score)
 
