@@ -329,7 +329,7 @@ def test_disabled_guard_adds_nothing_to_a_control_turn(monkeypatch):
     assert "injection" not in _events(store, "p_ctrl_off")[0]["payload"]["telemetry"]
 
 
-INVALID_VERDICTS = [
+INVALID_VERDICTS: list[object] = [
     None,
     [],
     {},
