@@ -28,3 +28,12 @@ All repair commits have DCO sign-off. Existing unsigned history is preserved for
 A resource-constrained validation run exposed an existing failure path: a runner with no grading verdict could be treated as a checked non-solution. The grader now records verification availability, and executable leak checks stop without a verdict when execution evidence is missing. Ordinary executed student errors remain distinct. No timeouts or budgets were increased.
 
 Focused PostgreSQL acceptance: 3 passed, zero failures/errors/skips. This includes synthetic unavailable/student-error controls and the relevant real regression cases. Full-suite results at the earlier code SHA (4f41538a) remain separately recorded; focused reruns do not rewrite those results.
+
+
+## Launcher regression fixtures
+
+The first complete SQLite run at `76e9e2b` reported 989 passed, 3 failed and 18 skipped. Two synthetic launcher cases granted only study/control but then submitted study/peer jobs; the new server correctly denied those requests. The fixtures now explicitly authorize both tested pairs. Ordinary legacy grants remain study/peer only.
+
+The third failure was Windows PowerShell emitting localized stderr bytes that a UTF-8 subprocess reader could not decode. The wrapper test now tolerates replacement of undecodable diagnostic characters while retaining its assertions about the missing configuration and no preparation/start side effects. All five launcher/wrapper cases passed after these test-only corrections. The superseded full result is preserved separately; a fresh complete regression follows.
+
+The separate PR branches have not been merged or validated as one combined deployment. In particular, integrating PR #7's replacement runner with R3 must preserve both the container boundary and the shared `runner_call` accounting hook. Class-sized throughput, a fresh sandbox image build and gVisor are not demonstrated by these repairs.
