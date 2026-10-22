@@ -36,6 +36,7 @@ from ...controls.contracts import ControlError
 from ...controls.http import control_http_error
 from ...controls.runtime import current as control_context
 from ...core.registry import get_active_pack
+from ...pedagogy import authorized_turn
 from ...store import ConsentRouter, InMemoryStore, SqlStore
 from ...store.scoped import register, scoped_store
 from .pii import PIIRejected, assert_no_pii
@@ -174,7 +175,13 @@ def build_router(
             register(consent_router, request.state.identity, req.consent)
         store = scoped_store(consent_router, request.state.identity)
         try:
-            released = run_turn(turn_payload, _llm(), store)
+            released = authorized_turn(
+                run_turn,
+                turn_payload,
+                None if req.stance == "control" else _llm(),
+                store,
+                request.state.identity,
+            )
             return {
                 "message": released["message"],
                 "check_question": released.get("check_question"),

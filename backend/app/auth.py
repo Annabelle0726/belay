@@ -8,13 +8,33 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 import jwt
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .config import settings
+
+
+class Behavior(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+    mode: Literal["study", "teach"]
+    stance: Literal["peer", "oracle", "control"]
+
+
+class AssignmentGrant(BaseModel):
+    """Explicit trusted pairs: two allowlists must not imply a Cartesian product."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+    version: str = Field(pattern=r"^[A-Za-z0-9_.:-]{1,64}$")
+    generation: str = Field(pattern=r"^[A-Za-z0-9_.:-]{1,64}$")
+    policy_revision: int = Field(ge=1)
+    allowed_pairs: list[Behavior] = Field(max_length=6)
+
+    def permits(self, mode: str, stance: str) -> bool:
+        return any(p.mode == mode and p.stance == stance for p in self.allowed_pairs)
 
 
 class Membership(BaseModel):
@@ -22,7 +42,25 @@ class Membership(BaseModel):
     institution_id: str = Field(pattern=r"^[a-zA-Z0-9_-]{1,64}$")
     class_id: str = Field(pattern=r"^[a-zA-Z0-9_-]{1,64}$")
     learner_id: str = Field(pattern=r"^[a-z][a-z0-9_]*:[0-9]+$", max_length=64)
-    assignments: dict[str, str]
+    assignments: dict[str, AssignmentGrant]
+
+    @field_validator("assignments", mode="before")
+    @classmethod
+    def migrate_legacy(cls, value):
+        # Only the old string format migrates. Missing/malformed object fields fail closed.
+        if not isinstance(value, dict):
+            return value
+        return {
+            ex: {
+                "version": grant,
+                "generation": "legacy-v1",
+                "policy_revision": 1,
+                "allowed_pairs": [{"mode": "study", "stance": "peer"}],
+            }
+            if isinstance(grant, str)
+            else grant
+            for ex, grant in value.items()
+        }
 
 
 class Authorization(BaseModel):
@@ -42,6 +80,16 @@ class Identity:
     exercise_version: str = ""
     active_assignments: tuple[tuple[str, str], ...] = ()
     grant_ref: str = ""
+    subject: str = ""
+    issuer: str = ""
+    audience: str = ""
+    assignment_policies: tuple[tuple[str, AssignmentGrant], ...] = ()
+
+    def policy(self, exercise_id: str) -> AssignmentGrant:
+        for ex, policy in self.assignment_policies:
+            if ex == exercise_id:
+                return policy
+        raise denied()
 
     @property
     def storage_id(self) -> str:
@@ -130,7 +178,7 @@ async def authorize(
         if not isinstance(ex, str):
             raise denied()
         version = authorization.exercise_versions.get(ex, "")
-        if not version or m.assignments.get(ex) != version:
+        if not version or (ex not in m.assignments or m.assignments[ex].version != version):
             raise denied()
         if "exercise_version" in payload and payload["exercise_version"] != version:
             raise denied()
@@ -147,16 +195,22 @@ async def authorize(
         m.institution_id,
         m.class_id,
         m.learner_id,
-        tuple(m.assignments.items()),
+        tuple((ex_id, grant.version) for ex_id, grant in m.assignments.items()),
         ex,
         version,
         tuple(
-            (ex_id, ver)
-            for ex_id, ver in m.assignments.items()
-            if authorization.exercise_versions.get(ex_id) == ver
+            (ex_id, grant.version)
+            for ex_id, grant in m.assignments.items()
+            if authorization.exercise_versions.get(ex_id) == grant.version
         ),
+        grant_ref=_grant_ref(claims["sub"], m),
+        subject=claims["sub"],
+        issuer=claims["iss"],
+        audience=settings.auth_audience,
+        assignment_policies=tuple(m.assignments.items()),
     )
-    identity = Identity(**{**identity.__dict__, "grant_ref": _grant_ref(claims["sub"], m)})
+    if ex and ("mode" in payload or "stance" in payload):
+        require_behavior(identity, payload.get("mode", "study"), payload.get("stance", "peer"))
     request.state.identity = identity
     return identity
 
@@ -194,7 +248,7 @@ def _configuration() -> tuple[str, Authorization]:
             if len(scopes) != len(set(scopes)):
                 raise ValueError
             if any(
-                not opaque.fullmatch(ex) or not opaque.fullmatch(v)
+                not opaque.fullmatch(ex) or not opaque.fullmatch(v.version)
                 for m in members
                 for ex, v in m.assignments.items()
             ):
@@ -211,6 +265,74 @@ def _configuration() -> tuple[str, Authorization]:
     return key, authorization
 
 
+def require_behavior(identity: Identity, mode: str, stance: str) -> None:
+    if mode not in ("study", "teach") or stance not in ("peer", "oracle", "control"):
+        raise HTTPException(422, "invalid tutoring behavior")
+    policy = identity.policy(identity.exercise_id)
+    if policy.version != identity.exercise_version or not policy.permits(mode, stance):
+        raise denied()
+
+
+def behavior_receipt(identity: Identity, mode: str, stance: str) -> dict:
+    require_behavior(identity, mode, stance)
+    grant = identity.policy(identity.exercise_id)
+    principal = hashlib.sha256(
+        json.dumps(
+            [
+                identity.issuer,
+                identity.audience,
+                identity.subject,
+                identity.institution_id,
+                identity.class_id,
+                identity.learner_id,
+            ]
+        ).encode()
+    ).hexdigest()
+    return {
+        "principal": principal,
+        "generation": grant.generation,
+        "policy_revision": grant.policy_revision,
+        "mode": mode,
+        "stance": stance,
+    }
+
+
+def check_receipt(identity: Identity, receipt: dict | None) -> None:
+    # Pre-upgrade saved turns have no reliable behavior metadata; they are not replayable.
+    if (
+        not isinstance(receipt, dict)
+        or not receipt
+        or receipt != behavior_receipt(identity, receipt.get("mode", ""), receipt.get("stance", ""))
+    ):
+        raise denied()
+
+
+def recheck_behavior(identity: Identity, mode: str, stance: str) -> None:
+    require_behavior(identity, mode, stance)
+    _, authorization = _configuration()
+    if identity.issuer != settings.auth_issuer or identity.audience != settings.auth_audience:
+        raise denied()
+    for member in authorization.subjects.get(identity.subject, []):
+        if (member.institution_id, member.class_id, member.learner_id) != (
+            identity.institution_id,
+            identity.class_id,
+            identity.learner_id,
+        ):
+            continue
+        current = member.assignments.get(identity.exercise_id)
+        previous = identity.policy(identity.exercise_id)
+        if (
+            current is None
+            or current != previous
+            or authorization.exercise_versions.get(identity.exercise_id)
+            != identity.exercise_version
+            or not current.permits(mode, stance)
+        ):
+            raise denied()
+        return
+    raise denied()
+
+
 class ExecutionGrant(BaseModel):
     """Opaque reference to the ORIGINAL verified principal, never a bearer token."""
 
@@ -221,6 +343,9 @@ class ExecutionGrant(BaseModel):
     learner_id: str
     exercise_id: str
     exercise_version: str
+    authorization: AssignmentGrant
+    mode: Literal["study", "teach"]
+    stance: Literal["peer", "oracle", "control"]
 
 
 def _grant_ref(subject: str, member: Membership) -> str:
@@ -238,46 +363,69 @@ def _grant_ref(subject: str, member: Membership) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
-def execution_grant(identity: Identity) -> ExecutionGrant:
-    if not identity.exercise_id or not identity.exercise_version:
+def execution_grant(
+    identity: Identity, mode: str = "study", stance: str = "peer"
+) -> ExecutionGrant:
+    require_behavior(identity, mode, stance)
+    if not identity.exercise_id or not identity.exercise_version or not identity.grant_ref:
         raise denied()
-    return ExecutionGrant(**{k: getattr(identity, k) for k in ExecutionGrant.model_fields})
+    selected = Behavior.model_validate({"mode": mode, "stance": stance})
+    return ExecutionGrant(
+        **{
+            k: getattr(identity, k)
+            for k in (
+                "grant_ref",
+                "institution_id",
+                "class_id",
+                "learner_id",
+                "exercise_id",
+                "exercise_version",
+            )
+        },
+        authorization=identity.policy(identity.exercise_id),
+        mode=selected.mode,
+        stance=selected.stance,
+    )
 
 
 def recheck_grant(grant: ExecutionGrant) -> Identity:
-    """Re-read current authorization without saving or replaying a login token.
+    """The exact original permission snapshot must still be current.
 
-    A different subject with identical learner scope cannot sustain this grant.
-    Key/config failure, original membership revocation or version change fail closed.
+    A re-grant needs a new generation; editing an allowed pair never upgrades
+    already queued or completed work. Old unbound records fail validation.
     """
     _, authorization = _configuration()
     for subject, members in authorization.subjects.items():
         for m in members:
             if _grant_ref(subject, m) != grant.grant_ref:
                 continue
-            if (m.institution_id, m.class_id, m.learner_id) != (
-                grant.institution_id,
-                grant.class_id,
-                grant.learner_id,
-            ):
-                raise denied()
+            current = m.assignments.get(grant.exercise_id)
             if (
-                authorization.exercise_versions.get(grant.exercise_id) != grant.exercise_version
-                or m.assignments.get(grant.exercise_id) != grant.exercise_version
+                (m.institution_id, m.class_id, m.learner_id)
+                != (grant.institution_id, grant.class_id, grant.learner_id)
+                or authorization.exercise_versions.get(grant.exercise_id) != grant.exercise_version
+                or current is None
+                or current != grant.authorization
+                or current.version != grant.exercise_version
+                or not current.permits(grant.mode, grant.stance)
             ):
                 raise denied()
             return Identity(
                 m.institution_id,
                 m.class_id,
                 m.learner_id,
-                tuple(m.assignments.items()),
+                tuple((ex, g.version) for ex, g in m.assignments.items()),
                 grant.exercise_id,
                 grant.exercise_version,
                 tuple(
-                    (ex, v)
-                    for ex, v in m.assignments.items()
-                    if authorization.exercise_versions.get(ex) == v
+                    (ex, g.version)
+                    for ex, g in m.assignments.items()
+                    if authorization.exercise_versions.get(ex) == g.version
                 ),
-                grant.grant_ref,
+                grant_ref=grant.grant_ref,
+                subject=subject,
+                issuer=settings.auth_issuer,
+                audience=settings.auth_audience,
+                assignment_policies=tuple(m.assignments.items()),
             )
     raise denied()

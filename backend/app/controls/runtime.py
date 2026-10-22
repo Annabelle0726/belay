@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any, TypeVar
 
 from ..config import settings
+from ..pedagogy import check_current
 from .admission import Admission
 from .contracts import Amount, ControlError, Scope
 from .ledger import Ledger
@@ -46,6 +47,7 @@ def operation(
 
 
 def current() -> Execution | None:
+    check_current()
     context = _execution.get()
     if context is not None:
         if context.guard:
@@ -112,6 +114,7 @@ def model_call(
         context.ledger.settle(attempt_id, Amount())
         raise
     try:
+        check_current()
         result = call()
         prompt, completion = usage(result)
     except BaseException as exc:

@@ -72,7 +72,10 @@ class ExecutionData:
         ).scalar_one_or_none()
         if raw is None:
             raise ControlError("job_unavailable", 404)
-        return ExecutionGrant.model_validate_json(raw)
+        try:
+            return ExecutionGrant.model_validate_json(raw)
+        except ValueError:
+            raise ControlError("job_unavailable", 404) from None
 
     def _owned(self, conn: Connection, job_id: str, identity: Identity) -> ExecutionGrant:
         grant = self._grant(conn, job_id)
@@ -152,7 +155,9 @@ class ExecutionData:
         connection: Connection | None = None,
         conversation_id: str | None = None,
     ) -> dict:
-        grant = execution_grant(identity)
+        grant = execution_grant(
+            identity, payload.get("mode", "study"), payload.get("stance", "peer")
+        )
         stored = temporary_input(payload)
         recheck_grant(grant)
         raw = json.dumps(

@@ -43,6 +43,7 @@ from .controls.http import control_http_error
 from .controls.run_http import run_context
 from .controls.runtime import current as control_context
 from .core.registry import get_active_pack
+from .pedagogy import authorized_turn
 from .schemas import (
     GoalRequest,
     OverlayRequest,
@@ -183,7 +184,13 @@ def sol_turn(request: Request, req: SolTurnRequest):
     # Route events + learner-state writes to durable or ephemeral by consent.
     store = scoped_store(_router, request.state.identity)
     try:
-        released = run_turn(payload, _llm(), store)
+        released = authorized_turn(
+            run_turn,
+            payload,
+            None if req.stance == "control" else _llm(),
+            store,
+            request.state.identity,
+        )
         return {
             "message": released["message"],
             "check_question": released.get("check_question"),

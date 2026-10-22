@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy import select
 
 from app.agent import telemetry
-from app.agent.injection_guard import InjectionGuard
+from app.agent.injection_guard import InjectionGuard, SovereignLLMClient
 from app.agent.llm import AnthropicProvider, OpenAICompatProvider
 from app.config import settings
 from app.controls.contracts import ControlError, Limits, Traffic
@@ -85,7 +85,10 @@ def test_exhaustion_stops_before_sdk_and_guard_does_not_swallow(ledger, monkeypa
     value, calls = provider([response()])
     monkeypatch.setattr(settings, "injection_guard_enabled", True)
     guard = InjectionGuard()
-    guard._initialized, guard._llm = True, value
+    dedicated = SovereignLLMClient.__new__(SovereignLLMClient)
+    dedicated.model = "test-classifier"
+    dedicated._client = value._client
+    guard._initialized, guard._llm = True, dedicated
     with operation(ledger, SCOPE, "op"), pytest.raises(ControlError, match="budget_exhausted"):
         guard.check("test")
     assert calls == []
