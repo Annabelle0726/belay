@@ -194,3 +194,86 @@ def test_saved_worker_receipt_protects_history_recovery_and_references(saved_wor
 from tests.test_saved_jobs import saved_worker as saved_worker_fixture
 
 saved_worker = saved_worker_fixture
+
+
+@pytest.mark.parametrize(
+    "pairs", [[{"mode": "study", "stance": "control"}], [{"mode": "teach", "stance": "oracle"}], []]
+)
+def test_code_run_does_not_require_or_grant_peer_tutoring(job_boundary, monkeypatch, pairs):
+    from fastapi import Depends, FastAPI, Request
+    from fastapi.testclient import TestClient
+
+    from app.auth import authorize
+    from app.controls.run_http import run_context
+    from app.controls.runtime import runner_call
+    from app.core.runner import RunnerResult
+    from tests.http_auth import token
+
+    client, store, path, auth = job_boundary
+    change(path, auth, pairs=pairs)
+    monkeypatch.setattr(settings, "controls_mode", "enforced")
+    app = FastAPI()
+
+    @app.post("/run", dependencies=[Depends(authorize)])
+    def run(request: Request):
+        with run_context(request.state.identity):
+            value = runner_call(lambda: RunnerResult(True, 0, "ok", "", False, 1, None), 0.1)
+            return {"ok": value.ok}
+
+    signed = TestClient(app, headers={"Authorization": "Bearer " + token("original")})
+    assert signed.post("/run", json={"exercise_id": "echo-1", "exercise_version": "v1"}).json() == {
+        "ok": True
+    }
+    assert client.post("/api/sol/jobs", json={**BODY, "stance": "peer"}).status_code == 404
+    assert store.ledger.summary()["consumed"]["runs"] == 1
+    assert store.ledger.summary()["consumed"]["tokens"] == 0
+
+
+@pytest.mark.parametrize(
+    "pairs", [[{"mode": "study", "stance": "control"}], [{"mode": "teach", "stance": "oracle"}], []]
+)
+def test_missing_request_fence_does_not_require_peer_tutoring(job_boundary, pairs):
+    client, store, path, auth = job_boundary
+    change(path, auth, pairs=pairs)
+    body = {k: BODY[k] for k in ["request_id", "exercise_id", "exercise_version"]}
+    url = "/api/sol/jobs/by-request/" + BODY["request_id"] + "/reconcile"
+    response = client.post(url, json=body)
+    assert response.status_code == 200, response.text
+    assert response.json()["reason"] == "request_not_admitted"
+    if pairs:
+        assert client.post("/api/sol/jobs", json={**BODY, **pairs[0]}).status_code == 409
+    assert store.ledger.summary()["attempts"] == 0
+
+
+def test_recovery_fence_cannot_be_loaded_as_a_tutor_job(job_boundary, monkeypatch):
+    client, store, _, _ = job_boundary
+    body = {k: BODY[k] for k in ["request_id", "exercise_id", "exercise_version"]}
+    response = client.post(
+        "/api/sol/jobs/by-request/" + BODY["request_id"] + "/reconcile", json=body
+    )
+    assert response.status_code == 200
+    job_id = response.json()["id"]
+    with store.ledger.transaction() as conn:
+        assert store._grant(conn, job_id).purpose == "recovery_fence"
+    monkeypatch.setattr(store, "_get", lambda *a: pytest.fail("A fence must not read model input"))
+    with pytest.raises(ControlError, match="job_unavailable"):
+        store.load({"id": job_id})
+
+
+@pytest.mark.parametrize("mode", ["development_bypass", "enforced"])
+def test_code_result_delivery_rechecks_assignment_access(
+    job_boundary, grant_boundary, monkeypatch, mode
+):
+    from fastapi import HTTPException
+
+    from app.auth import recheck_grant
+    from app.controls.run_http import run_context
+
+    _, _, path, auth = job_boundary
+    identity = recheck_grant(grant_boundary[0])
+    monkeypatch.setattr(settings, "controls_mode", mode)
+    with pytest.raises(HTTPException) as error:
+        with run_context(identity):
+            del auth["subjects"]["original"]
+            path.write_text(json.dumps(auth))
+    assert error.value.status_code == 404

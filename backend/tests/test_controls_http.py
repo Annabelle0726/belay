@@ -19,6 +19,7 @@ def active_pack(monkeypatch):
     from app.packs.datascience import DataSciencePack
 
     monkeypatch.setattr(main, "_pack", DataSciencePack())
+    monkeypatch.setattr(main, "_router", ConsentRouter(InMemoryStore()))
     app = FastAPI()
     app.router.routes.extend(
         r for r in main.app.routes if getattr(r, "path", "").startswith("/api/")

@@ -34,6 +34,13 @@ Focused PostgreSQL acceptance: 3 passed, zero failures/errors/skips. This includ
 
 The first complete SQLite run at `76e9e2b` reported 989 passed, 3 failed and 18 skipped. Two synthetic launcher cases granted only study/control but then submitted study/peer jobs; the new server correctly denied those requests. The fixtures now explicitly authorize both tested pairs. Ordinary legacy grants remain study/peer only.
 
-The third failure was Windows PowerShell emitting localized stderr bytes that a UTF-8 subprocess reader could not decode. The wrapper test now tolerates replacement of undecodable diagnostic characters while retaining its assertions about the missing configuration and no preparation/start side effects. All five launcher/wrapper cases passed after these test-only corrections. The superseded full result is preserved separately; a fresh complete regression follows.
+The third failure was Windows PowerShell emitting localized stderr bytes that a UTF-8 subprocess reader could not decode. The wrapper test now tolerates replacement of undecodable diagnostic characters while retaining its assertions about the missing configuration and no preparation/start side effects. All five launcher/wrapper cases passed after these test-only corrections. The superseded full result is preserved separately; the subsequent complete run and final targeted evidence are recorded separately in the repair summary.
 
 The separate PR branches have not been merged or validated as one combined deployment. In particular, integrating PR #7's replacement runner with R3 must preserve both the container boundary and the shared `runner_call` accounting hook. Class-sized throughput, a fresh sandbox image build and gVisor are not demonstrated by these repairs.
+
+
+## Assignment access and tutoring permissions
+
+Run code and a missing-request recovery fence require current assignment access, not a default study/peer tutoring grant. Each captures a purpose-bound original authorization snapshot; a fence cannot load, stage or publish an Ask. Actual tutoring still requires the selected trusted mode/stance pair before admission and at subsequent boundaries. Removing the original principal or changing its grant blocks code-result delivery in both enforced and development-bypass modes. An accessible assignment may permit code execution while allowing no tutoring pair.
+
+The later full SQLite run at e4af0a7 had 991 passed, one failed and 18 skipped: its launcher readiness loop did not catch a socket TimeoutError. The test now retries that error within the existing 20-second startup deadline; all four launcher variants inject an initial probe timeout to exercise this path. No application timeout was increased. HTTP error-wiring tests also use an explicit in-memory consent router, avoiding dependence on a globally imported SQLite connection. Earlier failures remain recorded, and focused results are not described as a clean final full suite.

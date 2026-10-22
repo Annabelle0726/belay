@@ -344,6 +344,7 @@ class ExecutionGrant(BaseModel):
     exercise_id: str
     exercise_version: str
     authorization: AssignmentGrant
+    purpose: Literal["tutor", "run", "recovery_fence"] = "tutor"
     mode: Literal["study", "teach"]
     stance: Literal["peer", "oracle", "control"]
 
@@ -388,6 +389,37 @@ def execution_grant(
     )
 
 
+def capture_assignment_access(
+    identity: Identity, purpose: Literal["run", "recovery_fence"]
+) -> ExecutionGrant:
+    """Capture course access without granting a tutoring behavior.
+
+    Only tutor grants may enter the worker. Behavior fields on non-tutor
+    records are placeholders, never permission to execute an Ask.
+    """
+    if purpose not in ("run", "recovery_fence"):
+        raise ValueError("invalid assignment access purpose")
+    if not identity.exercise_id or not identity.exercise_version or not identity.grant_ref:
+        raise denied()
+    return ExecutionGrant(
+        **{
+            k: getattr(identity, k)
+            for k in (
+                "grant_ref",
+                "institution_id",
+                "class_id",
+                "learner_id",
+                "exercise_id",
+                "exercise_version",
+            )
+        },
+        authorization=identity.policy(identity.exercise_id),
+        purpose=purpose,
+        mode="study",
+        stance="peer",
+    )
+
+
 def recheck_grant(grant: ExecutionGrant) -> Identity:
     """The exact original permission snapshot must still be current.
 
@@ -407,7 +439,7 @@ def recheck_grant(grant: ExecutionGrant) -> Identity:
                 or current is None
                 or current != grant.authorization
                 or current.version != grant.exercise_version
-                or not current.permits(grant.mode, grant.stance)
+                or (grant.purpose == "tutor" and not current.permits(grant.mode, grant.stance))
             ):
                 raise denied()
             return Identity(
