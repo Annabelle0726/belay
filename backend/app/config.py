@@ -154,7 +154,7 @@ class Settings:
             o.strip()
             for o in _env(
                 "CORS_ORIGINS",
-                "null,http://localhost:5173,http://localhost:3000,http://localhost:63342,http://127.0.0.1:63342,http://localhost:8000",
+                "http://localhost:5173,http://localhost:3000,http://localhost:63342,http://127.0.0.1:63342,http://localhost:8000",
             ).split(",")
             if o.strip()
         ]
