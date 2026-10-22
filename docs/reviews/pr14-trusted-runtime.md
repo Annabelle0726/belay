@@ -44,3 +44,8 @@ The separate PR branches have not been merged or validated as one combined deplo
 Run code and a missing-request recovery fence require current assignment access, not a default study/peer tutoring grant. Each captures a purpose-bound original authorization snapshot; a fence cannot load, stage or publish an Ask. Actual tutoring still requires the selected trusted mode/stance pair before admission and at subsequent boundaries. Removing the original principal or changing its grant blocks code-result delivery in both enforced and development-bypass modes. An accessible assignment may permit code execution while allowing no tutoring pair.
 
 The later full SQLite run at e4af0a7 had 991 passed, one failed and 18 skipped: its launcher readiness loop did not catch a socket TimeoutError. The test now retries that error within the existing 20-second startup deadline; all four launcher variants inject an initial probe timeout to exercise this path. No application timeout was increased. HTTP error-wiring tests also use an explicit in-memory consent router, avoiding dependence on a globally imported SQLite connection. Earlier failures remain recorded, and focused results are not described as a clean final full suite.
+
+
+## Pinned browser asset bytes
+
+The complete frontend suite exposed CRLF conversions in the committed vendored JS. Restore the three assets from their already installed, version-pinned npm package sources, assert that only line endings differ, and prevent Git text conversion for these files. The byte-equality assertion remains unchanged. This preserves browser behavior and does not change the student layout or interaction.
