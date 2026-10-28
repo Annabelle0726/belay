@@ -137,3 +137,10 @@ schedule or a commitment.
 - As-built privacy and distress safety: `PRIVACY.md`.
 - System architecture: `ARCHITECTURE.md`.
 - Build-phase narrative and the canonical runbook: `VALIDATION.md`.
+
+
+## CC-B3 grounding repair
+
+Citation annotation precedes final governance. Checked, skipped and unavailable
+extraction have distinct status and unknown measurements remain null. Runtime
+NLP dependencies are pinned. See [review](docs/reviews/pr5-grounding.md).

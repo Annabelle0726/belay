@@ -326,3 +326,9 @@ The browser persists only an opaque scoped request pointer, recovers with GET an
 acknowledges a displayed result; unknown work is never automatically rerun. This
 adds no R2 conversation repository or learner cancellation UI. See operator/
 retention instructions in `deployment/controls/controls-operations.md`.
+
+## CC-B3 grounding repair
+
+Citation annotation precedes final governance. Checked, skipped and unavailable
+extraction have distinct status and unknown measurements remain null. Runtime
+NLP dependencies are pinned. See [review](docs/reviews/pr5-grounding.md).

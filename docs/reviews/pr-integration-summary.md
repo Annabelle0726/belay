@@ -31,3 +31,6 @@ Branch: feature/integrate-reviewed-pr-fixes
 
 - PR8 merged as a06d890; runtime already had the corrected default allowlist.
 - Ruling (PR9): Preserve the runtime dedicated classifier with physical-attempt accounting, explicit 400/422 fallback, and propagated budget/access denials. Its strict verdict validation and traces already include PR9; avoid a redundant components refactor. Keep PR9 deployment settings, documentation and regression evidence. Preserve isolated database fixtures and trusted synthetic grants.
+
+- PR9 merged as d7e2526.
+- Ruling (PR5): Apply citation/status and final-response governance changes while retaining injection screening, authorization, Retry-After headers and isolated test fixtures. The focused PR intentionally removed other feature files; those deletions are not appropriate in the combined branch. Restore the reviewed CORS normalization, and retain only PR9 dedicated-classifier configuration (no duplicate guessed-model fields).
