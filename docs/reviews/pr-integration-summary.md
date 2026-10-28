@@ -6,6 +6,12 @@ Base: 89f25971749f9b6c557fc49ab6beaf4a9909bb95
 
 Branch: feature/integrate-reviewed-pr-fixes
 
+Latest local outcome (2026-10-28): the four acceptance findings are repaired.
+The full SQLite suite passes (1133 passed, 18 conditional skips), as do the
+targeted PostgreSQL acceptance, frontend suite and quality checks. See the
+acceptance repair follow-up below for scope, evidence and remaining hosted gates.
+Main and the seven original repair refs are unchanged.
+
 ## Decisions
 
 - Ruling: Proceed with the explicitly requested inline merge on a new branch, without worktrees or another permission handoff. Original branches remain intact.
@@ -49,7 +55,7 @@ Reviewed application source: `ad36ea8990fd2b158ba357e7d9a164037a14c934`.
 The user asked to resume the interrupted acceptance, retain the integration branch,
 and leave main unchanged. No repair history was redone and no main merge was attempted.
 
-**Decision: not ready for merge or delivery.** Four independently reproduced
+**Historical decision at `ad36ea8`: not ready for merge or delivery.** Four independently reproduced
 acceptance defects remain. Passing targeted tests does not override these findings.
 This pass reviews and records them; it does not silently change the reviewed code.
 
@@ -188,3 +194,108 @@ All seven repair heads remain unchanged and are ancestors of the integration
 head. All 202 pre-existing untracked files match their original SHA-256 hashes.
 The index has no unresolved entries. Main remains `e8725ec`; upstream/main
 remains `89f2597`. The review report is the only intended checkout edit.
+
+## Acceptance repair follow-up — 2026-10-28
+
+The user authorized correcting the four findings, with English comments and
+Conventional Commits. Work continues on `feature/integrate-reviewed-pr-fixes`;
+main and the seven original repair refs remain protected.
+
+### Changes and regression evidence
+
+- History validates the original assistant turn's receipt before returning a
+  student follow-up's server-derived excerpt. It rejects a missing/noncompleted
+  origin, a mismatched conversation reference, revoked or changed grants, and
+  legacy origins without a receipt. Six regressions cover narrowing, re-granting
+  and legacy receipts on both failed and pending follow-ups, with the assistant
+  outside the one-message history page. Unchanged authorization still returns
+  the quote.
+- Authenticated traces retain a narrow `metrics.injection` object. Status and
+  error category must belong to closed vocabularies; score must be a finite
+  number in [0, 1]. Invalid status becomes unavailable and invalid score becomes
+  null. Model names, arbitrary strings and exception bodies remain excluded.
+  Synthetic safe/flagged/malformed/unavailable/error outcomes exercise the real
+  classifier, orchestrator and scoped store together.
+- Punctuation-only quoted follow-ups preserve the already-performed classifier
+  result in response components and a content-free event, without making tutor
+  model calls or retaining quoted content. Both core and scoped stores are tested.
+- Container grading returns `ExceptionType: message` while retaining the student
+  line number. Wrapper traceback frames no longer precede the exception type.
+  Real-container ValueError and SyntaxError regressions enforce the representation
+  consumed by the existing feedback adapter.
+- The lost `slow` pytest marker registration is restored without skipping tests
+  or changing thresholds, budgets, timeouts or isolation settings.
+
+Before implementation, all **23** added/strengthened regression cases failed for
+the expected missing behavior (`regression-red.xml`). After implementation,
+the expanded relevant suites passed **163** cases (`regression-green.xml`).
+The original failed full run and diagnostic logs remain preserved above.
+
+Fresh follow-up evidence is under the prior evidence directory's
+`acceptance-fixes/` subdirectory.
+
+The first type-check attempt reported three narrowing errors for
+`type(score) in (int, float)`. The guard was expressed as the equivalent exact
+type checks `type(score) is int or type(score) is float`, without allowing
+booleans/subclasses or weakening validation. The configured mypy rerun passed
+all 187 source files. This was the only application-source edit after the full
+SQLite run began; final classifier regressions also passed in the PostgreSQL
+acceptance invocation.
+Initial and final source hashes are recorded in the evidence directory.
+
+A fresh independent reviewer inspected the complete repair diff and regression
+tests and found no confirmed blockers. This was a bounded source review, not a
+second execution of the suites or an exhaustive audit of the earlier integration.
+
+### Final validation and scope
+
+- Full SQLite suite: **1133 passed, 0 failed, 0 errors, 18 skipped** from 1151
+  collected cases in 14 minutes 33 seconds (`sqlite-full.xml` and
+  `sqlite-full.log`). The previously failing local-stub saved/unsaved execution,
+  recovery, authorization and accounting scenario passed. All **47** real
+  runner/boundary cases passed without skips.
+- The 18 conditional skips remain 11 PostgreSQL-only cases, six unavailable
+  sibling verifier-schema cases and one opt-in live-model evaluation. They
+  are not counted as passes.
+- Disposable PostgreSQL acceptance plus final classifier regressions:
+  **22 passed, 0 failures/errors/skips** (`postgres-acceptance.xml`), consisting
+  of seven job/saved/dialogue acceptance cases and 15 classifier regressions.
+  The latter use in-memory stores; they do not add PostgreSQL persistence
+  coverage. This is a targeted PostgreSQL run, not a full PostgreSQL-suite pass.
+  The task-owned database container was stopped and removed after validation.
+- Frontend: **126 passed, 0 failed, 0 skipped** (`frontend.log`).
+- Ruff lint passed, format checks passed for **194 files**, and mypy passed
+  for **187 source files**. The sole pytest warning is the existing Starlette
+  dependency's deprecated AnyIO alias; the missing-marker warning is resolved.
+- Tests used isolated synthetic credentials and local endpoints. No live model
+  evaluation or fresh sandbox-image build was performed. Local Python is 3.13;
+  hosted CI's Python 3.12 execution still needs its own evidence.
+- Pre-commit integrity checks matched all **255** validated source-file hashes
+  and all **202** pre-existing untracked-file hashes. All seven repair refs and
+  both main refs matched their recorded values, and all seven repair heads
+  remained ancestors of the integration branch (`precommit-integrity.json`).
+
+**Local repair decision:** the four reproduced acceptance blockers are resolved
+with regression coverage and a clean bounded independent review. No further
+confirmed blocker was found in this repair diff. These local results do not
+approve an upstream merge or certify platform-integration issue #22: hosted
+workflows still require maintainer action, historical DCO omissions remain,
+and the identity/revocation/Portage contract work is not newly implemented here.
+No remote branch was pushed and no main branch was merged during this follow-up.
+
+### Repair commits
+
+All new source commits use English Conventional Commit subjects and include
+the configured contributor's DCO `Signed-off-by` trailer. Documentation for
+authorization and trace privacy is included with the corresponding code changes.
+Historical commits were not rewritten or signed on another contributor's behalf.
+
+| Commit | Subject |
+| --- | --- |
+| `f5e6552` | `fix(conversations): recheck quoted reply authorization in history` |
+| `3c77e46` | `fix(telemetry): retain bounded classifier outcomes across reply paths` |
+| `35392b7` | `fix(runner): normalize student errors for tutor feedback` |
+| `a21d42d` | `test(governance): register the adversarial regression marker` |
+
+These changes are retained on `feature/integrate-reviewed-pr-fixes`; the final
+report is committed separately as documentation-only evidence.
