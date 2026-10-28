@@ -138,7 +138,13 @@ text cannot be placed in trace metadata. The eight-field event row remains uncha
 `payload` now contains allowlisted numeric/boolean `metrics` and the authorized
 `exercise_version` (null for class events). Source, stdout, dialogue, free-text
 goals/reflections, notes and arbitrary model/result fields are excluded from the
-trace and export. Private goals/reflections remain in scoped learner state for
+trace and export. The narrow `metrics.injection` record additionally preserves
+validated classifier status and error-category enums; its score is finite and in
+[0, 1], or null for invalid evidence. Unknown status values become unavailable.
+Model names, arbitrary strings and exception bodies remain excluded. Both ordinary
+turns and flagged injection events use this representation, including checks that
+precede a deterministic quoted-follow-up clarification.
+Private goals/reflections remain in scoped learner state for
 tutoring. Historical/offline core traces have the old payload shape; analysis
 consumers must account for this HTTP minimization rather than assume full-text
 revision measures remain available. The grades firewall, governance and distress

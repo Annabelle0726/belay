@@ -8,6 +8,7 @@ Assignment state: run attempts and exercise events, keyed by exercise + version.
 from __future__ import annotations
 
 import json
+import math
 
 from ..auth import Identity, denied
 from .consent import ConsentRouter
@@ -60,6 +61,26 @@ def _metrics(value):
     return None
 
 
+def _injection_metrics(value: dict) -> dict:
+    """Keep closed classifier evidence without admitting arbitrary text fields."""
+    statuses = {"safe", "flagged", "unavailable", "malformed", "error", "disabled"}
+    categories = {"INIT_FAILED", "CLIENT_UNAVAILABLE", "MALFORMED_JSON", "LLM_INFERENCE_ERROR"}
+    status = value.get("status")
+    score = value.get("score")
+    result = {
+        "status": status if isinstance(status, str) and status in statuses else "unavailable",
+        "score": score
+        if (type(score) is int or type(score) is float) and 0 <= score <= 1 and math.isfinite(score)
+        else None,
+    }
+    if type(value.get("triggered")) is bool:
+        result["triggered"] = value["triggered"]
+    category = value.get("error_category")
+    if isinstance(category, str) and category in categories:
+        result["error_category"] = category
+    return result
+
+
 class ScopedStore:
     def __init__(self, store: Store, identity: Identity, state_store: Store | None = None):
         self.store = store
@@ -92,8 +113,18 @@ class ScopedStore:
         # persistence boundary retain only content-free signals; state remains private.
         payload = event["payload"]
         signals = payload.get("telemetry", payload.get("result", payload))
+        metrics = _metrics(signals)
+        injection = (
+            payload
+            if event["event_type"] == "injection"
+            else signals.get("injection")
+            if isinstance(signals, dict)
+            else None
+        )
+        if isinstance(injection, dict):
+            metrics["injection"] = _injection_metrics(injection)
         row["payload"] = {
-            "metrics": _metrics(signals),
+            "metrics": metrics,
             "exercise_version": self.identity.exercise_version if row["exercise_id"] else None,
         }
         row["note"] = ""

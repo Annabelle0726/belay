@@ -374,6 +374,15 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
     if payload.get("_reply_context") and not any(
         c.isalnum() for c in _latest_student_message(payload.get("recent", []))
     ):
+        # The clarification avoids tutoring calls, but classification already ran.
+        # Record its outcome without copying the quote or learner message.
+        components = {"injection": injection_telemetry} if injection_telemetry is not None else {}
+        if injection_telemetry is not None:
+            store.append_event(
+                make_event(
+                    pid, exercise["id"], mode, "turn", {"telemetry": components}, stance=stance
+                )
+            )
         return {
             "affective_state": "neutral",
             "affect_reasoning": "",
@@ -385,7 +394,7 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
             "memory": {},
             "message": "Which part of this reply would you like to ask about? You can ask for an explanation, add information, or point out something I misunderstood.",
             "check_question": None,
-            "components": {},
+            "components": components,
         }
     if stance == "control":
         return _control_turn(payload, ctx, store, pid, exercise, mode, pack, injection_telemetry)
