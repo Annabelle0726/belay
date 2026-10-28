@@ -19,6 +19,11 @@ services:
     environment:
       PROVIDER: ${PROVIDER:-openai_compatible}
       TUTOR_PACK: ${TUTOR_PACK:-datascience}
+      BELAY_ENV: ${BELAY_ENV:-production}
+      AUTH_ISSUER: ${AUTH_ISSUER:-}
+      AUTH_AUDIENCE: ${AUTH_AUDIENCE:-}
+      AUTH_PUBLIC_KEY_FILE: /run/belay-auth/identity.pub
+      AUTH_AUTHORIZATION_FILE: /run/belay-auth/authorization.json
       STORE_BACKEND: ${STORE_BACKEND:-sql}
       DATABASE_URL: ${DATABASE_URL:-sqlite:///./qimvp.db}
       # Point this at your model endpoint (host Ollama/vLLM, or an institutional
@@ -28,6 +33,9 @@ services:
       MODEL_FAST: ${MODEL_FAST:-llama3.2}
       MODEL_STRONG: ${MODEL_STRONG:-llama3.2}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:3000}
+    volumes:
+      # Operator-owned public key + authorization grants; never commit real grants.
+      - ${AUTH_CONFIG_DIR:-./deployment/auth}:/run/belay-auth:ro
     extra_hosts:
       # Lets the container reach a model endpoint on the host (Linux parity with
       # Docker Desktop's built-in host.docker.internal).

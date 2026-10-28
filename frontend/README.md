@@ -1,16 +1,127 @@
 # Front-end
 
 Reference front-ends for the Sol peer-tutor backend. They are demos and pilot
-glue, not part of the tested framework; the backend is the source of truth.
+glue; the backend is the source of truth. Request lifecycle behavior is covered
+by offline transport and page-script tests, not authenticated browser acceptance.
+
+For the complete controlled backend/worker setup, use the
+[team setup and launch README](../deployment/controls/README.md), then the detailed
+[controlled runtime guide](../deployment/controls/controlled-runtime.md). The same
+page works with the selected implemented provider; frontend code does not select
+models or vendor pricing. The legacy local demo command below is retained.
 
 | File | Purpose |
 |------|---------|
 | `widget.html` | The reference widget (Slice E/F), wired to the `/quad/v1` sidecar. Drop-in embeddable; routes entirely through the backend (no browser-side key). |
 | `embed-demo.html` | A minimal page showing how to embed the widget on a host site. |
-| `dev-client.html` | Zero-dependency page that routes through the backend to verify a deployment. Marked DEV ONLY: uses a hardcoded `PID = "p_dev"` without consent registration, so it is not suitable for a pilot session. |
+| `dev-client.html` | No-build development page with responsive layout, theme and conversation feed; the host supplies an authorized learner alias and signed access token. |
+| `dev-client.js` | Authenticated run/turn wiring, live signals and saved/unsaved conversation rendering for the development page. |
 | `api-client.js` | A small API client (`runModel`, `solTurn`, `createParticipant`, `exportEvents`, `getCurriculum`) for a custom front-end. |
+| `request-lifecycle.js` | Shared bounded JSON transport, turn validation, and page-local duplicate/stale-response protection. |
+
+## Failure and waiting behavior
+
+The reference pages and API client bound JSON requests to 90 seconds, including
+reading the response body, with no automatic retries. The browser may stop
+waiting while server/provider work continues; this is not a cancellation feature.
+Malformed JSON, empty messages and unusable display metadata cannot become a
+successful tutor answer. An ambiguous network/timeout/5xx failure explains that
+execution may still be running and directs the learner to course support.
+
+The pages block repeat clicks while work is pending and after an uncertain outcome
+in that page's current learner/exercise context. Context changes fence late
+responses, including switching away and back. A failed run never starts an Ask
+with stale run data. The widget preserves unsent text on failure and does not put
+error/empty tutor messages in dialogue history. No learner cancellation button
+is added.
+
+These are local guards, **not HTTP idempotency or durable recovery**. A refresh,
+another tab or another device is not protected by the page-local gate. Do not
+reload/resubmit to resolve an unknown outcome; the authenticated job/status API
+is the next prerequisite for recovering the same operation. The API client
+reports `error.code` and `error.uncertain`; custom hosts must implement their own
+display/in-flight guard and must not automatically retry uncertain POSTs.
+
+Run the offline tests from the repository root (no backend/model endpoint):
+
+```text
+node --test frontend/tests/control-messages.test.cjs frontend/tests/request-lifecycle.test.cjs frontend/tests/turn-pages.test.cjs
+```
+
+For the complete suite, including actual Markdown/sanitizer DOM checks:
+
+```powershell
+Set-Location frontend
+npm ci --ignore-scripts
+npm test
+```
+
+The dev-client serves pinned rendering libraries from `vendor/`; it needs no
+build step or CDN connection for Markdown. See `vendor/README.md` for provenance.
+Normal controlled waits show a small spinner, stable disabled submit buttons and
+a screen-reader status. Failure/unknown explanations remain visible. Fresh and
+restored tutor replies share the same sanitized Markdown renderer; only supported
+language-tagged code blocks receive syntax highlighting. Plain answers stay plain.
+
+The development page keeps request-associated history and system notices separate
+from Sol replies. Only the current reply owns an initially collapsed Glass Box.
+Desktop columns stay equally wide and tall, with long conversations scrolling
+inside the feed. Confirmed temporary-result expiry appears as a system notice;
+requesting another answer requires an explicit Ask Sol action. The compact header
+identifies this page as a Development preview.
+
+The page tests execute the actual inline page scripts with a minimal DOM harness
+and mocked transport. Real browser/authenticated HTTP acceptance remains pending.
 
 ## Backend wiring
+
+### Authenticated local demo (PowerShell)
+
+`python -m http.server 5173` only serves files. It does not install the host
+credential callback, so opening these demos directly reports **Host authentication
+is not configured for this backend**. `uvicorn --env-file .env` loads environment
+variables into that backend process; it cannot configure the browser.
+
+Stop the old uvicorn and static servers with Ctrl+C in their terminals, then run
+one command from `backend` (with the backend dependencies installed):
+
+```powershell
+Set-Location C:\Projects\EduCloud-Ecosystem\belay\backend
+python -m app.local_dev --save-dialogue
+```
+
+Open **http://127.0.0.1:5173/dev-client.html**. The Backend field is automatically
+**http://127.0.0.1:8000**. The launcher starts both servers; Ctrl+C stops both.
+Do not run the previous two server commands alongside it. For different ports,
+pass `--api-port 8001 --frontend-port 5174` and use the printed page URL.
+
+Startup checks both IPv4 and IPv6 loopback listeners: a wildcard or IPv6
+server already using either port is a conflict even if an IPv4 bind would succeed
+on Windows. This does not stop existing processes; close their terminals or
+choose unused ports before starting this demo.
+
+The launcher reads `backend/.env` for model/provider configuration. It supplies
+real RS256 credentials valid for five minutes through a same-origin callback,
+and a synthetic institution/class/learner grant for the installed pack. Private
+keys and bearer tokens stay in memory; credentials never go in a URL or browser
+storage. It binds only `127.0.0.1` and refuses foreign Host/Origin/fetch-site
+requests. This local issuer is for synthetic development data only; production
+still requires the institution's verified identity and authorization contract.
+
+Local data goes in ignored `deployment/local/`, separate from the configured
+course database and `deployment/auth/`. Startup runs the repeatable migration
+and initializes the local deletion ledger once. Keep this directory to test
+restoration across restarts; a new signing key invalidates old bearer tokens but
+does not change conversation ownership. Missing/corrupt deletion ledgers beside
+an existing local database fail closed. One launcher may use a data directory
+at a time; the lock is released on exit.
+
+`--save-dialogue` explicitly enables a **local-test-only one-hour retention
+policy**. Also select the optional saving checkbox in the page before sending
+a turn. Research consent remains independent. Without this flag saving is off,
+and ordinary authenticated tutoring remains available. No manual `init-ledger`
+command is needed for this launcher. Asking the tutor still uses your configured
+model endpoint; a model availability error is separate from authentication.
 
 `api-client.js` talks to the backend with two calls:
 
@@ -47,3 +158,205 @@ cards; the richer `components` block backs the same cards and the research trace
 
 Export button: downloads `GET /api/session/{pid}/events.jsonl` (the durable 6 trace,
 consenters only).
+
+## Host credential contract (production phase 1)
+
+The four clients use `auth-client.js` for authenticated API calls. The host must
+install these values before loading/calling the client (including demos):
+
+```js
+window.BELAY_AUTH_ORIGIN = "https://belay.your-institution.example";
+window.BELAY_GET_ACCESS_TOKEN = async () => hostSession.getShortLivedAccessToken();
+window.BELAY_LEARNER_ID = "gh:12345"; // dev-client alias; must match server grants
+window.BELAY_INSTITUTION_ID = "institution-opaque-a"; // both selectors required
+window.BELAY_CLASS_ID = "class-opaque-a";             // for multi-class subjects
+```
+
+The host issues RS256 credentials with a lifetime <=15 minutes and owns refresh.
+The callback keeps credentials in memory; it is never obtained from a query string
+or saved to browser storage. No model/provider key belongs in the frontend. The
+helper refuses a backend origin other than `BELAY_AUTH_ORIGIN`; HTTPS is required
+except for loopback development. If the demo backend field changes, requests fail
+until the trusted host explicitly updates the allowed origin. Configure CORS for
+that host. Body aliases must match the authorized learner; registration returns
+that same alias. `exercise_version` can be sent to pin an assignment version;
+omitting it uses the server's deployed version and still requires its grant.
+Identity and assignment permissions are enforced by the backend. See
+[the server contract](../docs/authentication.md) and run
+`node frontend/tests/auth-client.test.cjs` for hermetic credential wiring checks.
+
+## Optional saved dialogue
+
+`conversation-client.js` supplies an authenticated Session for both API surfaces.
+`api-client.js` exports `createConversationSession(exerciseId, onChange)`. The three
+demos mount the same saving/history controls. The preview dev-client incorporates
+the UI branch's layout and theme, with these controls inside Conversation Feed.
+The server config response supplies the VERIFIED namespace and
+current granted exercise versions; browser inputs never grant access.
+
+Saving is unchecked until the learner opts in under an enabled institution policy.
+The notice shows policy_id and creation-based retention. When saving is disabled,
+ordinary tutoring uses the existing unsaved API. A new saved attempt is explicit;
+refresh restores its latest bounded page. Older pages, a new attempt and deletion
+are explicit actions. Missing/expired/deleted history clears the stale pointer and
+does not silently create a replacement. Pending/failed turns are labeled. Turning
+saving off stops saving new turns; it does not delete existing history. Deletion
+remains available for an existing pointer even while the saving preference is off.
+
+Browser localStorage holds only the attempt ID, saving preference and occasionally
+a pending creation request ID, namespaced by verified institution/class/learner,
+backend/API prefix and exercise/version. It contains no credentials, source,
+learner/assistant messages or retry body. A turn request and its request_id remain
+in RAM during a lost-response retry. Refresh obtains authoritative server history;
+it never submits invented assistant messages. Sensitive exchanges restore neutral
+placeholders; the current live institution support response can still be displayed.
+
+The host must update its learner/class/institution values and dispatch
+`window.dispatchEvent(new Event("belay-auth-changed"))` on login/logout or scope
+change; discard/recreate embedded sessions when changing hosts. The shared controls
+clear prior history and discard an obsolete session's late response. Each saved
+operation additionally checks the authenticated server namespace. No token belongs
+in URL parameters, browser persistence, logs or exports.
+
+Hermetic checks: `node --test frontend/tests/*.test.cjs` (28 passed). These exercise refresh,
+new attempts, lost-response retries, pagination, unavailable/deleted history,
+identity changes and credential headers, plus parse every demo inline script.
+
+### Live replies and unavailable history
+
+Saved turns deliver an optional `live_signals` object for the existing Glass Box.
+These bounded, screened summaries are transient: they are not written to dialogue
+storage or browser storage, and are absent from restored history and retry replay.
+Restoring an attempt displays saved replies without inventing historical signals.
+A failed history-network request after a completed turn still supplies its live
+reply to the caller for display; refreshing replaces that transient display with
+the server's authoritative messages.
+
+An unavailable attempt clears the stale pointer and rechecks membership. If the
+current assignment is still authorized, New attempt and turning saving off remain
+usable. Recovery does not create an attempt automatically or extend its retention.
+Expired local-demo attempts remain unavailable under the one-hour test policy.
+
+### UI integration preview
+
+`codex/ui-conversation-preview` starts from bounded-restoration `3a414d6` and ports
+presentation from UI `0bd2def`: SVG logo, responsive columns, theme, Markdown feed
+and widget typography. It does not import the UI branch's CC-B1 backend ancestry
+or its unauthenticated POSTs. Current typed questions reach the backend, using
+the legacy `who/text` contract when saving is off. Run results use the actual
+pack-agnostic envelope; failed execution does not trigger a tutor call.
+Glass Box summaries wrap instead of being silently truncated.
+
+Run Result presents printed program output and a short execution status, with
+exercise-check details available on demand. It does not display the JSON API
+envelope; the complete response remains in RAM as authorized tutor context.
+Execution success and exercise-check success are distinct, and output is literal
+text so printed HTML is never executed. Empty output suggests using `print(...)`.
+
+The dev-client uses a compact, viewport-sized desktop workspace at widths >=900px
+and heights >=640px. Code and conversation scroll inside their own panels; the
+question input sits beside the conversation rather than below the editor.
+Controls use 34px heights (32px for conversation actions) and 8–16px gaps.
+Optional saving stays visible, with human-readable creation-based retention;
+refresh/older/delete actions are in a native More disclosure. Connection settings
+are collapsed by default; Glass Box and run-check feedback start expanded and can
+be collapsed manually. Run code sits in the Code Editor header. On narrow screens the conversation and
+composer come first. The reference widget also uses the compact saving toolbar; embed-demo keeps its original presentation.
+
+Markdown uses pinned marked 18.0.14 and DOMPurify 3.4.16 from jsDelivr, with
+sanitization and safe external links. If either library is unavailable, model text
+is escaped as plain text. There is no frontend build/install step.
+
+The same `python -m app.local_dev --save-dialogue` command applies on this branch.
+The initial inspected machine had existing servers on 8000/5173 and 8001/5174;
+the separate preview was launched with unused ports and a separate local directory:
+
+```powershell
+python -m app.local_dev --save-dialogue --api-port 8002 --frontend-port 5175 --data-dir ..\deployment\local\ui-preview
+```
+
+Open the printed `http://127.0.0.1:5175/dev-client.html` for normal peer tutoring.
+`?stance=control` provides a fixed support response without model calls for an
+offline wiring check; it is not a peer-model demonstration. Stance remains fixed
+for the page session, as in the existing enrollment-URL contract. Do not use the
+synthetic local preview for actual student data. Ports and data directory affect
+which namespace/attempt pointer is restored; preserve the directory for restart
+checks and do not expect a different directory to contain the old history.
+
+Both dev-client and widget expose System / Light / Dark in the header. System is
+the default; explicit choices persist only the `sol-theme` display preference.
+The shared palette makes the header follow the workspace; select chevrons are
+inset 12px from the right edge. Theme selection remains usable when embedded
+browser storage is unavailable. Authentication and dialogue are never stored by
+the theme helper.
+
+The widget puts optional saving above the messages and Send next to the input.
+Session settings and optional goals/reflection are collapsible, and signals use
+content-sized cards. Host `SOL_BACKEND_URL` / `BELAY_AUTH_ORIGIN`,
+`BELAY_LEARNER_ID`, and optional `BELAY_EXERCISE_ID` initialize its display fields;
+the server still verifies every credential and requested identity. The same local
+launcher serves `/widget.html` with the authenticated bootstrap.
+
+Glass Box history follow-up: signals are first-delivery data and are not persisted
+or replayed with saved dialogue. Same-attempt, same-revision refreshes keep the
+current page's received signals in RAM; new attempts, newer history revisions,
+identity/assignment changes and authorization failure clear them. Restored history
+and replies without signals show an explicit explanation instead of only dashes.
+32 hermetic frontend tests pass, including same-attempt refresh and new-attempt
+clearing. No signal persistence or backend contract changes were introduced.
+## Standalone local demo
+
+A plain `python -m http.server` cannot supply the host credential callback above.
+For an explicit local-only demo, stop the existing frontend and backend with
+Ctrl+C, then run from `backend/` using the project virtual environment:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.local_demo
+```
+
+Open `http://127.0.0.1:5173/dev-client.html`. This one command starts both servers
+on loopback, generates a temporary RSA key and synthetic class grant, and injects
+the host callback before the client loads. Access tokens are minted on demand for
+five minutes and stay in memory; the private key is never written or served. The
+backend still verifies signatures and membership, uses `BELAY_ENV=local` and an
+ephemeral memory store, and reads the inference settings from `backend/.env` when
+present. Asking the peer tutor still requires your configured model endpoint.
+Existing `.env` files and deployment configuration are not changed.
+
+If the original servers should keep running, choose different ports:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.local_demo --frontend-port 5174 --backend-port 8001
+```
+
+Then open `http://127.0.0.1:5174/dev-client.html`. For the no-model embed demo use
+`--pack _skeleton` and open `/embed-demo.html` (control stance). Ctrl+C stops both
+child/demo servers and removes the temporary public key and grants. The helper is
+only a local host emulator, never a production identity provider. Production and
+normal static hosting continue to require the real host credential callback.
+
+## Controlled unsaved Ask (CC-R3 Stage B)
+
+Ask uses `/api/sol/jobs` or `/quad/v1/jobs` and requires server opt-in plus the
+existing origin-bound host credential helper. `ask-jobs.js` stores only a scoped
+opaque request pointer in localStorage before admission. Reload or Check request
+status queries the same operation; an unknown/missing result never resends a POST.
+Temporary server retention is shown in the page. Clearing browser storage loses
+the recovery pointer; it is not cancellation. Unsaved Ask does not create an R2
+saved conversation. Run remains the existing separately controlled endpoint.
+The API client exports `recoverSolTurn(exerciseId)` for host bootstrapping.
+
+## Integrated saved/unsaved Ask (CC-R3 Stage C)
+
+The existing dev/widget/embed UI now uses controlled Ask jobs and opaque request
+recovery. Saved sessions use R2's attempt/history API plus its controlled jobs
+routes. Unknown outcomes are queried, never automatically submitted again. A
+changed input remains visible when recovering an older request. Saving remains
+optional and off by default; Glass Box signals are not saved for controlled saved
+turns. Code-run jobs are outside this integration.
+
+For an isolated no-model-service demo use `app.local_dev --controlled-stub
+--save-dialogue` with a new temporary data directory and unused ports. The full
+PowerShell command and database/migration/backup requirements are in
+[the Stage C protocol](../deployment/controls/controls-stage-c-protocol.md).
+The older launcher without this flag does not provision controlled Ask.

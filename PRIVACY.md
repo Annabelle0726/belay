@@ -18,13 +18,15 @@ implements it here.
 
 Privacy is a structural property, not a policy bolted on afterward.
 
-- **Pseudonymous identifiers only.** Identity is a pseudonymous host id (for example
-  `gh:12345`), namespaced by provider; that id is the participant anon-code. There is no
-  name, email, SIS id, or other personal identifier in the identity model.
+- **Pseudonymous identifiers only.** A verified opaque subject resolves to an
+  institution-issued institution/class/learner authorization context. The learner
+  alias keeps the `gh:12345` format; physical participant and anon-code keys are
+  class-specific digests. There is no name, email, SIS id or other personal
+  identifier in the identity model. Credentials and subjects are never persisted.
   Source: `README.md` (Privacy by architecture), `CONTRIBUTING.md` ("Privacy is enforced
   in code, not by policy"), `backend/app/store/models.py` (participants table: "anonymized
   identity + consent flag. No PII by design"), `backend/app/integrations/quad/router.py`.
-- **PII is rejected at the boundary.** The Quad sidecar refuses any payload carrying PII
+- **PII is rejected at the boundary.** Both authenticated HTTP surfaces refuse any payload carrying PII
   (name, SIS/student id, email, ssn, phone field keys anywhere; plaintext email patterns;
   non-pseudonymous ids) with a 422 before it reaches the tutor.
   Source: `backend/app/integrations/quad/pii.py` (`pii_reason`, `assert_no_pii`,
@@ -143,3 +145,85 @@ Two decisions are deliberately left to the IRB and are marked open in the code:
 - System architecture, including the governance gate and the trace envelope:
   `ARCHITECTURE.md`.
 - The licensing split: `LICENSING.md`.
+# Operational accounting (CC-R3)
+
+Resource accounting metadata uses separate controls tables and does not depend on research
+consent. Encrypted temporary execution content lives separately in `control_data`
+as described below; it is not an accounting or research record. They contain hashed hierarchical scope keys, opaque operation/attempt
+references, policy versions, integer usage, states and content-free reason codes.
+They contain no prompts, source code, response text or bearer tokens. Operator
+reconciliation records contain opaque evidence references. No institution-wide
+usage endpoint is exposed to students.
+
+The early service-only slice accepted opaque references. Stage B implemented
+owned expiring encrypted payload/results; Stage C adds the saved-turn link and
+same-database publication contract described below.
+Accounting/tombstone archival and rejection-record retention require an approved
+policy before production rollout. Development accounting is retained indefinitely
+to preserve idempotency and audit history. This is not a new conversation archive.
+See [operator guide](deployment/controls/controls-operations.md).
+
+## Production identity boundary
+
+`backend/app/auth.py` verifies signature, issuer, audience and time claims, then
+resolves only operator-owned membership and assignment grants. Every learner
+read/write, registration, event ingress, export and code execution route uses that
+context. Another learner or class is uniformly unavailable (404), regardless of
+whether records exist. Missing credentials are 401; missing auth configuration
+is 503. Explicit local/test modes still require signed credentials.
+
+`backend/app/store/scoped.py` namespaces class state and assignment-version events.
+Legacy records without trusted scope are excluded; no automatic ownership backfill
+or broad default access exists. HTTP trace payloads retain allowlisted numeric and
+boolean metrics plus the authorized version, removing raw source, stdout, notes
+and free-text intake from events/exports. Private scoped goals/reflections retain
+the existing tutoring behavior. Consent still controls durable versus ephemeral
+state; registration cannot change anyone else's consent. The grades firewall and
+governance/distress floors are unchanged. See [the identity contract and upgrade
+procedure](docs/authentication.md), including retention and offline-tool boundaries.
+
+## Course storage and research consent (CC-R2 step 1)
+
+Scoped HTTP learner state now serves ordinary course continuity independently of
+research consent. Research events remain consent-gated and content-free. Dialogue
+saving is a separate, default-disabled policy; research consent never enables it.
+See [docs/conversations.md](docs/conversations.md).
+
+Saved dialogue is an independently optional course function, disabled until an
+institution-approved policy is configured. It uses dedicated bounded tables and
+creation-based expiry, not research events or research consent. Sensitive exchanges
+retain a neutral placeholder. Deletion fences survive database backup restoration;
+operators must retain the independent content-free ledger and retire backups.
+Deployment commands, limits and unresolved policy choices are in docs/conversations.md.
+### Unsaved Ask operational recovery (CC-R3 Stage B)
+
+When explicitly enabled, Ask uses short-lived encrypted operational input and
+results in the shared controls coordinator. This is not saved dialogue or research
+consent: research routing remains unchanged. No bearer token or raw login subject
+is retained. Input lasts at most queue wait plus execution limit; result retention
+is `result_seconds` (300 seconds locally, maximum 3600). Operators must approve
+and disclose production retention, restrict database/key access, run
+`python -m app.controls.cli cleanup-content` at least every minute, and exclude
+these temporary tables from long-lived backups/exports. Encryption is not permission
+to retain content indefinitely. Expiry blocks access even before physical cleanup.
+PII and verbatim distress are not retained; content-free accounting/dedup records
+survive independently. No R2 saved-conversation strategy is changed.
+
+### Saved Ask execution (CC-R3 Stage C)
+
+Saved Ask reuses the existing optional R2 archive, creation expiry, ownership,
+revision/turn leases and independent deletion ledger. It requires explicitly
+co-located dialogue/controls tables to publish the released assistant reply,
+temporary result and task completion in one SQL transaction. There is no
+cross-database atomicity claim or automatic data relocation. A content-free link
+associates the logical task with one R2 turn; internal model retries remain
+separate accounting attempts. Saved temporary results omit Glass Box analysis.
+Deletion and R2 maintenance also erase linked operational input/results; expiry
+bounds their TTL. Failed/unknown jobs never create a successful empty reply or
+requeue themselves. Original-principal authorization is rechecked at worker and
+result boundaries, without retaining credentials.
+
+Operators must exclude temporary execution content from long-lived backups and
+exports even when it shares the dialogue database. Existing R2 policy/consent
+separation and deletion-fence restore checks remain unchanged. See
+[the Stage C contract and local verification](deployment/controls/controls-stage-c-protocol.md).

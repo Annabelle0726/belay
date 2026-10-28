@@ -4,6 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Peer-Tutor reference widget (/quad/v1)</title>
+  <link rel="icon" type="image/svg+xml" href="AI-Powered-Spark.svg"/>
+  <link rel="stylesheet" href="workspace.css"/>
+  <script src="theme-client.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@18.0.14/lib/marked.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.4.16/dist/purify.min.js"></script>
   <!--
     DEPENDENCY-LIGHT REFERENCE WIDGET (replaceable; demo-proof grade, not pilot UI).
 
@@ -18,71 +23,75 @@
       2. Goals & reflect - opt-in, honored-not-authority (POST /quad/v1/goals,
                            /quad/v1/reflection); a goal is honored WITHIN limits,
                            never as a command.
-      3. Trace & signals - SIGNALS, not verdicts: a withheld solution shows as
-                           "held back, with a nudge"; self-eval + the wellbeing
-                           softener are observable indicators. Mastery framing,
-                           never a grade, never a ranking.
+      3. Student-facing explanation of visible evidence and tutoring approach.
 
     One customization knob (scaffolding level) proves the per-learner overlay seam
     end-to-end: it is opt-in and routed through the server-side floor check; it
     shapes HOW the tutor helps, never WHAT it withholds.
   -->
   <style>
-    :root { --ink:#1a2233; --muted:#667085; --line:#e3e8ef; --bg:#f7f9fc;
-            --accent:#3056d3; --hold:#9a6700; --soft:#7a3ea8; --ok:#2f7d4f; }
-    * { box-sizing: border-box; }
-    body { font: 14px/1.55 system-ui, sans-serif; color:var(--ink); margin:0;
-           background:var(--bg); }
-    .wrap { max-width: 960px; margin: 1.2rem auto; padding: 0 1rem; }
-    h1 { font-size: 1.15rem; margin:.2rem 0; }
-    h2 { font-size: .92rem; margin:.1rem 0 .6rem; letter-spacing:.01em; }
-    .note { color:var(--muted); font-size:.82rem; }
-    .bar { display:flex; flex-wrap:wrap; gap:.6rem; align-items:end;
-           background:#fff; border:1px solid var(--line); border-radius:10px; padding:.7rem .9rem; }
-    .bar label { font-size:.72rem; color:var(--muted); display:block; margin-bottom:.15rem; }
-    .bar input, .bar select { font:inherit; padding:.35rem .45rem; border:1px solid var(--line);
-           border-radius:7px; }
-    .panes { display:grid; grid-template-columns: 1.5fr 1fr; gap:.9rem; margin-top:.9rem; }
-    .pane { background:#fff; border:1px solid var(--line); border-radius:10px; padding:.9rem; }
-    .col { display:flex; flex-direction:column; gap:.9rem; }
-    .msgs { display:flex; flex-direction:column; gap:.5rem; min-height:170px; max-height:320px;
-            overflow:auto; padding:.2rem; }
-    .msg { padding:.5rem .7rem; border-radius:10px; max-width:90%; }
-    .msg.student { align-self:flex-end; background:#eef2ff; }
-    .msg.tutor { align-self:flex-start; background:#f1f5f9; }
-    .msg .who { font-size:.7rem; color:var(--muted); margin-bottom:.15rem; }
-    textarea, .row input { width:100%; font:inherit; padding:.45rem; border:1px solid var(--line);
-            border-radius:7px; }
-    button { font:inherit; padding:.45rem .8rem; border:1px solid var(--accent); background:var(--accent);
-             color:#fff; border-radius:7px; cursor:pointer; margin-top:.5rem; }
-    button.ghost { background:#fff; color:var(--accent); }
-    .chip { display:inline-block; font-size:.74rem; padding:.12rem .5rem; border-radius:999px;
-            border:1px solid var(--line); margin:.1rem .25rem .1rem 0; color:var(--muted); }
-    .chip.hold { color:var(--hold); border-color:#f0d9a8; background:#fff8e8; }
-    .chip.soft { color:var(--soft); border-color:#e6cff0; background:#faf2ff; }
-    .chip.ok   { color:var(--ok); border-color:#cfe9d8; background:#f1fbf4; }
-    .sig { margin:.35rem 0; }
-    .sig b { font-weight:600; }
-    .declined { color:var(--hold); font-size:.8rem; margin-top:.3rem; }
-    code { background:#eef1f6; padding:.05rem .3rem; border-radius:5px; }
+    :root { --radius-control:8px; }
+    * { box-sizing:border-box; }
+    body { margin:0; font:14px/1.5 system-ui,sans-serif; color:var(--text); background:var(--bg); }
+    .wrap { max-width:1280px; margin:0 auto; padding:16px; }
+    h1 { font-size:1.15rem; margin:0; }
+    h2 { font-size:.9rem; margin:0; }
+    .note { color:var(--muted); font-size:.8rem; }
+    .intro { margin:0 0 12px; }
+    .bar { display:flex; flex-wrap:wrap; gap:10px; align-items:end; }
+    .bar > div { flex:1 1 180px; min-width:0; }
+    label { display:block; color:var(--muted); font-size:.8rem; margin-bottom:4px; }
+    input, select, textarea { font:inherit; color:var(--text); background-color:var(--field-bg); border:1px solid var(--border-strong); border-radius:8px; padding:7px 10px; }
+    .bar input, .bar select, textarea { width:100%; }
+    button { font:inherit; min-height:34px; padding:6px 12px; border:1px solid var(--accent); border-radius:8px; background:var(--accent); color:var(--on-accent); cursor:pointer; }
+    button.ghost { background:var(--surface); color:var(--text); border-color:var(--border-strong); }
+    button:disabled { opacity:.5; cursor:default; }
+    :is(button,input,select,textarea,summary):focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+    button:hover:not(:disabled) { filter:brightness(.95); }
+    .pane, .settings { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; box-shadow:var(--shadow); min-width:0; }
+    .settings summary, .goals summary { cursor:pointer; }
+    .settings[open] summary { margin-bottom:12px; }
+    .panes { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(0,1fr); gap:12px; margin-top:12px; align-items:start; }
+    .col { display:flex; flex-direction:column; gap:12px; min-width:0; }
+    .chat-pane { display:flex; flex-direction:column; gap:10px; border-top:3px solid var(--accent); }
+    .pane-heading { padding-bottom:10px; border-bottom:1px solid var(--border); }
+    .msgs { display:flex; flex-direction:column; gap:10px; height:clamp(180px,35vh,440px); overflow:auto; overscroll-behavior:contain; border:1px solid var(--border); border-radius:8px; padding:10px; }
+    .msgs:empty::before { content:"Ask Sol a question to get started."; color:var(--muted); text-align:center; margin:auto; }
+    .msg { padding:10px 12px; border:1px solid var(--border); border-radius:8px; max-width:90%; overflow-wrap:anywhere; }
+    .msg.student { align-self:flex-end; background:var(--surface-2); }
+    .msg.tutor { align-self:flex-start; max-width:100%; background:var(--code-bg); }
+    .who { font-size:.7rem; color:var(--muted); margin-bottom:4px; }
+    .msg p { margin:.25rem 0; }
+    .msg pre { overflow:auto; padding:10px; background:var(--surface-2); border-radius:6px; }
+    .msg code { color:var(--code-text); background:var(--surface-2); border-radius:4px; padding:1px 3px; }
+    .msg ul, .msg ol { padding-left:1.2rem; }
+    .composer { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:end; }
+    textarea { display:block; resize:vertical; min-height:58px; }
+    .goals-content { display:grid; gap:10px; margin-top:12px; }
+    .goal-action { display:flex; align-items:center; gap:8px; }
+    .signals-pane { max-height:65vh; overflow:auto; }
+    .chip { display:inline-block; font-size:.75rem; padding:3px 8px; border-radius:999px; border:1px solid var(--border); background:var(--surface-2); margin:2px 4px 2px 0; }
+    .chip.hold, .declined { color:var(--warn-text); }
+    .chip.ok { color:var(--accent-teal); }
+    .chip.soft { color:var(--accent); }
+    .sig { margin:10px 0; }
+    .conversation-note { color:var(--muted); }
+    @media(max-width:700px) { .panes { grid-template-columns:minmax(0,1fr); } .wrap { padding:12px; } .pane,.settings { padding:12px; } .msgs { height:35vh; } }
   </style>
 </head>
 <body>
+<header class="site-header">
+  <div class="brand-group"><img src="AI-Powered-Spark.svg" alt="" width="28" height="28"/><h1>Sol</h1><span class="header-description">Peer tutor · Reference widget</span></div>
+  <div class="controls-group"><label class="theme-picker"><span>Theme</span><select data-theme-picker aria-label="Color theme"><option value="auto">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label></div>
+</header>
 <div class="wrap">
-  <h1>Peer-Tutor reference widget</h1>
-  <p class="note">
-    The host supplies an already-authenticated <strong>pseudonymous</strong> id; this
-    widget never authenticates and sends no PII. It renders <strong>signals, not
-    verdicts</strong>, and shows <strong>no grades and no rankings</strong>. Replaceable:
-    a host can drop this in or swap its own shell against the same <code>/quad/v1</code>
-    contract.
-  </p>
-
+  <p class="note intro">Think it through with Sol. Signals describe the tutor’s help, never grades or rankings.</p>
+  <details class="settings"><summary>Session settings</summary>
   <div class="bar">
-    <div><label>sidecar base URL</label><input id="base" value="http://localhost:8000" /></div>
-    <div><label>pseudo_id (from host)</label><input id="pid" value="gh:12345" /></div>
-    <div><label>exercise_id</label><input id="ex" value="ds-foundations" /></div>
-    <div><label>stance</label>
+    <div><label for="base">Backend URL</label><input id="base" value="http://localhost:8000" /></div>
+    <div><label for="pid">Learner alias (from host)</label><input id="pid" value="gh:12345" /></div>
+    <div><label for="ex">Exercise</label><input id="ex" value="ds-foundations" /></div>
+    <div><label for="stance">Tutor stance</label>
       <select id="stance">
         <option value="peer">peer</option>
         <option value="control">control (no model)</option>
@@ -90,7 +99,7 @@
       </select>
     </div>
     <div>
-      <label>scaffolding (one customization knob, opt-in)</label>
+      <label for="knob">Guidance preference (optional)</label>
       <select id="knob">
         <option value="">(default)</option>
         <option value="more">more scaffolding (smaller steps)</option>
@@ -104,42 +113,61 @@
     customizable. <span id="declined" class="declined"></span>
   </p>
 
+  </details>
   <div class="panes">
     <div class="col">
-      <div class="pane">
-        <h2>Chat</h2>
+      <div class="pane chat-pane">
+        <h2 class="pane-heading">Conversation</h2>
+        <div id="conversation-controls"></div>
         <div class="msgs" id="msgs"></div>
-        <textarea id="say" rows="2" placeholder="Ask the tutor, or paste what you tried..."></textarea>
-        <div><button id="send">Send turn</button></div>
+        <div class="composer"><textarea aria-label="Message to Sol" id="say" rows="2" placeholder="Ask the tutor, or paste what you tried..."></textarea>
+        <button id="send">Send</button></div>
       </div>
-      <div class="pane">
-        <h2>Goals &amp; reflection <span class="note">(opt-in, honored within limits, never a command)</span></h2>
-        <textarea id="goal" rows="2" placeholder="A goal in your own words, e.g. 'make me explain my reasoning first'"></textarea>
-        <button id="setgoal" class="ghost">Set goal</button>
-        <span id="goalstate" class="note"></span>
-        <textarea id="refl" rows="2" placeholder="A reflection on how it is going..." style="margin-top:.6rem"></textarea>
-        <button id="setrefl" class="ghost">Record reflection</button>
-        <span id="reflstate" class="note"></span>
-      </div>
+      <details class="pane goals">
+        <summary><strong>Goals &amp; reflection</strong> <span class="note">· Optional</span></summary>
+        <div class="goals-content"><span class="note">Your goals guide the help, within the tutor’s safety limits.</span>
+        <textarea aria-label="Learning goal" id="goal" rows="2" placeholder="A goal in your own words, e.g. 'make me explain my reasoning first'"></textarea>
+        <div class="goal-action"><button id="setgoal" class="ghost">Set goal</button>
+        <span id="goalstate" class="note" role="status"></span></div>
+        <textarea aria-label="Reflection" id="refl" rows="2" placeholder="A reflection on how it is going..." style="margin-top:.6rem"></textarea>
+        <div class="goal-action"><button id="setrefl" class="ghost">Record reflection</button>
+        <span id="reflstate" class="note" role="status"></span></div></div>
+      </details>
     </div>
 
-    <div class="pane">
-      <h2>Trace &amp; signals <span class="note">(mastery framing, not a score)</span></h2>
-      <div id="signals"><p class="note">Signals from the latest turn appear here.</p></div>
+    <div class="pane signals-pane">
+      <h2 class="pane-heading">How Sol is helping</h2>
+      <div id="signals"><p class="note">An explanation from the latest reply will appear here.</p></div>
     </div>
   </div>
 </div>
 
+<p id="turnstatus" role="status" class="note"></p>
+<script src="auth-client.js"></script>
+<script src="control-messages.js"></script>
+<script src="request-lifecycle.js"></script>
+<script src="ask-jobs.js"></script>
+<script src="conversation-client.js"></script>
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
+// Public host configuration chooses the display fields, never grants permissions.
+if (window.SOL_BACKEND_URL || window.BELAY_AUTH_ORIGIN) $("base").value = window.SOL_BACKEND_URL || window.BELAY_AUTH_ORIGIN;
+if (window.BELAY_LEARNER_ID) $("pid").value = window.BELAY_LEARNER_ID;
+if (window.BELAY_EXERCISE_ID) $("ex").value = window.BELAY_EXERCISE_ID;
 const baseURL = () => $("base").value.replace(/\/$/, "");
+const askJobs = globalThis.belayAskJobs();
+let sending = false, generation = 0;
 const recent = [];   // dialogue history for the turn loop
 
 function addMsg(who, text) {
   const d = document.createElement("div");
   d.className = "msg " + (who === "student" ? "student" : "tutor");
-  d.innerHTML = '<div class="who">' + who + "</div>" + escapeHtml(text);
+  const html = window.marked && window.DOMPurify
+    ? window.DOMPurify.sanitize(window.marked.parse(String(text || "")), {USE_PROFILES:{html:true}})
+    : escapeHtml(text);
+  d.innerHTML = '<div class="who">' + escapeHtml(who) + "</div>" + html;
+  d.querySelectorAll("a").forEach(a => {a.setAttribute("target", "_blank"); a.setAttribute("rel", "noopener noreferrer");});
   $("msgs").appendChild(d);
   $("msgs").scrollTop = $("msgs").scrollHeight;
 }
@@ -151,90 +179,113 @@ function overlayFromKnob() {
   return v ? { pedagogy: { scaffolding: v } } : null;
 }
 async function post(path, body) {
-  const r = await fetch(baseURL() + path, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+  const data = await globalThis.belayRequestJSON(baseURL() + path, {
+    method:"POST", headers:await window.BelayAuth.headers(baseURL()), body:JSON.stringify(body)
   });
-  const data = await r.json().catch(() => ({}));
-  return { status: r.status, data };
+  return {status:200,data};
 }
 
-// SIGNALS, not verdicts. A withheld solution reads as "held back, with a nudge".
 function renderSignals(t) {
-  const c = (t.components || {});
-  const gov = t.governance || "none";
-  const govLabel = {
-    none: ['<span class="chip ok">on track</span>', "no intervention needed"],
-    withholding_solution: ['<span class="chip hold">held back, with a nudge</span>',
-      "kept the full answer back so the learning stays yours"],
-    redirect_answer_seeking: ['<span class="chip hold">redirected to your reasoning</span>',
-      "pointed back at your thinking instead of handing it over"],
-    flag_escalate: ['<span class="chip">flagged for a human</span>', "out of the tutor's depth"],
-    encourage_tone: ['<span class="chip ok">encouraging</span>', "meta-affective support"],
-  }[gov] || ['<span class="chip">' + escapeHtml(gov) + "</span>", ""];
-
-  const parts = [];
-  parts.push('<div class="sig">' + govLabel[0] + '<div class="note">' + govLabel[1] + "</div></div>");
-  parts.push('<div class="sig"><b>Move:</b> <span class="chip">' + escapeHtml(t.intervention || "-") +
-             '</span> <span class="note">' + escapeHtml(t.affective_state || "") + "</span></div>");
-  const se = c.self_eval || {};
-  if (se.leak_risk) parts.push('<div class="sig"><b>Self-check leak risk:</b> ' + escapeHtml(se.leak_risk) + "</div>");
-  // Calibrated confidence as a soft signal (a bar, never a grade or rank).
-  if (typeof t.confidence === "number") {
-    const pct = Math.round(t.confidence * 100);
-    parts.push('<div class="sig"><b>Tutor confidence (calibrated):</b> ' + pct + "%</div>");
+  const explanation = t.glass_box;
+  if (!explanation || typeof explanation.evidence !== "string" || typeof explanation.approach !== "string") {
+    $("signals").textContent = "No explanation is available for this turn.";
+    return;
   }
-  if (c.wellbeing_softened) {
-    parts.push('<div class="sig"><span class="chip soft">tone softened</span>' +
-               '<div class="note">an observable wellbeing backstop fired</div></div>');
+  $("signals").replaceChildren();
+  for (const line of [explanation.evidence, explanation.approach]) {
+    const paragraph = document.createElement("p");
+    paragraph.textContent = line;
+    $("signals").appendChild(paragraph);
   }
-  if (se.goal_alignment) {
-    parts.push('<div class="sig"><b>Goal alignment:</b> <span class="chip">' +
-               escapeHtml(se.goal_alignment) + "</span></div>");
-  }
-  parts.push('<p class="note">Signals describe how the tutor is helping. They are not a grade, a score, or a ranking.</p>');
-  $("signals").innerHTML = parts.join("");
 }
 
+const dialogue = window.BelayConversations.mount({
+  container: $("conversation-controls"), compact: true, base: baseURL, prefix: "/quad/v1", exercise: () => $("ex").value,
+  renderHistory(messages) {
+    recent.length = 0;
+    $("signals").textContent = "An explanation from the latest reply will appear here.";
+    if (!messages.length) { $("msgs").textContent = ""; return; }
+    $("msgs").textContent = "";
+    messages.forEach(m => addMsg(m.role === "student" ? "student" : "tutor", m.text +
+      (m.status === "completed" ? "" : " (" + m.status + ")")));
+  }
+});
+for (const id of ["base", "ex", "pid"]) $(id).addEventListener("change", () => { generation++; recent.length = 0; dialogue.refresh().then(recoverUnsaved); });
 $("send").addEventListener("click", async () => {
-  const text = $("say").value.trim();
-  if (text) { addMsg("student", text); recent.push({ who: "student", text }); $("say").value = ""; }
-  const body = {
-    pseudo_id: $("pid").value, exercise_id: $("ex").value, stance: $("stance").value,
-    event: "chat", mode: "study", source: "", recent: recent.slice(-8),
-  };
-  const ov = overlayFromKnob();
-  if (ov) body.overlay = ov;     // the customization knob rides on the turn
-  const { status, data } = await post("/quad/v1/turn", body);
-  if (status !== 200) { addMsg("tutor", "(" + status + ") " + (data.detail || JSON.stringify(data))); return; }
-  addMsg("tutor", data.message || "(no message)");
-  if (data.check_question) addMsg("tutor", data.check_question);
-  recent.push({ who: "tutor", text: data.message || "" });
-  renderSignals(data);
-  // Surface any declined overlay field (floor check) without echoing the raw value.
-  const decl = ((data.components || {}).overlay_declined) || [];
-  $("declined").textContent = decl.length ? ("A preference was declined by the floor check: " + decl.join(", ")) : "";
+  if (sending) return;
+  sending = true;
+  const currentGeneration = generation, currentExercise = $("ex").value;
+  const text = $("say").value.trim(); if (!text) {sending = false; return;}
+  $("send").disabled = true;
+  try {
+    let data = await dialogue.send({message:text, stance:$("stance").value, mode:"study",
+                                   source:"", overlay:overlayFromKnob()});
+    if (!data) {
+      data = await askJobs.ask(baseURL(), "/quad/v1/jobs", {participant_id:$("pid").value, exercise_id:$("ex").value,
+        stance:$("stance").value, event:"chat", mode:"study", source:"", recent:[...recent.slice(-8), {who:"student",text}], overlay:overlayFromKnob()},
+        state => { if (currentGeneration === generation) $("turnstatus").textContent = state === "queued" ? "Waiting for a worker…" : "Checking request status…"; });
+      if (currentGeneration !== generation || currentExercise !== $("ex").value) return;
+      const recovered = askJobs.wasRecovered(data);
+      if (!recovered) addMsg("student", text);
+      addMsg("tutor", data.message);
+      if (data.check_question) addMsg("tutor", data.check_question);
+      if (!recovered) recent.push({who:"student",text}, {who:"tutor",text:data.message});
+      askJobs.acknowledge(data);
+      data.recovered_request = recovered;
+    }
+    if (currentGeneration !== generation || currentExercise !== $("ex").value) return;
+    if (data.unsaved_exchange) { addMsg("tutor", data.message); if (data.check_question) addMsg("tutor", data.check_question); }
+    if (!data.recovered_request) $("say").value = "";
+    $("send").textContent = "Send"; $("turnstatus").textContent = data.recovered_request ? "Recovered the original request. Your current input was not submitted." : "";
+    if (data.glass_box) renderSignals(data);
+    else $("signals").textContent = "Explanations from earlier replies are not saved.";
+  } catch (error) { if (currentGeneration === generation) {$("turnstatus").textContent = error.message; if (error.uncertain) $("send").textContent = "Check request status";} }
+  finally { sending = false; $("send").disabled = false; }
 });
 
+async function recoverUnsaved() {
+  const current = generation;
+  let session;
+  try { session = await dialogue.ready(); }
+  catch (error) { if (current === generation) $("turnstatus").textContent = error.message; return; }
+  if (current !== generation || session.enabled || sending) return;
+  sending = true; $("send").disabled = true;
+  try {
+    const answer = await askJobs.recover(baseURL(), "/quad/v1/jobs", $("ex").value);
+    if (current !== generation) return;
+    if (answer) { addMsg("tutor", answer.message); askJobs.acknowledge(answer);
+      $("turnstatus").textContent = "Recovered the same request. No request was resubmitted."; }
+  } catch (error) { if (current === generation) $("turnstatus").textContent = error.message; }
+  finally { sending = false; $("send").disabled = false; }
+}
+window.addEventListener?.("belay-auth-changed", () => {generation++; recent.length = 0; $("msgs").textContent = "";});
+recoverUnsaved();
+
 $("setgoal").addEventListener("click", async () => {
+  try {
   const { status, data } = await post("/quad/v1/goals", { pseudo_id: $("pid").value, text: $("goal").value });
   if (status !== 200) { $("goalstate").textContent = "(" + status + ") rejected"; return; }
   const g = data.goals;
   $("goalstate").textContent = !g ? "cleared"
     : g.honored ? "honored within your stance (never a command)"
     : "recorded, but not adopted - the tutor holds you to constructive goals";
+  } catch { $("goalstate").textContent = "Update not confirmed. Check status before trying again."; }
 });
 
 $("setrefl").addEventListener("click", async () => {
+  try {
   const { status } = await post("/quad/v1/reflection", { pseudo_id: $("pid").value, text: $("refl").value });
   $("reflstate").textContent = status === 200 ? "recorded (private to you, never to an instructor)" : "(" + status + ")";
+  } catch { $("reflstate").textContent = "Update not confirmed. Check status before trying again."; }
 });
 
 // Setting the knob also persists the overlay via its own intake (opt-in).
 $("knob").addEventListener("change", async () => {
+  try {
   const { data } = await post("/quad/v1/overlay", { pseudo_id: $("pid").value, overlay: overlayFromKnob() });
   const decl = ((data.overlay || {}).declined) || [];
   $("declined").textContent = decl.length ? ("A preference was declined by the floor check: " + decl.join(", ")) : "";
+  } catch { $("declined").textContent = "Update not confirmed. Check status before trying again."; }
 });
 </script>
 </body>

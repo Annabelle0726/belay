@@ -34,7 +34,161 @@ Three properties distinguish it:
   pointed at a local Ollama or vLLM endpoint, so the tutor can run entirely on
   institutional compute with no external API in the data path.
 
+## Authentication required
+
+All learner/resource API routes now require a short-lived signed bearer plus
+operator-owned institution/class/learner and assignment-version grants. The
+production default refuses protected requests with missing configuration (503).
+Local/test modes must be explicitly selected and also require credentials.
+Set up the [identity contract and authorization file](docs/authentication.md)
+before following the quickstart. Health checks remain public.
+
 ## Quickstart
+
+### Controlled Run code / Ask Sol (PowerShell)
+
+Open PowerShell in this repository's root with your Python environment activated.
+For **first use only**, copy and run this entire block. It prepares a new local
+model-stub installation; it refuses existing config/data rather than overwriting
+them. It does not start services or call a real model.
+
+```powershell
+& {
+    $ErrorActionPreference = 'Stop'
+    $belayRoot = (Get-Location).Path
+    if (-not (Test-Path './backend/app/controlled_runtime.py')) { throw 'Run from the Belay repository root.' }
+    $configDir = Join-Path $belayRoot 'deployment/local/controlled-config'
+    $dataDir = Join-Path $belayRoot 'deployment/local/controlled-runtime'
+    if ((Test-Path $configDir) -or (Test-Path $dataDir)) { throw 'Already configured or partially prepared; retain existing files and inspect them before proceeding.' }
+    python -m pip install -r ./backend/requirements.txt -r ./backend/requirements-packs.txt
+    if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed.' }
+    New-Item -ItemType Directory -Path $configDir | Out-Null
+    Copy-Item ./deployment/controls/controlled-runtime.env.example (Join-Path $configDir '.env')
+    Copy-Item ./deployment/controls/controlled-runtime-policy.example.json (Join-Path $configDir 'policy.json')
+    Push-Location ./backend
+    try {
+        python -m app.controlled_runtime prepare --data-dir $dataDir --env-file (Join-Path $configDir '.env') --policy (Join-Path $configDir 'policy.json') --api-port 8004 --frontend-port 5177
+        if ($LASTEXITCODE -ne 0) { throw 'Preparation failed; do not reinitialize existing data.' }
+    } finally { Pop-Location }
+}
+```
+
+**Daily commands** for an already prepared installation, from the repository root:
+
+```powershell
+.\start-belay.ps1 -Check
+.\start-belay.ps1
+```
+
+Defaults read `deployment/local/controlled-config/.env` and, if present,
+credentials only from `backend/.env`. The selected provider/models come from
+configuration; an existing profile may use paid inference. Only missing keys
+prompt securely. Check makes no model calls and reports queued work and expiry.
+After successful start,
+open **http://127.0.0.1:5177/dev-client.html**; API: **http://127.0.0.1:8004**.
+The command runs API, frontend and worker together in the foreground. Default
+feedback in a fresh example installation is labelled `Local model stub`; existing
+configurations are retained. Wait for `ready:true` and `worker_alive:true`;
+`checked:true` alone is preflight. Eligible queued work can execute on start;
+unknown tasks are not automatically resubmitted.
+
+**Stop:** press **Ctrl+C** in the starting terminal, or run this from a second
+PowerShell at the repository root:
+
+```powershell
+.\stop-belay.ps1
+```
+
+Wait for the starting terminal to exit. Start does not initialize/migrate/reset
+data; stop does not erase task records or refund unknown usage.
+Start never renews a persisted authorization. An approved, unarmed window starts
+once on first launch. An expired window requires explicit review, not another
+prepare. Optional `-DataDir`, `-EnvFile`, `-CredentialsEnvFile` select another
+prepared installation. Model changes also need reviewed prices and budget policy,
+not just a new key. See the team README below for precedence and troubleshooting.
+
+The inference time window is an operator-selected **local testing policy**,
+independent of API credential lifetime, student budget limits and saved-dialogue
+retention. Two hours was a temporary validation choice, not a model-provider or
+formal-course requirement. For continuous local development, a **cumulative
+amount-only budget** needs no short expiry or renewal. To explicitly convert an
+existing finite authorization, stop its host and run once from the repository root:
+
+```powershell
+.\start-belay.ps1 -UseAmountOnlyBudget
+.\start-belay.ps1 -Check
+```
+
+The conversion archives the old deadline, pins the **same cumulative ceiling**,
+and leaves the database, consumed money and unknown reservations unchanged. It
+does not start services, grant money or change prices. Active/queued work and
+pending authorizations require review before conversion. Unknown tasks remain
+unreplayed. The normal `./start-belay.ps1` and `./stop-belay.ps1` commands then
+remain unchanged. An exhausted amount budget still blocks inference.
+
+For a new amount-only profile, configure `CONTROLS_INFERENCE_WINDOW_SECONDS=0`,
+`CONTROLS_INFERENCE_EXPIRES_AT=0` and an explicitly approved finite
+`CONTROLS_INFERENCE_TOTAL_MICROUNITS`, prepare **only that new installation**, then
+use the same conversion command to persist the ceiling. One USD is 1,000,000
+microunits. Existing installations take the ceiling from their saved authorization,
+not a larger env value. The per-scope policy limits continue to apply as well.
+Bounded profiles still support fixed windows up to 7200 seconds, persisted on
+first start and never renewed by restart. See the [team README](deployment/controls/README.md)
+for configuration precedence and mode-change constraints.
+
+**Developer budget versus teaching quota:** local amount-only testing uses an
+explicit finite cumulative budget with no short renewal deadline. It is not a
+student allowance. Raising it requires approval of the additional money and
+associated resource limits; changing only the key or scoped policy cannot raise
+the manifest's pinned ceiling. The [local budget proposal and future course
+quota requirements](deployment/controls/budget-policy.md) record
+the current audit and pending recommendation, not active new settings.
+Formal teaching is a separate future requirement: configurable learner quota
+periods during valid course access, with spending still accumulated against the
+class/course total and all ledger history retained. That policy and its ownership
+are to be agreed with Greg; no new periodic quota or admin UI is implemented.
+
+For the newer **local short-period + weekly** proposal, see the
+[current budget plan and verification summary](deployment/controls/budget-policy.md).
+The optional coordinator checks both fixed windows plus existing scope/cumulative
+limits. A quota refresh does not add funds or erase historical/unknown usage.
+Local budget changes require explicit authorization. A **new explicit local approval
+on 2026-10-11 has now been applied**: USD5 additional funding, cumulative ceiling
+USD5.148223 without expiry, USD1 per six hours and USD5 per week. These are that
+local installation's approved values, not repository/provider/student defaults.
+
+Its fixed timezone is **Asia/Shanghai (UTC+08:00)**: six-hour buckets begin at
+00:00/06:00/12:00/18:00; weeks begin Monday 00:00. Short refresh never resets week
+usage; week refresh never resets cumulative usage or grants new money. Restart
+does not change these boundaries. Both windows and all other budget controls
+must pass. Other resource caps remain unchanged. See the
+[applied authorization and verification summary](deployment/controls/budget-policy.md)
+for preserved ledger evidence and the manual restart commands. Formal
+student/course quota rules remain separate and unimplemented.
+
+The deployment allowance is **shared across providers, models and tiers** in
+the same controlled installation. Planning, generation, evaluation, revision,
+format fallback and JSON repair each reserve and settle through `model_call`.
+Changing `PROVIDER` or model names does not create another quota or reset history.
+Keep the same database, deployment ID and approved cumulative cap on all workers.
+The policy uses one conservative input/output price bound covering every selected
+model; it is not an automatic vendor price catalogue. Review these bounds when
+switching models. `LLM_BILLING_MODE=metered` rejects zero/missing prices before
+dispatch; free/self-hosted inference requires explicit `unmetered` configuration
+and still obeys token/resource limits. Missing usage retains a reservation.
+See the [shared-provider audit](deployment/controls/shared-provider-budget-audit-summary.md)
+for simulated-adapter coverage and remaining verification limits.
+
+For the integrated **controlled Run code / Ask Sol / optional save and recovery**
+page, start with the [team setup and launch README](deployment/controls/README.md)
+(first-time preparation, daily start/stop and code entry map). The
+[controlled runtime guide](deployment/controls/controlled-runtime.md) documents
+provider configuration, migrations and operational boundaries.
+Its tracked `app.controlled_runtime` entry separates prepare/migrate from start,
+assembles identity/shared R2-R3 database/policy/worker/cleanup, and selects an
+implemented provider from backend environment. The default example is a local
+model stub. The older container/source quickstart below does not itself provision
+these controlled-job prerequisites.
 
 The fastest path is the container, which is SQLite-default and points at a local
 OpenAI-compatible model endpoint with no external API.

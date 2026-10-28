@@ -182,9 +182,74 @@ turn at `/quad/v1/turn`, and rejects PII at the boundary with a 422 (`integratio
 Source: `backend/app/main.py`, `backend/app/integrations/quad/` (`router.py`, `pii.py`,
 `schemas.py`), `VALIDATION.md` Quad sidecar section, `README.md` ("Quad sidecar").
 
+## Trusted identity and isolation (production phase 1)
+
+Both HTTP surfaces resolve a verified RS256 bearer subject against an
+operator-owned authorization file (`backend/app/auth.py`). The resulting
+institution/class/learner context and exercise-version grants are authoritative;
+body IDs and membership selectors cannot confer access. Authentication is 401;
+resource authorization uses a uniform 404; incomplete configuration is 503.
+The curriculum is filtered by current authorized exercise versions.
+
+`backend/app/store/scoped.py` wraps the existing store protocol using class-learner
+storage keys and versioned exercise keys. Learner model/customization is class
+scoped; run attempts and exercise events are assignment-version scoped. Old
+unscoped records remain inaccessible, without a schema change or guessed ownership.
+HTTP traces keep the eight-field row with content-free, allowlisted metrics.
+Consent, the grades firewall and deterministic governance remain in place.
+
+The full token contract, authorization JSON, deployment and legacy-data procedure
+are in [docs/authentication.md](docs/authentication.md). Frontend callers use an
+origin-bound, host-supplied in-memory bearer through `frontend/auth-client.js`.
+
 ## Related records
 
 - Privacy and the distress safety posture: `PRIVACY.md`.
 - Licensing split and per-file SPDX: `LICENSING.md`.
 - Build-phase narrative, test inventory, and the canonical runbook: `VALIDATION.md`.
 - Forward work: `ROADMAP.md`.
+
+## Course storage separation (CC-R2 step 1)
+
+ScopedStore composes a durable class-learner course-state store and a separately
+consent-routed research-event store. Missing participants are initialized without
+research consent; initialization never overwrites an existing choice. Dedicated
+dialogue storage is the next layer; see [docs/conversations.md](docs/conversations.md).
+
+Dialogue restoration uses dedicated SQL tables, short transaction leases, scoped
+server-owned history and an independent deletion ledger. Both HTTP surfaces share
+the dialogue router; inference still passes through the existing governance gate.
+See docs/conversations.md for migration, retries, limits and recovery deployment.
+
+`python -m app.local_dev` explicitly provisions a loopback-only synthetic host,
+short-lived RS256 credentials and independent local SQL/ledger files. The host
+injects the existing browser credential callback without changing demo layouts
+or weakening shared API authorization. See frontend/README.md for local startup.
+# Shared traffic and budget controls (CC-R3)
+
+`app.controls` contains a PostgreSQL/SQLite coordinator independent of research
+and saved dialogue. It reserves integer budgets across deployment, institution,
+class and learner scopes before each provider/runner attempt. Shared admission
+adds token buckets, bounded jobs, class rotation, separate concurrency resources
+and worker fences. Unknown external work retains both liability and concurrency.
+
+The existing main-based HTTP surfaces have no trusted identity adapter yet.
+`CONTROLS_MODE=development_bypass` preserves local operation and is shown by health
+routes; `enforced` rejects expensive routes without a verified execution context.
+The queue/worker services are tested behind synthetic adapters, not advertised as
+production HTTP job APIs. Auth and conversation integration are prerequisite work.
+See [implementation status](deployment/controls/controls-implementation.md) and
+[operator guide](deployment/controls/controls-operations.md) for guarantees and limitations.
+
+### Controlled unsaved Ask (CC-R3 Stage B)
+
+Both HTTP edges share `controls.jobs_http`, the existing Admission/Ledger and
+`controls.data`. Verified R1 identity yields an original-subject grant and stable
+scope. Admission and encrypted temporary input commit together. An explicit
+`controls.jobs_worker.AskAdapter` runs the existing tutor loop under the fenced
+controls runtime, with live grant/TTL checks before external attempts and publication.
+Owned result publication and completed state commit in one coordinator transaction.
+The browser persists only an opaque scoped request pointer, recovers with GET and
+acknowledges a displayed result; unknown work is never automatically rerun. This
+adds no R2 conversation repository or learner cancellation UI. See operator/
+retention instructions in `deployment/controls/controls-operations.md`.
