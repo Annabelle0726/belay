@@ -61,6 +61,9 @@ policy revision, mode and stance) within the existing turn-response JSON. It is
 not returned as dialogue. Replay, history and model-context retrieval require the
 current matching permission. Narrowing/re-granting blocks old protected output;
 deletion remains available while the learner still has assignment access.
+History also checks the original assistant turn's receipt before returning a
+student follow-up's quoted excerpt. Failed or pending follow-ups and pagination
+cannot bypass this check by excluding the original assistant row from the page.
 
 Pre-upgrade saved assistant turns lack reliable permission metadata. They are not
 replayed or injected into tutoring context. The learner can delete that attempt

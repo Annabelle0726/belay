@@ -236,7 +236,28 @@ class ConversationStore:
                     "status": status,
                 }
                 if msg.role == "student" and turn and (turn.response or {}).get("reply_to"):
-                    item["reply_to"] = (turn.response or {})["reply_to"]
+                    quote = (turn.response or {})["reply_to"]
+                    if identity.subject:
+                        # A page can contain only failed/pending student follow-ups.
+                        # Their server-derived excerpts still require the original grant.
+                        if (
+                            not isinstance(quote, dict)
+                            or quote.get("conversation_id") != cid
+                            or not isinstance(quote.get("request_id"), str)
+                        ):
+                            raise denied()
+                        original = session.get(Turn, (cid, quote["request_id"]))
+                        if original is None or original.status != "completed":
+                            raise denied()
+                        check_receipt(
+                            replace(
+                                identity,
+                                exercise_id=row.exercise_id,
+                                exercise_version=row.exercise_version,
+                            ),
+                            (original.response or {}).get("_authorization"),
+                        )
+                    item["reply_to"] = quote
                 trial = [item, *page]
                 cursor: str | None = (
                     f"{msg.sequence}.{digest([identity.storage_id, cid, msg.sequence])}"
