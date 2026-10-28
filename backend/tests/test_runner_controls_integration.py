@@ -22,7 +22,7 @@ def test_container_student_error_preserves_feedback_location(source, line, error
     assert result["pack"]["execution_status"] == "student_error"
     assert result["pack"]["error_line"] == line
     assert result["pack"]["verification_unavailable"] is False
-    assert error in result["error"]
+    assert result["error"].startswith(error + ":")
 
 
 @pytest.mark.parametrize("timed_out,status", [(True, "timeout"), (False, "infrastructure_error")])
