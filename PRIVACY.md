@@ -187,7 +187,8 @@ is 503. Explicit local/test modes still require signed credentials.
 `backend/app/store/scoped.py` namespaces class state and assignment-version events.
 Legacy records without trusted scope are excluded; no automatic ownership backfill
 or broad default access exists. HTTP trace payloads retain allowlisted numeric and
-boolean metrics plus the authorized version, removing raw source, stdout, notes
+boolean metrics plus the authorized version and validated, closed classifier
+status/error-category enums, removing raw source, stdout, notes
 and free-text intake from events/exports. Private scoped goals/reflections retain
 the existing tutoring behavior. Consent still controls durable versus ephemeral
 state; registration cannot change anyone else's consent. The grades firewall and
