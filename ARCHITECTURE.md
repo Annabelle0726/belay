@@ -338,3 +338,7 @@ NLP dependencies are pinned. See [review](docs/reviews/pr5-grounding.md).
 The benchmark evaluates final learner-visible output with scripted model doubles,
 including a governance-bypass mutation control. Narrow withholding exemptions
 retain affirmative prose-disclosure detection. See [review](docs/reviews/pr10-denial-scope.md).
+
+## CC-B4 sandbox replacement
+
+See `docs/reviews/pr7-sandbox.md` for bounded output, artifact isolation, host grading and real-container acceptance.

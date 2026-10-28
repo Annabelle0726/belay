@@ -37,3 +37,8 @@ Branch: feature/integrate-reviewed-pr-fixes
 
 - PR5 merged as 99c2b4e.
 - Ruling (PR10): Keep scoped denial handling, adversarial corpus and delivered-response governance changes. Preserve the integrated classifier, CORS, authenticated HTTP routes, execution availability/status and test database/grant fixtures instead of applying unrelated focused-branch deletions.
+
+- PR10 merged as 7681109.
+- Ruling (PR7): Keep bounded container output/artifact validation and host-side grading, while retaining integrated authentication, classifier, CORS and test isolation. Restore exactly one shared runner accounting boundary per physical execution and carry informational error status/line through the new result schema; never execute student code on the host.
+- Task 1 compatibility evidence: before the adapter patch, existing composition tests had 4 failures/21 passes (missing runner accounting and execution status). New focused metadata regression had 4 failures/5 passes after correcting an over-specific assertion. After the patch, all 81 container, accounting, verification and feedback tests passed with zero skips. Ruff lint and format checks passed.
+- Ruling (latest user instruction): Publishing the reviewed integration branch is now authorized. Main and original branch histories remain unchanged; no force-push or automatic GitHub PR merge into main.
