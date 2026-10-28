@@ -25,6 +25,16 @@ _FENCE = re.compile(r"```[a-zA-Z0-9_+\-]*\n(.*?)```", re.DOTALL)
 _INLINE = re.compile(r"`([^`\n]+)`")
 
 # Imperative solution-giving prose. Any match → disclosure (strong signal).
+#
+# PRECISION MATTERS IN BOTH DIRECTIONS. A false negative is a leak, but a false
+# positive is its own defect here, because the gate's OWN remediation is
+# student-facing text: `governance.safe_rewrite` replaces a blocked draft with a
+# redirect containing "I don't want to just paste the whole thing". Bare
+# `\bjust (…|paste)\b` matches the ADVERBIAL "just" in that sentence, so the
+# gate's rewrite re-read as a prose disclosure — every correctly blocked attack
+# then scored as a leak by the CC-B2 benchmark, which takes its verdict over the
+# message the learner actually RECEIVED. `_in_denial_frame` separates the denial
+# from the instruction.
 _IMPERATIVE = [
     re.compile(p, re.IGNORECASE)
     for p in (
@@ -38,6 +48,19 @@ _IMPERATIVE = [
         r"\bcopy (this|the following|and paste|-paste)\b",
     )
 ]
+
+# Only a complete, directly governing withholding prefix exempts a denial.
+# Unrelated negatives ("Do not hesitate to just paste...") never exempt a match.
+_NEGATED_IMPERATIVE = re.compile(r"\bjust (paste|type|write)\b", re.IGNORECASE)
+_WITHHOLD_PREFIX = re.compile(
+    r"(?:(?:actually|sorry|instead)\s*[—–-]?\s*)?"
+    r"(?:(?:i|we)\s+(?:(?:do not|don't|don’t)\s+(?:want|intend|plan)\s+to"
+    r"|will not|won't|won’t|cannot|can't|can’t|do not|don't|don’t)"
+    r"|(?:i am|i'm|i’m|we are|we're|we’re)\s+not\s+going\s+to"
+    r"|(?:please\s+)?(?:do not|don't|don’t|never))\s*",
+    re.IGNORECASE,
+)
+_CLAUSE_BREAK = re.compile(r"[.!?;:,]")
 
 # How many distinct essential operation tokens in the prose trip disclosure.
 _OPS_THRESHOLD = 2
@@ -64,6 +87,24 @@ def _word_present(token: str, text: str) -> bool:
     )
 
 
+def _in_denial_frame(prose: str, start: int, end: int) -> bool:
+    """Exempt a narrow direct denial, never arbitrary negation in the clause."""
+    boundaries = list(_CLAUSE_BREAK.finditer(prose, 0, start))
+    clause_start = boundaries[-1].end() if boundaries else 0
+    return _WITHHOLD_PREFIX.fullmatch(prose[clause_start:start].strip()) is not None
+
+
+def _imperative_fires(prose: str, pat: re.Pattern) -> bool:
+    """Does this imperative pattern fire, ignoring object-less denials?"""
+    for m in pat.finditer(prose):
+        if _NEGATED_IMPERATIVE.fullmatch(m.group(0)) and _in_denial_frame(
+            prose, m.start(), m.end()
+        ):
+            continue
+        return True
+    return False
+
+
 def prose_discloses(draft: str, exercise_id: str) -> bool:
     """Deterministic prose-disclosure signal over the draft's prose (code stripped)."""
     prose = redact(draft)
@@ -71,7 +112,7 @@ def prose_discloses(draft: str, exercise_id: str) -> bool:
         return False
     # 1. Imperative solution-giving language.
     for pat in _IMPERATIVE:
-        if pat.search(prose):
+        if _imperative_fires(prose, pat):
             return True
     sol = SOLUTIONS.get(exercise_id)
     if not sol:
