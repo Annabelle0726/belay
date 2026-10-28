@@ -28,3 +28,6 @@ Branch: feature/integrate-reviewed-pr-fixes
 
 - PR14 merged as a4afc46.
 - Ruling (PR13): Keep the reviewed runtime permission/receipt/response boundary as a superset of direct R1/R2 behavior. Retain PR13 additional rechecks before JSON repair and saved replay, with runtime accounting still mandatory. R3 PostgreSQL no-skip acceptance supersedes the narrower duplicate CI job.
+
+- PR8 merged as a06d890; runtime already had the corrected default allowlist.
+- Ruling (PR9): Preserve the runtime dedicated classifier with physical-attempt accounting, explicit 400/422 fallback, and propagated budget/access denials. Its strict verdict validation and traces already include PR9; avoid a redundant components refactor. Keep PR9 deployment settings, documentation and regression evidence. Preserve isolated database fixtures and trusted synthetic grants.
