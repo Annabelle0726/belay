@@ -298,3 +298,9 @@ are written to be Apache-2.0-compatible, importing only from the framework core.
 `/quad/v1/capabilities` document advertises `"license": "Apache-2.0"`. Note honestly:
 there is no `LICENSE` file in the repository yet. Adding it is part of the
 name-and-publish step; until then the license is stated intent, not a file in the tree.
+
+
+Assignment access also restricts tutoring behavior. Legacy grants permit
+`study/peer` only; `teach`, `oracle`, and `control` require explicit trusted
+mode/stance pairs. See [assignment pedagogy policy](docs/assignment-pedagogy-policy.md)
+for the grant format, saved-history upgrade behavior and permission-update rules.

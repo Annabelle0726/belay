@@ -246,6 +246,7 @@ def build_router(
             reply_to=reply_metadata(quote, quote["text"]) if quote and not screened else None,
         )
         if replay is not None:
+            recheck_behavior(identity, body.mode, body.stance)
             return replay
         try:
             recent = recent_window(

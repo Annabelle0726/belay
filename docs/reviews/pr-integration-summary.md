@@ -25,3 +25,6 @@ Branch: feature/integrate-reviewed-pr-fixes
 ## Progress
 
 - Task 1 started: base and seven source heads recorded; 202 untracked files protected by hash.
+
+- PR14 merged as a4afc46.
+- Ruling (PR13): Keep the reviewed runtime permission/receipt/response boundary as a superset of direct R1/R2 behavior. Retain PR13 additional rechecks before JSON repair and saved replay, with runtime accounting still mandatory. R3 PostgreSQL no-skip acceptance supersedes the narrower duplicate CI job.

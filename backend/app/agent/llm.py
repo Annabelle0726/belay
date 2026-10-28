@@ -35,6 +35,7 @@ from typing import Protocol, runtime_checkable
 from ..config import settings
 from ..controls.contracts import ControlError
 from ..controls.runtime import model_call
+from ..pedagogy import check_current
 from . import telemetry as _tel
 
 
@@ -232,6 +233,7 @@ class OpenAICompatProvider:
                     "content": "Return ONLY the JSON object. No prose, no markdown fences.",
                 },
             ]
+            check_current()
             try:
                 resp = self._attempt(
                     role,
