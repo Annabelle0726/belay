@@ -332,3 +332,9 @@ retention instructions in `deployment/controls/controls-operations.md`.
 Citation annotation precedes final governance. Checked, skipped and unavailable
 extraction have distinct status and unknown measurements remain null. Runtime
 NLP dependencies are pinned. See [review](docs/reviews/pr5-grounding.md).
+
+## CC-B2 adversarial benchmark repair
+
+The benchmark evaluates final learner-visible output with scripted model doubles,
+including a governance-bypass mutation control. Narrow withholding exemptions
+retain affirmative prose-disclosure detection. See [review](docs/reviews/pr10-denial-scope.md).

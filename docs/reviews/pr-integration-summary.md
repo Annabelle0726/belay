@@ -34,3 +34,6 @@ Branch: feature/integrate-reviewed-pr-fixes
 
 - PR9 merged as d7e2526.
 - Ruling (PR5): Apply citation/status and final-response governance changes while retaining injection screening, authorization, Retry-After headers and isolated test fixtures. The focused PR intentionally removed other feature files; those deletions are not appropriate in the combined branch. Restore the reviewed CORS normalization, and retain only PR9 dedicated-classifier configuration (no duplicate guessed-model fields).
+
+- PR5 merged as 99c2b4e.
+- Ruling (PR10): Keep scoped denial handling, adversarial corpus and delivered-response governance changes. Preserve the integrated classifier, CORS, authenticated HTTP routes, execution availability/status and test database/grant fixtures instead of applying unrelated focused-branch deletions.
