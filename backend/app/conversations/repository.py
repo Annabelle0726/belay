@@ -1,0 +1,525 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+"""Short SQL transactions for scoped attempts and idempotent sequential turns."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import time
+import uuid
+from collections.abc import Callable
+from contextlib import contextmanager
+from dataclasses import replace
+
+from fastapi import HTTPException
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.engine import Connection
+from sqlalchemy.orm import Session, sessionmaker
+
+from ..agent.reply_context import reply_metadata
+from ..auth import Identity, check_receipt, denied
+from .bounds import wire_size
+from .ledger import DeletionLedger
+from .models import Bucket, Conversation, Message, SchemaVersion, Turn
+from .policy import Policy
+
+
+def digest(value) -> str:
+    return hashlib.sha256(
+        json.dumps(value, sort_keys=True, ensure_ascii=False).encode()
+    ).hexdigest()
+
+
+class ConversationStore:
+    def __init__(self, engine, policy: Policy, clock: Callable[[], float] = time.time):
+        self.engine = engine
+        self.sessions = sessionmaker(bind=engine, expire_on_commit=False)
+        self.policy = policy
+        self.clock = clock
+        self.ledger = DeletionLedger(policy.deletion_ledger_file)
+
+    @contextmanager
+    def transaction(self, connection: Connection | None = None):
+        # A supplied connection owns commit/rollback across dialogue and controls.
+        with Session(bind=connection or self.engine, expire_on_commit=False) as session:
+            with session.begin():
+                yield session
+
+    def check_turn(self, identity, cid, request_id, revision, connection, *, reading=False):
+        self._ready()
+        with self.transaction(connection) as session:
+            session.execute(
+                update(Conversation)
+                .where(Conversation.id == cid, Conversation.owner_key == identity.storage_id)
+                .values(revision=Conversation.revision)
+            )
+            row = self._owned(session, identity, cid)
+            turn = session.get(Turn, (cid, request_id))
+            if turn is None:
+                if reading:
+                    return {**self.metadata(row), "_turn_status": None}
+                if row.revision != revision or (
+                    row.pending_id and row.pending_until > int(self.clock())
+                ):
+                    raise HTTPException(409, "conversation changed; refresh history")
+            elif turn.status == "pending":
+                if not reading and (
+                    row.pending_id != request_id
+                    or row.pending_until <= int(self.clock())
+                    or row.revision != revision + 1
+                ):
+                    raise HTTPException(409, "turn lease is no longer valid")
+            elif turn.status == "completed":
+                if not reading and row.revision != revision + 2:
+                    raise HTTPException(409, "conversation changed; refresh history")
+            elif not reading:
+                raise HTTPException(409, "turn failed; refresh history")
+            return {**self.metadata(row), "_turn_status": turn.status if turn else None}
+
+    def _ready(self, *, saving: bool = True) -> None:
+        (self.policy if saving else replace(self.policy, enabled=True)).require()
+        self.ledger.deleted()
+        from sqlalchemy.exc import SQLAlchemyError
+
+        try:
+            with self.sessions() as session:
+                version = session.get(SchemaVersion, "dialogue")
+                if version is None or version.version != 1:
+                    raise ValueError
+        except (SQLAlchemyError, AttributeError, ValueError):
+            raise HTTPException(503, "dialogue schema requires migration") from None
+
+    def _owned(self, session: Session, identity: Identity, cid: str) -> Conversation:
+        row = session.get(Conversation, cid)
+        if (
+            row is None
+            or cid in self.ledger.deleted()
+            or row.owner_key != identity.storage_id
+            or row.deleted
+            or row.expires_at <= int(self.clock())
+            or row.policy_id != self.policy.policy_id
+            or (row.exercise_id, row.exercise_version) not in identity.active_assignments
+        ):
+            raise denied()
+        return row
+
+    def metadata(self, row: Conversation) -> dict:
+        return {
+            "conversation_id": row.id,
+            "attempt_id": row.id,
+            "exercise_id": row.exercise_id,
+            "exercise_version": row.exercise_version,
+            "revision": row.revision,
+            "created_at": row.created_at,
+            "expires_at": row.expires_at,
+            "pending": row.pending_id is not None and row.pending_until > int(self.clock()),
+        }
+
+    def create(self, identity: Identity, request_id: str) -> dict:
+        self._ready()
+        if (
+            not identity.exercise_id
+            or (identity.exercise_id, identity.exercise_version) not in identity.active_assignments
+        ):
+            raise denied()
+        assignment = identity.exercise_key(identity.exercise_id, identity.exercise_version)
+        cid = digest([identity.storage_id, assignment, request_id])[:32]
+        if cid in self.ledger.deleted():
+            raise denied()
+        with self.sessions.begin() as session:
+            # Serialize creation per owner/assignment to make retained-attempt quotas atomic.
+            bid = digest([identity.storage_id, assignment])
+            factory = pg_insert if self.engine.dialect.name == "postgresql" else sqlite_insert
+            session.execute(
+                factory(Bucket)
+                .values(id=bid, revision=0)
+                .on_conflict_do_nothing(index_elements=[Bucket.id])
+            )
+            session.execute(
+                update(Bucket).where(Bucket.id == bid).values(revision=Bucket.revision + 1)
+            )
+            if session.get(Conversation, cid) is not None:
+                return self.metadata(self._owned(session, identity, cid))
+            count = session.scalar(
+                select(func.count())
+                .select_from(Conversation)
+                .where(
+                    Conversation.owner_key == identity.storage_id,
+                    Conversation.assignment_key == assignment,
+                    Conversation.deleted.is_(False),
+                    Conversation.expires_at > int(self.clock()),
+                )
+            )
+            if (count or 0) >= self.policy.max_attempts:
+                raise HTTPException(409, "retained attempt limit reached; delete an attempt first")
+            now = int(self.clock())
+            row = Conversation(
+                id=cid,
+                owner_key=identity.storage_id,
+                assignment_key=assignment,
+                exercise_id=identity.exercise_id,
+                exercise_version=identity.exercise_version,
+                policy_id=self.policy.policy_id,
+                created_at=now,
+                expires_at=now + self.policy.retention_seconds,
+            )
+            session.add(row)
+            session.flush()
+            return self.metadata(row)
+
+    def get(self, identity: Identity, cid: str) -> dict:
+        self._ready()
+        with self.sessions() as session:
+            return self.metadata(self._owned(session, identity, cid))
+
+    def attempts(self, identity: Identity, exercise_id: str, version: str) -> list[dict]:
+        self._ready()
+        if (exercise_id, version) not in identity.active_assignments:
+            raise denied()
+        with self.sessions() as session:
+            rows = session.scalars(
+                select(Conversation)
+                .where(
+                    Conversation.owner_key == identity.storage_id,
+                    Conversation.exercise_id == exercise_id,
+                    Conversation.exercise_version == version,
+                    Conversation.deleted.is_(False),
+                    Conversation.expires_at > int(self.clock()),
+                    Conversation.policy_id == self.policy.policy_id,
+                )
+                .order_by(Conversation.created_at.desc(), Conversation.id)
+                .limit(self.policy.max_attempts)
+            )
+            deleted_ids = self.ledger.deleted()
+            return [self.metadata(row) for row in rows if row.id not in deleted_ids]
+
+    def history(self, identity: Identity, cid: str, before: str | None = None) -> dict:
+        self._ready()
+        with self.sessions() as session:
+            row = self._owned(session, identity, cid)
+            query = select(Message).where(Message.conversation_id == cid)
+            if before is not None:
+                try:
+                    boundary, proof = before.split(".")
+                    sequence = int(boundary)
+                    if sequence < 1 or proof != digest([identity.storage_id, cid, sequence]):
+                        raise ValueError
+                except (ValueError, TypeError):
+                    raise denied() from None
+                query = query.where(Message.sequence < sequence)
+            candidates = session.scalars(
+                query.order_by(Message.sequence.desc()).limit(self.policy.page_messages + 1)
+            ).all()
+            page: list[dict] = []
+            meta = self.metadata(row)
+            for msg in candidates[: self.policy.page_messages]:
+                turn = session.get(Turn, (cid, msg.request_id))
+                status = turn.status if turn else "failed"
+                if status == "pending" and row.pending_until <= int(self.clock()):
+                    status = "failed"
+                if identity.subject and msg.role == "assistant":
+                    check_receipt(
+                        replace(
+                            identity,
+                            exercise_id=row.exercise_id,
+                            exercise_version=row.exercise_version,
+                        ),
+                        (turn.response or {}).get("_authorization") if turn else None,
+                    )
+                item = {
+                    "sequence": msg.sequence,
+                    "request_id": msg.request_id,
+                    "role": msg.role,
+                    "text": msg.text,
+                    "status": status,
+                }
+                if msg.role == "student" and turn and (turn.response or {}).get("reply_to"):
+                    item["reply_to"] = (turn.response or {})["reply_to"]
+                trial = [item, *page]
+                cursor: str | None = (
+                    f"{msg.sequence}.{digest([identity.storage_id, cid, msg.sequence])}"
+                )
+                if (
+                    wire_size({**meta, "messages": trial, "before": cursor})
+                    > self.policy.page_bytes
+                ):
+                    break
+                page = trial
+            cursor = None
+            if page and len(page) < len(candidates):
+                sequence = page[0]["sequence"]
+                cursor = f"{sequence}.{digest([identity.storage_id, cid, sequence])}"
+            return {**meta, "messages": page, "before": cursor}
+
+    def reply(self, identity: Identity, cid: str, request_id: str, *, connection=None) -> dict:
+        self._ready()
+        with self.transaction(connection) as session:
+            row = self._owned(session, identity, cid)
+            if (row.exercise_id, row.exercise_version) != (
+                identity.exercise_id,
+                identity.exercise_version,
+            ):
+                raise denied()
+            turn = session.get(Turn, (cid, request_id))
+            message = session.scalar(
+                select(Message).where(
+                    Message.conversation_id == cid,
+                    Message.request_id == request_id,
+                    Message.role == "assistant",
+                )
+            )
+            if (
+                turn is None
+                or turn.status != "completed"
+                or message is None
+                or message.text == "[This exchange was not saved.]"
+            ):
+                raise denied()
+            if identity.subject:
+                check_receipt(identity, (turn.response or {}).get("_authorization"))
+            ref = {"conversation_id": cid, "request_id": request_id}
+            return {
+                **reply_metadata(ref, message.text),
+                "text": message.text,
+                "original_evidence": None,
+            }
+
+    def context(self, identity: Identity, cid: str) -> list[dict]:
+        self._ready()
+        with self.sessions() as session:
+            self._owned(session, identity, cid)
+            rows = session.scalars(
+                select(Message)
+                .join(
+                    Turn,
+                    (Message.conversation_id == Turn.conversation_id)
+                    & (Message.request_id == Turn.request_id),
+                )
+                .where(Message.conversation_id == cid, Turn.status == "completed")
+                .order_by(Message.sequence.desc())
+                .limit(self.policy.max_messages)
+            ).all()
+            if identity.subject:
+                for message in rows:
+                    if message.role == "assistant":
+                        turn = session.get(Turn, (cid, message.request_id))
+                        check_receipt(
+                            identity, (turn.response or {}).get("_authorization") if turn else None
+                        )
+            return [{"role": m.role, "text": m.text} for m in reversed(rows)]
+
+    def begin(
+        self,
+        identity: Identity,
+        cid: str,
+        request_id: str,
+        signature: str,
+        expected_revision: int,
+        learner_text: str,
+        *,
+        connection: Connection | None = None,
+        reply_to: dict | None = None,
+    ) -> dict | None:
+        self._ready()
+        if len(learner_text.encode()) > self.policy.max_message_bytes:
+            raise HTTPException(413, "message limit exceeded")
+        with self.transaction(connection) as session:
+            # UPDATE acquires a row lock on Postgres, and a write lock on SQLite.
+            # No transaction spans a model call. Never update by an untrusted owner.
+            session.execute(
+                update(Conversation)
+                .where(Conversation.id == cid, Conversation.owner_key == identity.storage_id)
+                .values(revision=Conversation.revision)
+            )
+            row = self._owned(session, identity, cid)
+            existing = session.get(Turn, (cid, request_id))
+            if existing:
+                if existing.digest != signature:
+                    raise HTTPException(409, "request identifier reused with different input")
+                if existing.status == "completed":
+                    result = dict(existing.response or {})
+                    if identity.subject:
+                        check_receipt(identity, result.pop("_authorization", None))
+                    return result
+                if existing.status == "pending" and row.pending_until <= int(self.clock()):
+                    existing.status = "failed"
+                    row.pending_id = None
+                    session.commit()
+                raise HTTPException(409, "turn is pending or failed; refresh before a new request")
+            if row.revision != expected_revision:
+                raise HTTPException(409, "conversation changed; refresh history")
+            if row.pending_id and row.pending_until > int(self.clock()):
+                raise HTTPException(409, "another turn is pending")
+            if row.pending_id:
+                prior = session.get(Turn, (cid, row.pending_id))
+                if prior:
+                    prior.status = "failed"
+            size = len(learner_text.encode()) + (wire_size(reply_to) if reply_to else 0)
+            if (
+                row.message_count + 2 > self.policy.max_messages
+                or row.byte_count + size + self.policy.max_message_bytes * 7 + 1024
+                > self.policy.max_stored_bytes
+            ):
+                raise HTTPException(409, "conversation storage limit reached; start a new attempt")
+            row.revision += 1
+            row.message_count += 1
+            row.byte_count += size
+            row.pending_id = request_id
+            row.pending_until = int(self.clock()) + self.policy.pending_seconds
+            session.add(
+                Turn(
+                    conversation_id=cid,
+                    request_id=request_id,
+                    digest=signature,
+                    status="pending",
+                    response={"reply_to": reply_to} if reply_to else None,
+                )
+            )
+            session.add(
+                Message(
+                    id=uuid.uuid4().hex,
+                    conversation_id=cid,
+                    request_id=request_id,
+                    sequence=row.revision,
+                    role="student",
+                    text=learner_text,
+                    byte_count=size,
+                )
+            )
+        return None
+
+    def complete(
+        self,
+        identity: Identity,
+        cid: str,
+        request_id: str,
+        response: dict,
+        *,
+        connection: Connection | None = None,
+        authorization: dict | None = None,
+    ) -> dict:
+        self._ready()
+        message = response["message"]
+        question = response.get("check_question")
+        text = message + (("\n\n" + question) if question else "")
+        if len(text.encode()) > self.policy.max_message_bytes:
+            raise HTTPException(413, "released response exceeds saved message limit")
+        with self.transaction(connection) as session:
+            session.execute(
+                update(Conversation)
+                .where(Conversation.id == cid, Conversation.owner_key == identity.storage_id)
+                .values(revision=Conversation.revision)
+            )
+            row = self._owned(session, identity, cid)
+            prior = session.get(Turn, (cid, request_id))
+            if connection is not None and prior is not None and prior.status == "completed":
+                result = dict(prior.response or {})
+                if identity.subject:
+                    check_receipt(identity, result.pop("_authorization", None))
+                return result
+            if row.pending_id != request_id or row.pending_until <= int(self.clock()):
+                raise HTTPException(409, "turn lease is no longer valid")
+            turn = session.get(Turn, (cid, request_id))
+            if turn is None:
+                raise HTTPException(409, "turn lease is no longer valid")
+            row.revision += 1
+            row.message_count += 1
+
+            row.pending_id = None
+            turn.status = "completed"
+            result = {
+                "conversation_id": cid,
+                "revision": row.revision,
+                "response": {"message": message, "check_question": question},
+            }
+            if (turn.response or {}).get("reply_to"):
+                result["reply_to"] = turn.response["reply_to"]
+            stored = {**result, "_authorization": authorization} if authorization else result
+            retained_size = len(text.encode()) + wire_size(stored)
+            if row.byte_count + retained_size > self.policy.max_stored_bytes:
+                raise HTTPException(409, "conversation storage limit reached")
+            row.byte_count += retained_size
+            turn.response = stored
+            session.add(
+                Message(
+                    id=uuid.uuid4().hex,
+                    conversation_id=cid,
+                    request_id=request_id,
+                    sequence=row.revision,
+                    role="assistant",
+                    text=text,
+                    byte_count=len(text.encode()),
+                )
+            )
+            return result
+
+    def fail(self, identity: Identity, cid: str, request_id: str) -> None:
+        # Do not recreate a deleted or expired conversation on a late callback.
+        with self.sessions.begin() as session:
+            session.execute(
+                update(Conversation)
+                .where(Conversation.id == cid, Conversation.owner_key == identity.storage_id)
+                .values(revision=Conversation.revision)
+            )
+            row = session.get(Conversation, cid)
+            if row and row.owner_key == identity.storage_id and row.pending_id == request_id:
+                row.pending_id = None
+                turn = session.get(Turn, (cid, request_id))
+                if turn:
+                    turn.status = "failed"
+
+    def delete(self, identity: Identity, cid: str) -> None:
+        self._ready()
+        with self.sessions.begin() as session:
+            session.execute(
+                update(Conversation)
+                .where(Conversation.id == cid, Conversation.owner_key == identity.storage_id)
+                .values(revision=Conversation.revision)
+            )
+            row = self._owned(session, identity, cid)
+            # Persist the external fence before deleting SQL data; failed SQL commit
+            # still hides the resource, and subsequent cleanup removes the payload.
+            self.ledger.record(cid)
+            self._erase(session, row)
+
+    @staticmethod
+    def _erase(session: Session, row: Conversation) -> None:
+        from ..controls.saved import erase_in
+
+        erase_in(session.connection(), row.id)
+        row.deleted = True
+        row.pending_id = None
+        row.pending_until = 0
+        row.message_count = 0
+        row.byte_count = 0
+        session.execute(delete(Message).where(Message.conversation_id == row.id))
+        session.execute(delete(Turn).where(Turn.conversation_id == row.id))
+
+    def cleanup(self) -> int:
+        self._ready(saving=False)
+        deleted_ids = self.ledger.deleted()
+        with self.sessions() as session:
+            candidates = session.scalars(
+                select(Conversation.id).where(
+                    (Conversation.expires_at <= int(self.clock())) | Conversation.deleted.is_(True)
+                )
+            ).all()
+            candidates = list(set(candidates) | deleted_ids)
+        count = 0
+        for cid in candidates:
+            with self.sessions.begin() as session:
+                session.execute(
+                    update(Conversation)
+                    .where(Conversation.id == cid)
+                    .values(revision=Conversation.revision)
+                )
+                row = session.get(Conversation, cid)
+                if row is None or (row.deleted and row.message_count == 0):
+                    continue
+                if cid not in deleted_ids:
+                    self.ledger.record(cid)
+                self._erase(session, row)
+                count += 1
+        return count

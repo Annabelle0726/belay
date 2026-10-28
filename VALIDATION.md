@@ -1158,18 +1158,20 @@ Sanity: `python -c "import sqlalchemy, fastapi, openai, pytest, numpy, pandas; p
 
 ## 1. Offline core suite 🟢
 
-No network, no DB, no key. This is the gate `main` must always pass.
+No live identity/model service or supplied secret. Identity tests generate local RSA keys;
+store tests use SQLite or the explicitly configured test database. This is the gate
+`main` must always pass.
 
 ```bash
 cd backend && python -m pytest
 ```
 
-**Expected (current, through Slice I, datascience active): `336 passed, 1
-skipped`.** The single skip is the gated live behavioral benchmark
-(`tests/evals/test_behavioral.py::test_live_benchmark_runs`), which skips unless
-`RUN_LLM_EVALS=1` and a reachable tutor + judge endpoint are configured (see §3).
-The running per-phase totals are recorded in the phase sections above (from `221
-passed, 11 skipped` at Phase 0 to `336 passed, 1 skipped` at Slice I). The
+**Expected (current, production identity phase 1): `541 passed, 7 skipped`.**
+The baseline `upstream/main` at `89f2597` was `374 passed, 7 skipped`; 167 new
+identity/isolation cases are in `tests/test_auth_isolation.py`. The seven skips
+are the gated live behavioral benchmark and six verifier-contract cases when the
+sibling contract checkout is absent. The running historical per-phase totals are
+recorded above. The
 quantum-era per-module table below is **historical** (those modules no longer
 exist, and the legacy `sol_behavior_evals.py` was retired into
 `evals/behavioral/` in Slice 6b); the current per-module inventory is the appended
@@ -1186,6 +1188,7 @@ phase sections above.
 | `tests/test_affect.py` | 12 | planner affect-adaptive overlay: encourage, flow→observe, teach/goal_met/oracle precedence | core (re-base fixture) |
 | `tests/test_consent.py` | 15 | consent-gated logging (durable vs ephemeral, fail-safe) | core |
 | `tests/test_sql_store.py` | 15 | SqlStore CRUD + durability + concepts column round-trip (SQLite here; Postgres in §2) | core |
+| `tests/test_auth_isolation.py` | 167 | Real offline RSA verification, both HTTP edges, forged IDs, institution/class/learner and assignment/version isolation, registration/state/export/execution, fail-closed config, consent and SQLite/Postgres upsert | current |
 | `tests/test_learner_model.py` | 40 | concept taxonomy · update_concepts · due_review · planner revisit overlay | core + pack taxonomy |
 | `tests/evals/sol_behavior_evals.py` | 11 (skipped) | behavioral fidelity + affect encourage quality + worked_analogy verification + revisit quality — see §3 | → del (pack evals) |
 | `tests/test_misconceptions.py` | 24 | F6 misconception-tailored dialogue | core + pack content |
@@ -1331,11 +1334,11 @@ curl -s http://localhost:8000/healthz                    # {"ok": true, ...}
 
 Then open `frontend/dev-client.html` and point its backend field at
 `http://localhost:8000`. **Note:** `dev-client.html` routes entirely through the
-backend (no browser-side key), but it uses a **hardcoded `PID = "p_dev"`** without
-consent registration — **dev only; do not use it for a pilot session.** For a
-host-embed surface that takes an already-authenticated pseudonymous id (no hardcoded
-PID), use `frontend/widget.html` (the Slice E/F reference widget). (The origin quantum
-React client was removed in Phase 1d.)
+backend (no browser-side model key). All demos now require the host's short-lived
+bearer callback, allowed backend origin and authorized learner alias; configure
+these using `frontend/README.md` and `docs/authentication.md`. No hardcoded dev
+identity can confer access. The widget and embed demo use the same credential
+helper. (The origin quantum React client was removed in Phase 1d.)
 
 Opt-in learner-customization intake (pseudonymous; PII-checked): `POST /api/goals`,
 `POST /api/reflection`, and `POST /api/overlay` (Slice E), mirrored on the sidecar as
@@ -1361,3 +1364,277 @@ a `scripts/smoke_*.py` | the matching section (§2/§3/§4) + add its expected o
 a new env var / config knob | the section that uses it (and `backend/app/config.py`, the source of truth; there is no `.env.example`)
 a new API route | §5 (and a curl/health example if relevant)
 a new external dependency (instance/account/allocation) | mark the step 🔴 and name the blocker
+## CC-R3 shared controls — 2026-10-08
+
+Base `83bd1a9`; branch `feature/shared-traffic-budget-controls`. Added shared
+ledger/admission services, model/runner attempt hooks, worker fencing, operator
+reconciliation and learner error messages. Full implementation record and
+per-step commit map: [controls-implementation.md](deployment/controls/controls-implementation.md).
+
+| Final check | Result |
+| --- | --- |
+| SQLite full regression | 423 passed, 9 skipped |
+| PostgreSQL 16 full regression | 425 passed, 7 skipped |
+| Frontend control messages | 2 passed |
+| Ruff lint and format | Passed |
+| mypy | Passed |
+
+New tests: `test_controls_ledger.py`, `test_controls_execution.py`,
+`test_controls_admission.py`, `test_controls_worker.py`,
+`test_controls_maintenance.py` (39 new cases total). Independent spawned
+PostgreSQL processes prove 800+800 cannot fit a 1,000-token allowance and a
+10-slot cap stays at 10 across processes. Deterministic fairness checks rotate
+A/B while A has 50 waiting jobs and B has 2. Failure tests cover unknown usage,
+rollover, overrun, cancellation, stale workers, synthetic revocation and outage.
+
+Seven common skips: one live inference evaluation and six missing external
+verifier-contract tests. SQLite additionally skips the two PostgreSQL races.
+One existing Starlette/AnyIO deprecation warning. Tests used isolated temporary
+stores and a disposable PostgreSQL container, with provider stubs throughout.
+
+**Integration status:** real Step 1/2 identity and conversation dependencies are
+not merged. HTTP asynchronous job routes, saved/unsaved transfer storage,
+conversation revision/deletion publication and production retention remain
+pending. Enforced existing HTTP routes fail closed without trusted context;
+development bypass is explicit in health output. No production rollout or
+full multi-API class load result is claimed. See the
+[operator guide](deployment/controls/controls-operations.md) for policy and reconciliation.
+
+
+## Production phase 1 — verified identity and institution/class isolation
+
+Baseline: clean `upstream/main` (`89f2597`), isolated branch
+`feature/auth-class-isolation`. Fork `origin/main` includes B1 changes; this
+branch starts from upstream and includes none of B1–B4 or the UI refactor.
+
+- `app/auth.py`: pinned RS256 RSA public key (>=2048 bits), exact issuer/audience,
+  required `iss/aud/exp/iat/sub`, verified optional `nbf`, integer dates and <=900s
+  token lifetime. Token claims cannot grant membership. The operator authorization
+  file supplies institution/class/learner and exercise-version grants, is validated
+  per request and takes immediate effect on revocation. OpenAPI declares Bearer auth.
+- Both `/api/*` resource routes and `/quad/v1/*` POST routes share this dependency;
+  standalone Quad mounting is also protected. Body aliases/classes, resource path
+  learner, membership selectors and assignment versions are checked before stores,
+  models or execution. 401 for failed authentication, uniform 404 for authorization,
+  503 for incomplete/invalid configuration. Public health/capabilities remain public.
+- `store/scoped.py`: class-learner state/customization and assignment-version event
+  and attempt isolation, including durable export. SHA-256 storage namespaces fit
+  existing columns: no DDL migration and no automatic legacy ownership backfill.
+  Legacy unscoped records remain inaccessible through the new HTTP paths. Upgrade
+  and explicit authorization JSON are documented in `docs/authentication.md`.
+- Consent remains coupled to storage, with stable class-scoped participant
+  registration, atomic SQLite/Postgres upsert, and fresh SQL consent lookup across
+  workers. PII rejection now covers `/api` as well as Quad. HTTP trace payloads
+  retain only allowlisted content-free metrics and version metadata; the fixed
+  eight-field row, grades firewall and safety floors are preserved.
+- `frontend/auth-client.js` and the four callers: origin-bound in-memory bearer
+  callback with host refresh, no URL or browser-storage credentials. UI structure
+  is unchanged. Compose passes auth settings and mounts operator files read-only.
+
+New hermetic suite: **167 cases**, including every protected endpoint with missing,
+invalid and expired credentials; issuer/audience/time/signature/algorithm checks;
+all identity aliases and class/institution forgery; same alias across classes and
+institutions; cross-learner denial; legal registration/state/turn/run/export/event
+access; assignment-version attempts/export filtering and immediate revocation;
+legacy exclusion; PII/content-free export; no credential/source logging; repeatable
+SQL registration and cross-worker consent withdrawal; curriculum filtering; route
+inventory and OpenAPI security. Existing sidecar/governance/PII HTTP tests now use
+actual ephemeral RSA credentials, not auth dependency overrides. Execution is spied
+and turns use control stance; no real identity or model service is contacted.
+
+Frontend: **4 passed** with `node frontend/tests/auth-client.test.cjs` (headers on
+all API calls/export and refreshed tokens, origin/URL rejection, malformed/missing
+token rejection, shared helper wiring on all demos). `docker compose config --quiet`
+passes. Full backend: **541 passed, 7 skipped** on SQLite. PostgreSQL full suite
+before the final two OpenAPI/inventory tests: **536 passed, 7 skipped**; the 164-case
+identity suite was then rerun on PostgreSQL with **164 passed**. The final three
+cases additionally constrain sidecar event/mode/stance to their closed vocabularies
+to prevent free-text trace metadata, and pass in the final SQLite run. Quality gates:
+`ruff check .`, `ruff format --check .` (104 files) and `mypy` (98 source files)
+pass. The Starlette/AnyIO deprecation warning is pre-existing. Temporary PostgreSQL
+uses its own Docker container/port and is removed after verification.
+
+Reproduce from `backend/` (install requirements, including `PyJWT[crypto]`):
+
+```bash
+python -m pytest -o addopts='' -q
+python -m pytest -o addopts='' -q tests/test_auth_isolation.py
+ruff check .
+ruff format --check .
+mypy
+```
+
+For the PostgreSQL leg, set `DATABASE_URL` to an isolated test database and run the
+same suite. The `configured` SQL isolation case uses that dialect; its other case
+always uses temporary SQLite. No live identity service, model or institutional
+credentials are needed. Operators still need to provision the issuer/public key,
+protected authorization file and the host token callback before a pilot. Key overlap
+rotation/JWKS discovery and audited recovery of legacy ownership are follow-ups;
+conversation persistence, consent decoupling, queues, budgets and B1–B4 are excluded.
+
+## CC-R2 step 1 — course/research separation
+
+Baseline `6124598` on `feature/bounded-conversation-restoration`, inheriting
+unmerged authentication `8868234`. Added `tests/test_course_storage.py` (2 cases):
+course continuity across router recreation without research consent, and
+participant initialization preserving explicit consent. Research-event gating,
+identity scopes and existing pure store tests remain required regression gates.
+
+Conversation restoration tests use temporary SQL databases/keys, stub providers and
+controlled clocks: ownership on both edges, retry/concurrency, payload and context
+bounds, released-output filtering, expiry/deletion and actual SQLite backup recovery.
+See docs/conversations.md for staged results and required PostgreSQL/frontend checks.
+
+Final bounded-restoration validation: 588 backend tests passed, 7 existing skips
+(one live model evaluation and six missing verifier-contract sibling tests); 13
+frontend Node tests passed. The disposable PostgreSQL migration/concurrency test
+ran successfully, plus two SQLite/configured-PostgreSQL scoped-store tests. Ruff
+check/format and complete mypy passed. Actual governance output, distress handling,
+revocation/deletion during inference, and cleanup while saving is disabled are
+covered. Full commands, contracts and deployment limits: docs/conversations.md.
+
+Local startup follow-up: 607 backend tests passed, 8 skipped (including the
+unconfigured disposable PostgreSQL DSN), with one existing dependency warning.
+The final `tests/test_local_dev.py` separately passed 14 cases; its last restart
+case was added after full-suite collection. Seven maintenance CLI cases cover
+actionable missing/numeric policy settings, repeatable initialization and cleanup.
+The local-host checks cover real signed credentials, cross-site refusal, port and
+data-directory contention, both-edge restoration, default-disabled saving,
+missing/corrupt ledger refusal and restart preservation with key rotation.
+Frontend Node tests: 13 passed; Ruff check/format and full mypy passed. No real
+identity or model service is used. See frontend/README.md for the runnable local host.
+
+## UI/restoration preview — local listener ownership
+
+The preview starts at bounded-restoration commit `3a414d6`. Before reserving either
+port, the local launcher now checks IPv4 and IPv6 loopback listeners. This catches
+Windows wildcard/specific-address overlap and prevents a second backend or static
+server from answering a different loopback address on the same chosen port.
+It exits without creating data files when a listener is already present.
+`tests/test_local_dev.py`: 19 hermetic cases passed, including both requested
+ports occupied on IPv4 loopback, IPv4 wildcard and IPv6 wildcard listeners.
+
+Preview conversation correction: live summaries are returned only on first
+successful delivery, excluded from persistence/replays, bounded and screened.
+Both-edge HTTP tests verify one model invocation and unchanged released dialogue
+under retry; safety tests cover hidden drafts, sensitive summaries and limits.
+Missing-history reauthorization permits explicit recovery without bypassing scope.
+Full backend suite: **617 passed, 8 skipped**; Ruff check/format and mypy passed.
+Skips remain live model evaluation, unconfigured PostgreSQL DSN and six absent
+verifier-contract siblings. Shared conversation-client tests include initialization
+with an unavailable pointer. All checks use offline providers and temporary data.
+
+Preview UI: **26 frontend Node tests passed**, covering authenticated typed
+questions, URL-assigned stance, saved/reloaded replies, unavailable-pointer
+recovery, lost replies/history fetches, explicit new/delete controls, scope
+changes, failed runs and escaped Markdown fallback. Live browser smoke checks
+used the isolated local host and control stance (no external identity/model calls):
+saved replies and live signals render together, actual starter-code output remains
+visible, exercise switching clears other history and switching back restores it.
+Desktop 1280x900 is two columns; mobile 390x844 stacks with no horizontal overflow.
+Viewport overrides were reset. No browser console errors were observed.
+
+Student-facing run output: 28 frontend tests passed, including printed-value/check
+rendering without API JSON, complete tutor context, literal HTML/error text and
+an actionable empty-output hint. Execution failure still does not call the tutor.
+
+Compact workspace follow-up: 28 frontend tests pass, retaining missing-history,
+new/delete, identity and retry checks with the compact toolbar. Ruff check,
+format --check and mypy pass. Browser checks at 1280x720 and 1024x768 confirmed
+page height equals viewport height with real starter-code output and saved
+control replies. At 390x844 the composer is visible before the editor, with no
+horizontal overflow. More reveals the original authorized actions; Glass Box is
+available on demand. No model/identity service was called. Backend behavior did
+not change, so the previous 617-pass backend suite was not repeated.
+
+Follow-up presentation: Run code moves to the editor header; run checks and
+Glass Box now start expanded and remain collapsible. Recheck viewport bounds
+with both disclosures open and real control-mode output.
+At 1280x720, both disclosures were open and the page remained 720px tall.
+
+Shared theme/widget follow-up: 31 hermetic frontend tests pass. Theme tests cover
+system changes, explicit preference restoration/validation, and unavailable
+browser storage. Browser checks verify light/dark headers match card surfaces,
+12px inset select chevrons, saved and unsaved widget control replies and refresh,
+and no horizontal overflow at 390x844. Both desktop pages fit 1280x720 with the
+optional widget settings/goals collapsed. Ruff check/format and mypy pass. Backend
+behavior is unchanged; the previous full backend suite was not repeated.
+
+Mypy scope clarification: the repository/CI command `mypy` checks the configured
+`app`, `tests`, and `evals` paths and passes (117 source files). The additional
+`mypy .` scan checks 122 files and reports four existing errors in unchanged
+operator scripts: `scripts/extract_measures.py` (two Exercise/dict mismatches),
+`scripts/smoke_sql.py` (optional indexing), and `scripts/smoke_inference.py`
+(non-bool return). These scripts have no diff in the UI/theme change and remain
+outside the configured quality-gate scope. They were not repaired in this UI task.
+
+Glass Box history follow-up: signals are first-delivery data and are not persisted
+or replayed with saved dialogue. Same-attempt, same-revision refreshes keep the
+current page's received signals in RAM; new attempts, newer history revisions,
+identity/assignment changes and authorization failure clear them. Restored history
+and replies without signals show an explicit explanation instead of only dashes.
+32 hermetic frontend tests pass, including same-attempt refresh and new-attempt
+clearing. No signal persistence or backend contract changes were introduced.
+
+## Authenticated standalone local demo
+
+`backend/scripts/local_demo.py` starts loopback-only frontend/backend servers for
+explicit local development. It supplies a host callback before loading the three
+demos, generates in-memory RSA signing material, and mints five-minute tokens on
+demand. The child backend uses its normal credential and class authorization path,
+`BELAY_ENV=local`, synthetic grants and the memory store. Only public verification
+material is placed in a temporary directory, removed on exit. The launcher reads
+model settings through uvicorn's optional `backend/.env`; it does not edit that
+file, the root `.env` or any operator-owned deployment configuration.
+
+Run from `backend/`: `python -m scripts.local_demo`. Stop the existing servers first
+or use `--frontend-port 5174 --backend-port 8001`. Open the printed `/dev-client.html`
+URL. `--pack _skeleton` with `/embed-demo.html` exercises a control turn without a
+model. Host/Origin/fetch-site checks, a custom request header, no-store responses
+and frame denial protect the local token response. No credentials appear in a URL
+or local host log. Production authentication remains unchanged.
+
+`tests/test_local_demo.py` adds 9 hermetic cases for bootstrap ordering, all demo
+pages, token lifetime and private-key non-persistence, rejected host/origin/bare
+requests, and acceptance/denial through the actual backend auth dependency. No real
+identity service or model is contacted. Run `python -m pytest -o addopts='' -q tests/test_local_demo.py tests/test_auth_isolation.py`, then `ruff check .`,
+`ruff format --check .` and `mypy`. Also run
+`node frontend/tests/auth-client.test.cjs` from the repository root.
+
+Measured for this launcher follow-up: **176 passed** for the 9 new local-demo cases
+plus the 167 identity/isolation cases; frontend **4 passed**; `ruff check .`,
+`ruff format --check .` (106 files), and `mypy` (99 source files) pass. An actual
+launcher smoke on ports 5174/8001 also ran the dev page's bootstrap/client JavaScript:
+the token callback and backend curriculum returned 200 and loaded `ds-foundations`.
+No model request was made; both temporary smoke servers were stopped afterwards.
+The earlier complete backend result remains 541 passed/7 skipped; the local-demo
+follow-up was validated with the related suites above, not another full-suite run.
+
+## CC-R3 Stage C local integration — 2026-10-10
+
+Integrated complete R1, R2 restoration, the existing UI and controlled saved/
+unsaved Ask on `integration/saved-ask-controls`, targeting the local
+`feature/ui-conversation-preview`. No main/remote/deployment update. Saved Ask
+requires explicitly co-located dialogue/control SQL schemas; its conversation
+completion, temporary result and job completion share one database transaction.
+Split databases fail closed for saving. No cross-database atomicity is claimed.
+
+Full hermetic backend validation: SQLite **748 passed / 0 failed / 17 skipped**;
+disposable PostgreSQL **758 passed / 0 failed / 7 skipped**. The common skips are
+one live-model evaluation and six absent verifier-contract sibling cases. All
+10 PostgreSQL-only cases skipped by SQLite ran in the PostgreSQL leg, including
+saved API/worker process deduplication, both deletion/publication race orders and
+worker process death during publication. Frontend **76 passed / 0 failed /
+0 skipped**. Ruff check/format passed (155 formatted files); mypy passed
+(148 source files). These runs used isolated test databases, signed synthetic
+identities and stubs, with no paid models.
+
+Real Chromium/local signed host checked the existing dev page's saved completion,
+reload, lost-response recovery without another POST, and deletion; widget and
+embed checked unsaved completion, saved 202 admission and reload. Final runs:
+zero page script errors, non-loopback browser requests blocked. The layout was
+visually inspected. This is local verification, not deployment or load acceptance.
+Initial failures and fixes, exact commit sequence, outstanding limits and the
+no-model demo commands are recorded in
+`deployment/controls/controls-stage-c-summary.md` and
+`deployment/controls/controls-stage-c-protocol.md`.

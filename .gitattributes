@@ -1,0 +1,3 @@
+
+# Preserve pinned third-party browser assets byte-for-byte.
+frontend/vendor/*.js -text

@@ -1,0 +1,16 @@
+{
+  "version": "controlled-local-example-v1",
+  "price_version": "synthetic-unmetered-v1",
+  "currency": "USD",
+  "period_seconds": 86400,
+  "input_price": 0,
+  "output_price": 0,
+  "deployment": {"tokens": 200000, "microunits": 100000, "runs": 30, "wall_ms": 300000},
+  "institution": {"tokens": 200000, "microunits": 100000, "runs": 30, "wall_ms": 300000},
+  "classroom": {"tokens": 200000, "microunits": 100000, "runs": 30, "wall_ms": 300000},
+  "learner": {"tokens": 200000, "microunits": 100000, "runs": 30, "wall_ms": 300000},
+  "deployment_traffic": {"burst": 20, "queue_jobs": 8, "active_jobs": 1, "model_calls": 1, "runner_calls": 1},
+  "institution_traffic": {"burst": 20, "queue_jobs": 8, "active_jobs": 1, "model_calls": 1, "runner_calls": 1},
+  "classroom_traffic": {"burst": 20, "queue_jobs": 8, "active_jobs": 1, "model_calls": 1, "runner_calls": 1},
+  "learner_traffic": {"burst": 20, "queue_jobs": 8, "active_jobs": 1, "model_calls": 1, "runner_calls": 1}
+}

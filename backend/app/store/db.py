@@ -8,7 +8,7 @@ testable; no code path requires Postgres. The models are portable as-is."""
 
 from __future__ import annotations
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker
 
 from ..config import settings
@@ -18,9 +18,17 @@ from .models import Base
 DATABASE_URL = settings.database_url
 
 _connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
-engine = create_engine(DATABASE_URL, connect_args=_connect_args, future=True)
+engine = create_engine(DATABASE_URL, connect_args=_connect_args, future=True, hide_parameters=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False, future=True)
 
 
 def init_db() -> None:
-    Base.metadata.create_all(bind=engine)
+    if settings.store_auto_create:
+        Base.metadata.create_all(bind=engine)
+    else:
+        inspector = inspect(engine)
+        for table in Base.metadata.sorted_tables:
+            if not inspector.has_table(table.name) or not {c.name for c in table.columns}.issubset(
+                {c["name"] for c in inspector.get_columns(table.name)}
+            ):
+                raise ValueError("store schema requires explicit migration")
