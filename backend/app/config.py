@@ -287,16 +287,6 @@ class Settings:
     # Optional institution-configured extra detection terms (comma-separated, IRB-owned)
     # on top of the conservative built-in vocabulary. Default empty.
     distress_signal_terms: str = field(default_factory=lambda: _env("DISTRESS_SIGNAL_TERMS", ""))
-    # Injection guard settings
-    injection_guard_enabled: bool = field(
-        default_factory=lambda: _envbool("INJECTION_GUARD_ENABLED", False)
-    )
-    injection_guard_model: str = field(
-        default_factory=lambda: _env("INJECTION_GUARD_MODEL", "meta-llama/Prompt-Guard-86M")
-    )
-    injection_guard_endpoint: str | None = field(
-        default_factory=lambda: _env("INJECTION_GUARD_ENDPOINT", "")
-    )
 
     @property
     def distress_configured(self) -> bool:

@@ -46,7 +46,7 @@ from ..config import settings
 from ..core.registry import get_active_pack
 from ..store import Store, make_event
 from . import distress as distress_mod
-from . import governance, memory, planner, reasoner, self_eval
+from . import governance, groundedness, memory, planner, reasoner, self_eval
 from . import overlay as overlay_mod
 from . import telemetry as tel
 from .context import _latest_student_message, build_context
@@ -506,6 +506,14 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
         plan["intervention"] = "escalate"  # keep governance's escalate flag consistent
         abstained = True
 
+    # Retrieved text has already been screened. Add citations BEFORE the final
+    # deterministic gate so reference metadata cannot create an unchecked channel.
+    passages = ctx.get("knowledge") or []
+    draft["message"], groundedness_data = groundedness.check_groundedness(
+        draft["message"], passages
+    )
+    cited_candidate = draft["message"]
+
     # Governance runs LAST, unchanged. In an abstention there is no solution to
     # strip; the no-leak gate is independent of escalate/abstain.
     #
@@ -521,6 +529,16 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
     gov = governance.check(ctx, plan, draft, evaluation, stance=stance)
     if gov["block"]:
         draft = governance.safe_rewrite(draft, gov, exercise)
+        # The old rewrite can retain leaking prose. Verify what will be delivered.
+        if governance.check(ctx, plan, draft, evaluation, stance=stance)["block"]:
+            draft = {
+                **draft,
+                "message": "Let's work through one small step together. What would you try next?",
+                "check_question": None,
+                "confidence": min(float(draft.get("confidence", 0.5)), 0.6),
+            }
+            if governance.check(ctx, plan, draft, evaluation, stance=stance)["block"]:
+                raise ValueError("safe response unavailable")
 
     # Wellbeing floor — DEFENSE-IN-DEPTH, NOT a deterministic gate (peer only).
     # Tone has no ground-truth oracle, so unlike the supreme leak gate this is a
@@ -531,6 +549,9 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
     wellbeing_softened = False
     if stance == "peer":
         draft, wellbeing_softened = governance.soften_if_berating(draft)
+
+    if draft["message"] != cited_candidate:
+        groundedness_data = groundedness.unchecked(len(passages), "skipped", "safety rewrite")
 
     # Calibrated headline confidence comes from self-evaluation, but a suppressed
     # solution (or a softened berating draft) must not leave a high confidence on screen.
@@ -595,6 +616,7 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
                 "blocked": gov["block"],
                 "reasons": gov["reasons"],
             },
+            "groundedness": groundedness_data,
             # Wellbeing defense-in-depth (additive §6): a post-hoc berating-softener,
             # NOT a deterministic gate. True iff an obviously berating draft was softened.
             "wellbeing_softened": wellbeing_softened,
@@ -695,6 +717,37 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
                     "retrieved": retr["retrieved"],
                     "kept": retr["kept"],
                     "dropped": retr["dropped"],
+                },
+                stance=stance,
+            )
+        )
+    # CC-B3: additive groundedness event, emitted ONLY when retrieval ran (so the
+    # None-path / no-query turns stay exactly one `turn` row, byte-identical to
+    # before). Content-free by construction: passage IDS and counts, never passage
+    # text, never the draft, never the claim strings — the same trace-minimalism
+    # discipline the `retrieval` event follows. `available` is derived from the
+    # retrieval record rather than from `ctx["knowledge"]` so that even the ID list
+    # it reports is the post-screen survivor list.
+    if retr and groundedness_data is not None:
+        store.append_event(
+            make_event(
+                pid,
+                exercise["id"],
+                mode,
+                "groundedness",
+                {
+                    **groundedness.get_groundedness_trace(
+                        len(passages),
+                        groundedness_data["citations_used"],
+                        groundedness_data["ungrounded_count"],
+                        groundedness_data["claim_count"],
+                        groundedness_data["all_grounded"],
+                        groundedness_data["status"],
+                    ),
+                    "available": retr["kept"],
+                    "ungrounded": None
+                    if groundedness_data["all_grounded"] is None
+                    else not groundedness_data["all_grounded"],
                 },
                 stance=stance,
             )

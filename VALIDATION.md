@@ -1751,3 +1751,10 @@ Initial failures and fixes, exact commit sequence, outstanding limits and the
 no-model demo commands are recorded in
 `deployment/controls/controls-stage-c-summary.md` and
 `deployment/controls/controls-stage-c-protocol.md`.
+
+
+## CC-B3 grounding repair
+
+Citation annotation precedes final governance. Checked, skipped and unavailable
+extraction have distinct status and unknown measurements remain null. Runtime
+NLP dependencies are pinned. See [review](docs/reviews/pr5-grounding.md).
