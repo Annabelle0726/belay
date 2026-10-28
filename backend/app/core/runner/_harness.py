@@ -82,7 +82,8 @@ def main():
         with redirect_stdout(stdout_buf), redirect_stderr(stderr_buf):
             exec(compile(code, "<student>", "exec"), namespace)
     except Exception as exc:
-        error_msg = traceback.format_exc()
+        # Keep the public exception contract independent of wrapper traceback frames.
+        error_msg = f"{type(exc).__name__}: {exc}"
         frames = [
             frame for frame in traceback.extract_tb(exc.__traceback__)
             if frame.filename == "<student>"
