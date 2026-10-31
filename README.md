@@ -1,13 +1,21 @@
-# peer-tutor-framework
+<p align="center">
+  <img src="assets/readme/belay-hero.png" width="100%" alt="A belay rope connects a notebook and conversation to a protective gate, illustrating supported learning with safety boundaries">
+</p>
 
-A generalizable, evaluation-first peer-tutor framework. Its defining property: the
-tutor cannot leak an exercise solution because a deterministic, executable Governance
-gate runs the draft through the active domain's grader and strips any full solution,
-rather than merely asking the model not to.
+<h1 align="center">Belay</h1>
 
-> The repository name `peer-tutor-framework` is a placeholder. The settled name
-> is **Belay** (see `../educloud/SYSTEM.md`); it is applied in a single atomic
-> commit at the publish step.
+<p align="center"><strong>An AI peer tutor that helps learners think, while a deterministic governance gate guards against revealing solutions.</strong></p>
+
+<p align="center">
+  <img src="assets/readme/badge-python.svg" alt="Python">
+  <img src="assets/readme/badge-javascript.svg" alt="JavaScript">
+  <img src="assets/readme/badge-html5.svg" alt="HTML5">
+  <img src="assets/readme/badge-css.svg" alt="CSS">
+</p>
+
+<p align="center"><a href="#quickstart">Get started</a> · <a href="#what-it-is">How it works</a> · <a href="docs/authentication.md">Authentication</a> · <a href="ARCHITECTURE.md">Architecture</a></p>
+
+> **Built for learning, with a safety boundary.** Belay evaluates a tutor's draft against the active domain's executable checks before delivering it. The illustration above is conceptual, not a product screenshot.
 
 ## What it is
 
