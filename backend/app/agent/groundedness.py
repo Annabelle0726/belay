@@ -33,6 +33,11 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+_FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)")
+_INLINE_CODE = re.compile(r"(?<!`)(`+)(?!`).+?(?<!`)\1(?!`)", re.DOTALL)
+_REFERENCES = re.compile(r"\s*(?:#{1,6}\s+)?(?:\*\*)?References:?(?:\*\*)?\s*", re.I)
+_DRAFT_MARKER = re.compile(r"\[(Belay )?([0-9]+)\]", re.I)
+
 
 def unchecked(passage_count: int, status: str, reason: str) -> dict[str, Any]:
     """Unknown measurements are null, never manufactured successful checks."""
@@ -49,9 +54,9 @@ def unchecked(passage_count: int, status: str, reason: str) -> dict[str, Any]:
     }
 
 
-def to_marker(index: int) -> str:
+def to_marker(index: int, prefix: str = "") -> str:
     """Return the inline citation marker, e.g. `[1]`."""
-    return f"[{index}]"
+    return f"[{prefix}{index}]"
 
 
 class Citation:
@@ -62,11 +67,12 @@ class Citation:
         self.citation_text = citation_text or "Reference"
         self.locator = locator
 
-    def to_reference(self, index: int) -> str:
+    def to_reference(self, index: int, prefix: str = "") -> str:
         """Return the full reference entry, e.g. `[1] Introduction to Statistics, §3.2`."""
+        label = to_marker(index, prefix)
         if self.locator:
-            return f"[{index}] {self.citation_text} ({self.locator})"
-        return f"[{index}] {self.citation_text}"
+            return f"{label} {self.citation_text} ({self.locator})"
+        return f"{label} {self.citation_text}"
 
     def __repr__(self):
         return f"Citation(passage_id={self.passage_id!r}, citation_text={self.citation_text!r})"
@@ -82,6 +88,37 @@ def _field(passage: Any, key: str, default: Any = None) -> Any:
     if isinstance(passage, Mapping):
         return passage.get(key, default)
     return getattr(passage, key, default)
+
+
+def _claim_prose(response: str) -> tuple[str | None, bool]:
+    """Preserve source offsets while excluding code and the draft's bibliography."""
+    lines = []
+    fence = ""
+    has_references = False
+    source_lines = iter(response.splitlines(keepends=True))
+    for line in source_lines:
+        delimiter = _FENCE.match(line)
+        if fence or delimiter:
+            if delimiter:
+                run, rest = delimiter.groups()
+                if not fence:
+                    fence = run
+                elif run.startswith(fence) and not rest.strip():
+                    fence = ""
+            lines.append(re.sub(r"[^\r\n]", " ", line))
+        elif _REFERENCES.fullmatch(line):
+            has_references = True
+            # Without recognizable entries, this could be additional answer
+            # prose. Do not silently omit it from a successful check.
+            if any(s.strip() and not _DRAFT_MARKER.match(s.lstrip()) for s in source_lines):
+                return None, True
+            break
+        else:
+            lines.append(line)
+    if fence:
+        return None, has_references
+    prose = _INLINE_CODE.sub(lambda m: re.sub(r"[^\r\n]", " ", m[0]), "".join(lines))
+    return prose, has_references
 
 
 def check_groundedness(
@@ -106,7 +143,12 @@ def check_groundedness(
     if not passages:
         return response, unchecked(0, "skipped", "no passages available")
     try:
-        claims = _extract_claims(response)
+        prose, has_references = _claim_prose(response)
+        if prose is None:
+            return response, unchecked(len(passages), "skipped", "ambiguous draft formatting")
+        distinct_markers = has_references or bool(_DRAFT_MARKER.search(prose))
+        prose = _DRAFT_MARKER.sub(lambda m: " " * len(m[0]), prose)
+        claims = _claim_spans(prose)
     except Exception:
         logger.warning("groundedness: claim extractor unavailable")
         return response, unchecked(len(passages), "unavailable", "claim extractor unavailable")
@@ -141,10 +183,11 @@ def check_groundedness(
             )
         )
 
-    claim_citations: list[tuple[str, Citation]] = []
+    claim_citations: list[tuple[int, Citation]] = []
     ungrounded_claims_count = 0
 
-    for claim in claims:
+    for start, end in claims:
+        claim = prose[start:end].strip()
         grounded_citation = None
         claim_lower = claim.lower()
         if len(claim) > 10:
@@ -154,7 +197,7 @@ def check_groundedness(
                     break
 
         if grounded_citation:
-            claim_citations.append((claim, grounded_citation))
+            claim_citations.append((end, grounded_citation))
         else:
             ungrounded_claims_count += 1
 
@@ -163,7 +206,9 @@ def check_groundedness(
 
     # Attach inline citations to grounded claims regardless of ungrounded presence
     if claim_citations:
-        updated_response, citations_used = _attach_inline_citations(response, claim_citations)
+        updated_response, citations_used = _attach_inline_citations(
+            response, claim_citations, distinct_markers
+        )
         citations_used_ids = [c.passage_id for c in citations_used]
 
     trace_data: dict[str, Any] = {
@@ -194,8 +239,8 @@ def _nlp():
     return spacy.load("en_core_web_sm", disable=["ner"])
 
 
-def _extract_claims(text: str) -> list[str]:
-    """Extract substantive knowledge claims using syntactic dependency parsing.
+def _claim_spans(text: str) -> list[tuple[int, int]]:
+    """Locate substantive knowledge claims using syntactic dependency parsing.
 
     Filters out conversational fluff, imperative prompts, questions, and 1st/2nd
     person modal statements while keeping declarative factual assertions.
@@ -239,7 +284,8 @@ def _extract_claims(text: str) -> list[str]:
         # 4. Require a valid declarative structure (Subject + Finite Verb / Auxiliary)
         root = sent.root
         if root.pos_ in ("VERB", "AUX") and nsubj is not None:
-            claims.append(sent_str.rstrip(".!"))
+            start = sent.start_char + sent.text.index(sent_str)
+            claims.append((start, start + len(sent_str.rstrip(".!"))))
 
     return claims
 
@@ -304,7 +350,8 @@ def _fuzzy_match(claim: str, passage: str) -> bool:
 
 def _attach_inline_citations(
     response: str,
-    claim_citations: list[tuple[str, Citation]],
+    claim_citations: list[tuple[int, Citation]],
+    distinct_markers: bool,
 ) -> tuple[str, list[Citation]]:
     """
     Attach inline markers [1], [2] next to grounded claims in the body,
@@ -315,36 +362,30 @@ def _attach_inline_citations(
 
     citations_used: list[Citation] = []
     citation_to_idx: dict[str, int] = {}
+    prefix = "Belay " if distinct_markers else ""
+    reserved = {number for label, number in _DRAFT_MARKER.findall(response) if label}
+    index = 1
 
     for _, citation in claim_citations:
         if citation.passage_id not in citation_to_idx:
+            while prefix and str(index) in reserved:
+                index += 1
             citations_used.append(citation)
-            citation_to_idx[citation.passage_id] = len(citations_used)
+            citation_to_idx[citation.passage_id] = index
+            index += 1
 
-    updated_response = response
+    chunks = []
+    previous = 0
+    for end, citation in claim_citations:
+        chunks.append(response[previous:end])
+        chunks.append(" " + to_marker(citation_to_idx[citation.passage_id], prefix))
+        previous = end
+    chunks.append(response[previous:])
+    updated_response = "".join(chunks)
 
-    for claim, citation in claim_citations:
-        idx = citation_to_idx[citation.passage_id]
-        marker = f" [{idx}]"
-
-        if claim in updated_response and f"[{idx}]" not in updated_response:
-            pattern = re.escape(claim) + r"([.!?]?)"
-
-            def _add_marker(match):
-                punct = match.group(1)
-                return (
-                    match.group(0)[: -len(punct)] + marker + punct  # noqa: B023
-                    if punct
-                    else match.group(0) + marker  # noqa: B023
-                )
-
-            updated_response = re.sub(pattern, _add_marker, updated_response, count=1)
-
-    references = [c.to_reference(idx) for idx, c in enumerate(citations_used, 1)]
-
-    if "\n\nReferences:" not in updated_response and "\nReferences:" not in updated_response:
-        ref_section = "\n\nReferences:\n" + "\n".join(references)
-        updated_response += ref_section
+    references = [c.to_reference(citation_to_idx[c.passage_id], prefix) for c in citations_used]
+    heading = "Sources checked by Belay for this reply:" if distinct_markers else "References:"
+    updated_response += "\n\n" + heading + "\n" + "\n".join(references)
 
     return updated_response, citations_used
 

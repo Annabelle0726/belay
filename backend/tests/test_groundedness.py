@@ -165,7 +165,7 @@ def test_extract_claims_from_response():
         "Category B has a mean of about 40. "
         "Let's think about what this tells us."
     )
-    claims = groundedness._extract_claims(response)
+    claims = [response[start:end] for start, end in groundedness._claim_spans(response)]
     assert len(claims) >= 2
     assert "mean of category A is approximately 15" in " ".join(claims)
     assert "Category B has a mean of about 40" in " ".join(claims)
@@ -234,6 +234,90 @@ def test_mixed_grounded_and_ungrounded_claims():
     assert trace["citations_used"] == ["passage_1"]
     assert trace["ungrounded_count"] >= 1
     assert trace["all_grounded"] is False
+
+
+def test_each_grounded_sentence_gets_its_shared_reference():
+    first = "The mean of category A is 15"
+    second = "The maximum of category B is 40"
+    unrelated = "Parrots have bright feathers"
+    response = f"{first}. {unrelated}. {second}. {first}."
+    passage = {"id": "stats", "text": f"{first}. {second}.", "citation": "Statistics"}
+
+    updated, trace = groundedness.check_groundedness(response, [passage])
+
+    assert updated == (
+        f"{first} [1]. {unrelated}. {second} [1]. {first} [1].\n\nReferences:\n[1] Statistics"
+    )
+    assert trace["claim_count"] == 4
+    assert trace["ungrounded_count"] == 1
+    assert trace["citations_used"] == ["stats"]
+
+
+@pytest.mark.parametrize(
+    "heading", ["References:", "**References**:", "Sources checked by Belay for this reply:"]
+)
+def test_draft_reference_list_cannot_supply_a_verified_citation(heading):
+    claim = "Copper conducts electrical current"
+    draft_references = f"\n\n{heading}\n[1] Birds grow soft feathers."
+    response = claim + "." + draft_references
+    passages = [
+        {"id": "copper", "text": claim, "citation": "Physics notes"},
+        {"id": "birds", "text": "Birds grow soft feathers.", "citation": "Biology notes"},
+    ]
+    updated, trace = groundedness.check_groundedness(response, passages)
+    assert updated == (
+        claim
+        + " [Belay 1]."
+        + draft_references
+        + "\n\nSources checked by Belay for this reply:\n[Belay 1] Physics notes"
+    )
+    assert trace["citations_used"] == ["copper"]
+    assert trace["claim_count"] == 1
+
+
+def test_draft_markers_remain_distinct_from_verified_markers():
+    response = "Copper conducts electrical current [2]. Birds grow soft feathers [Belay 1]."
+    passages = [
+        {"id": "copper", "text": "Copper conducts electrical current.", "citation": "Physics"},
+        {"id": "birds", "text": "Birds grow soft feathers.", "citation": "Biology"},
+    ]
+    updated, trace = groundedness.check_groundedness(response, passages)
+    assert updated == (
+        "Copper conducts electrical current [2] [Belay 2]. "
+        "Birds grow soft feathers [Belay 1] [Belay 3]."
+        "\n\nSources checked by Belay for this reply:\n[Belay 2] Physics\n[Belay 3] Biology"
+    )
+    assert trace["citations_used"] == ["copper", "birds"]
+
+
+def test_reference_syntax_in_code_is_left_intact():
+    code = '```python\nprint("References:")\n# Copper conducts electrical current.\nprint(values[1])\n```'
+    inline = "Try `values[1]`."
+    response = f"{code}\n\nCopper conducts electrical current. {inline}"
+    updated, trace = groundedness.check_groundedness(
+        response,
+        [{"id": "copper", "text": "Copper conducts electrical current.", "citation": "Physics"}],
+    )
+    assert code in updated and inline in updated
+    assert "\n\nCopper conducts electrical current [1]." in updated
+    assert trace["claim_count"] == 1
+
+
+@pytest.mark.parametrize(
+    "tail",
+    [
+        "\n\nReferences:\nThis mountain contains buried gold.",
+        "\n```python\nprint(values[1])",
+    ],
+)
+def test_ambiguous_reference_layout_is_not_reported_as_checked(tail):
+    response = "Copper conducts electrical current." + tail
+    updated, trace = groundedness.check_groundedness(
+        response, [{"id": "copper", "text": "Copper conducts electrical current."}]
+    )
+    assert updated == response
+    assert trace["status"] == "skipped" and trace["claim_count"] is None
+    assert trace["all_grounded"] is None and trace["citations_used"] == []
 
 
 def test_malformed_passage_metadata():

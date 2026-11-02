@@ -6,8 +6,18 @@ not a claim-free successful check. A successfully parsed question with no claims
 remains a checked claim-free result. Traces contain bounded statuses, IDs and
 counts only, with unknown ungrounded status distinct from false.
 
-Claim citations still work for mixed grounded/ungrounded answers. Citation text
-is attached before final deterministic governance. Rewrites are checked again;
+Each supported sentence receives a marker at its own position. Sentences that
+use the same passage share one numbered reference, including repeated sentences
+in mixed grounded/ungrounded answers. When the draft already contains numbered
+markers or a References section, Belay keeps that material and labels its own
+matches with separate markers such as `[Belay 2]`. The appended list identifies
+the retrieved sources Belay checked for this reply. Its numbers skip any Belay
+markers already in the draft. The claim check excludes numbered bibliography
+entries, fenced code and inline code spans. An unclosed fence or an ambiguous
+reference section leaves the draft intact and records a skipped check with
+unknown measurements.
+
+Citation text is attached before final deterministic governance. Rewrites are checked again;
 remaining leaking prose is replaced with a checked safe fallback or no answer is
 released. A safety rewrite invalidates the earlier grounding result rather than
 claiming the replacement was checked against the original claims.
