@@ -51,8 +51,10 @@ def test_migration_is_additive_and_repeatable(dialogue):
 @pytest.mark.parametrize("pending", [False, True])
 @pytest.mark.parametrize("change", ["narrow", "regrant", "legacy"])
 def test_history_quotes_recheck_original_permission_without_assistant_on_page(
-    dialogue, pending, change
+    dialogue, pending, change, monkeypatch, tmp_path
 ):
+    from tests.http_auth import AUDIENCE, ISSUER, configure
+
     store, owner, _ = dialogue
     store.policy = replace(store.policy, page_messages=1)
     grant = AssignmentGrant(
@@ -64,9 +66,20 @@ def test_history_quotes_recheck_original_permission_without_assistant_on_page(
     owner = replace(
         owner,
         subject="subject-a",
-        issuer="https://issuer.invalid",
-        audience="test",
+        issuer=ISSUER,
+        audience=AUDIENCE,
         assignment_policies=(("echo-1", grant),),
+    )
+    member = {
+        "institution_id": owner.institution_id,
+        "class_id": owner.class_id,
+        "learner_id": owner.learner_id,
+        "assignments": {"echo-1": grant.model_dump()},
+    }
+    configure(
+        monkeypatch,
+        tmp_path,
+        {"exercise_versions": {"echo-1": "v1"}, "subjects": {owner.subject: [member]}},
     )
     cid = store.create(owner, "create-quote")["conversation_id"]
     store.begin(owner, cid, "oracle-1", "original", 0, "Explain")

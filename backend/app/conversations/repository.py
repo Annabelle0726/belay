@@ -19,7 +19,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..agent.reply_context import reply_metadata
-from ..auth import Identity, check_receipt, denied
+from ..auth import Identity, check_receipt, denied, recheck_assignment
 from .bounds import wire_size
 from .ledger import DeletionLedger
 from .models import Bucket, Conversation, Message, SchemaVersion, Turn
@@ -199,6 +199,9 @@ class ConversationStore:
         self._ready()
         with self.sessions() as session:
             row = self._owned(session, identity, cid)
+            identity = replace(
+                identity, exercise_id=row.exercise_id, exercise_version=row.exercise_version
+            )
             query = select(Message).where(Message.conversation_id == cid)
             if before is not None:
                 try:
@@ -221,11 +224,7 @@ class ConversationStore:
                     status = "failed"
                 if identity.subject and msg.role == "assistant":
                     check_receipt(
-                        replace(
-                            identity,
-                            exercise_id=row.exercise_id,
-                            exercise_version=row.exercise_version,
-                        ),
+                        identity,
                         (turn.response or {}).get("_authorization") if turn else None,
                     )
                 item = {
@@ -250,11 +249,7 @@ class ConversationStore:
                         if original is None or original.status != "completed":
                             raise denied()
                         check_receipt(
-                            replace(
-                                identity,
-                                exercise_id=row.exercise_id,
-                                exercise_version=row.exercise_version,
-                            ),
+                            identity,
                             (original.response or {}).get("_authorization"),
                         )
                     item["reply_to"] = quote
@@ -272,7 +267,9 @@ class ConversationStore:
             if page and len(page) < len(candidates):
                 sequence = page[0]["sequence"]
                 cursor = f"{sequence}.{digest([identity.storage_id, cid, sequence])}"
-            return {**meta, "messages": page, "before": cursor}
+        if identity.subject:
+            recheck_assignment(identity)
+        return {**meta, "messages": page, "before": cursor}
 
     def reply(self, identity: Identity, cid: str, request_id: str, *, connection=None) -> dict:
         self._ready()
@@ -439,6 +436,7 @@ class ConversationStore:
                 result = dict(prior.response or {})
                 if identity.subject:
                     check_receipt(identity, result.pop("_authorization", None))
+                    recheck_assignment(identity)
                 return result
             if row.pending_id != request_id or row.pending_until <= int(self.clock()):
                 raise HTTPException(409, "turn lease is no longer valid")
@@ -474,6 +472,12 @@ class ConversationStore:
                     byte_count=len(text.encode()),
                 )
             )
+            if identity.subject:
+                # Complete blocking writes before the last check. Raising here
+                # rolls the assistant row and completed turn back together.
+                session.flush()
+                check_receipt(identity, authorization)
+                recheck_assignment(identity)
             return result
 
     def fail(self, identity: Identity, cid: str, request_id: str) -> None:

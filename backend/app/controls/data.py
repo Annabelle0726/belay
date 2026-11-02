@@ -331,7 +331,8 @@ class ExecutionData:
     def publish(self, job: dict, ref: str) -> None:
         with self.ledger.transaction() as conn:
             self.admission._live(conn, job["id"], job["fence"])
-            identity = recheck_grant(self._grant(conn, job["id"], tutoring=True))
+            grant = self._grant(conn, job["id"], tutoring=True)
+            identity = recheck_grant(grant)
             saved.check(self, conn, job["id"], identity)
             self._get(conn, job["id"], job["payload_ref"], "input")
             value = self._get(conn, job["id"], ref, "pending")
@@ -349,6 +350,7 @@ class ExecutionData:
             )
             self.admission.finish(job["id"], job["fence"], ref, authorized=True, connection=conn)
             self.cleanup_in(conn)
+            recheck_grant(grant)
 
     def reconcile_missing(self, identity: Identity, request_id: str) -> dict:
         """Fence an absent unsaved request, never cancel or refund existing work.
@@ -422,7 +424,7 @@ class ExecutionData:
             saved.check(self, conn, job_id, identity, reading=True)
         status = self.admission.status(self.scope(identity), job_id)
         with self.ledger.transaction() as conn:
-            self._owned(conn, job_id, identity)
+            grant = self._owned(conn, job_id, identity)
             saved.check(self, conn, job_id, identity, reading=True)
             self.cleanup_in(conn)
             response = None
@@ -433,13 +435,15 @@ class ExecutionData:
                     if exc.code != "result_expired":
                         raise
                     status = status | {"state": "result_expired", "reason": "result_expired"}
-            return {
+            result = {
                 "id": job_id,
                 "state": status["state"],
                 "reason": status["reason"],
                 "result": response,
                 "poll_seconds": self.ledger.policy(conn).poll_seconds,
             }
+        recheck_grant(grant)
+        return result
 
 
 def require_storable(value: dict) -> None:

@@ -222,6 +222,28 @@ def test_atomic_publish_failure_rolls_back_assistant_and_result(saved_worker, mo
     assert not run_one(store.admission, adapter) and len(calls) == 3
 
 
+def test_revocation_during_atomic_saved_job_publication_rolls_back(saved_worker, monkeypatch):
+    _, store, repo, _, _, adapter, _, calls, path, auth = saved_worker
+    job_id = submit(saved_worker)
+    finish = store.admission.finish
+
+    def revoke_before_commit(*args, **kwargs):
+        result = finish(*args, **kwargs)
+        if kwargs["authorized"]:
+            del auth["subjects"]["original"]
+            path.write_text(json.dumps(auth))
+        return result
+
+    monkeypatch.setattr(store.admission, "finish", revoke_before_commit)
+    assert run_one(store.admission, adapter)
+    assert len(calls) == 3
+    with store.ledger.transaction() as conn:
+        row = conn.execute(select(jobs).where(jobs.c.id == job_id)).mappings().one()
+        assert row["state"] != "completed" and row["result_ref"] is None
+    with repo.sessions() as session:
+        assert session.scalars(select(Message).where(Message.role == "assistant")).all() == []
+
+
 def test_split_database_saved_path_fails_closed(saved_worker, monkeypatch):
     from app.controls import saved
     from app.controls.contracts import ControlError
@@ -230,6 +252,25 @@ def test_split_database_saved_path_fails_closed(saved_worker, monkeypatch):
     del store.dialogue
     with pytest.raises(ControlError, match="saved_database_mismatch"):
         saved.repository(store)
+
+
+def test_saved_poll_revocation_during_read_hides_result(saved_worker, monkeypatch):
+    _, store, _, _, _, adapter, _, calls, path, auth = saved_worker
+    submit(saved_worker)
+    assert run_one(store.admission, adapter)
+    read = store._get
+
+    def revoke_after_result_read(conn, job_id, ref, kind):
+        value = read(conn, job_id, ref, kind)
+        if kind == "result":
+            del auth["subjects"]["original"]
+            path.write_text(json.dumps(auth))
+        return value
+
+    monkeypatch.setattr(store, "_get", revoke_after_result_read)
+    response = status(saved_worker)
+    assert response.status_code == 404 and "result" not in response.json()
+    assert len(calls) == 3
 
 
 def test_queued_revision_conflict_executes_only_first_turn(saved_worker):

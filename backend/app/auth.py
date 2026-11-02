@@ -309,6 +309,11 @@ def check_receipt(identity: Identity, receipt: dict | None) -> None:
 
 def recheck_behavior(identity: Identity, mode: str, stance: str) -> None:
     require_behavior(identity, mode, stance)
+    recheck_assignment(identity)
+
+
+def recheck_assignment(identity: Identity) -> None:
+    """Require the original principal and exact assignment policy to still be current."""
     _, authorization = _configuration()
     if identity.issuer != settings.auth_issuer or identity.audience != settings.auth_audience:
         raise denied()
@@ -324,9 +329,9 @@ def recheck_behavior(identity: Identity, mode: str, stance: str) -> None:
         if (
             current is None
             or current != previous
+            or current.version != identity.exercise_version
             or authorization.exercise_versions.get(identity.exercise_id)
             != identity.exercise_version
-            or not current.permits(mode, stance)
         ):
             raise denied()
         return

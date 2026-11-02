@@ -65,6 +65,12 @@ History also checks the original assistant turn's receipt before returning a
 student follow-up's quoted excerpt. Failed or pending follow-ups and pagination
 cannot bypass this check by excluding the original assistant row from the page.
 
+Publication rechecks the original grant inside the write transaction, after
+acquiring the lock. A synchronous request also checks immediately before
+returning the answer. Revocation observed before commit rolls back publication.
+Revocation observed after commit withholds delivery. History and polling check
+again after reading the protected result.
+
 Pre-upgrade saved assistant turns lack reliable permission metadata. They are not
 replayed or injected into tutoring context. The learner can delete that attempt
 or start another; no old mode is guessed or backfilled. Changing an unrelated

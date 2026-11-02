@@ -285,10 +285,9 @@ def build_router(
             if screened or private_content(message + (question or "")):
                 message, question = PLACEHOLDER, None
             # Re-read credentials and current membership after the model call.
-            fresh = await authorize(request, await _bearer(request))
-            recheck_behavior(identity, body.mode, body.stance)
+            await authorize(request, await _bearer(request))
             result = repository.complete(
-                fresh,
+                identity,
                 cid,
                 body.request_id,
                 {"message": message, "check_question": question},
@@ -307,6 +306,7 @@ def build_router(
                     "unsaved_exchange": True,
                     "response": {"message": live_message, "check_question": live_question},
                 }
+            recheck_behavior(identity, body.mode, body.stance)
             return result
         except HTTPException:
             repository.fail(identity, cid, body.request_id)

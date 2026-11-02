@@ -299,8 +299,104 @@ def test_class_policy_does_not_authorize_another_class(boundary):
     assert response.status_code == 404 and calls == []
 
 
+@pytest.mark.parametrize("phase", ["publication_lock", "after_commit"])
+def test_saved_turn_revocation_during_publication(http_dialogue, phase):
+    from sqlalchemy import event
+    from sqlalchemy.orm import Session
+
+    from app.conversations.models import Message
+    from tests.test_conversation_http import auth, create
+
+    client, store, _, _, calls, path, grants = http_dialogue
+    install(path, grants, grant(), "one")
+    cid = create(client).json()["conversation_id"]
+    changed = False
+
+    def narrow():
+        nonlocal changed
+        install(path, grants, grant([("study", "peer")], policy_revision=2), "one")
+        changed = True
+
+    def after_lock(conn, cursor, statement, parameters, context, executemany):
+        # The no-op UPDATE is the first write after inference and acquires the
+        # conversation lock. Reproduce a policy change during that wait.
+        if calls and not changed and statement.startswith("UPDATE conversations SET revision="):
+            narrow()
+
+    def after_commit(session):
+        if session.bind is store.engine and calls and not changed:
+            narrow()
+
+    target = (
+        (store.engine, "after_cursor_execute", after_lock)
+        if phase == "publication_lock"
+        else (Session, "after_commit", after_commit)
+    )
+    event.listen(*target)
+    try:
+        result = client.post(
+            f"/api/conversations/{cid}/turns",
+            headers=auth(),
+            json={
+                "request_id": "late-revoke",
+                "expected_revision": 0,
+                "message": "Explain",
+                "mode": "teach",
+                "stance": "oracle",
+            },
+        )
+    finally:
+        event.remove(*target)
+    assert changed and len(calls) == 1
+    assert result.status_code == 404
+    assert "Released answer" not in result.text
+    with store.sessions() as session:
+        messages = session.scalars(select(Message).where(Message.role == "assistant")).all()
+        turn = session.get(Turn, (cid, "late-revoke"))
+        assert len(messages) == (0 if phase == "publication_lock" else 1)
+        assert turn.status == ("failed" if phase == "publication_lock" else "completed")
+    assert client.get(f"/api/conversations/{cid}/messages", headers=auth()).status_code == (
+        200 if phase == "publication_lock" else 404
+    )
+
+
 def test_empty_pairs_is_explicit_denial():
     assert not AssignmentGrant.model_validate(grant([])).permits("study", "peer")
+
+
+@pytest.mark.parametrize("phase", ["message_read", "transaction_close"])
+def test_history_revocation_while_loading_messages(http_dialogue, phase):
+    from sqlalchemy import event
+
+    from tests.test_conversation_http import auth, create
+
+    client, store, _, _, _, path, grants = http_dialogue
+    cid = create(client).json()["conversation_id"]
+    url = f"/api/conversations/{cid}"
+    body = {"request_id": "turn-1", "expected_revision": 0, "message": "Explain"}
+    assert client.post(url + "/turns", headers=auth(), json=body).status_code == 200
+
+    revoked = False
+
+    def revoke(conn):
+        nonlocal revoked
+        install(path, grants, grant([]), "one")
+        revoked = True
+
+    def after_read(conn, cursor, sql, params, context, many):
+        if "FROM conversation_messages" in sql:
+            if phase == "transaction_close":
+                event.listen(conn, "rollback", revoke, once=True)
+            else:
+                revoke(conn)
+
+    event.listen(store.engine, "after_cursor_execute", after_read)
+    try:
+        result = client.get(url + "/messages", headers=auth())
+    finally:
+        event.remove(store.engine, "after_cursor_execute", after_read)
+    assert revoked and result.status_code == 404
+    assert "Released answer" not in result.text
 
 
 @pytest.mark.parametrize("malformed", [False, True])
