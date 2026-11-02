@@ -15,7 +15,8 @@ the retrieved sources Belay checked for this reply. Its numbers skip any Belay
 markers already in the draft. The claim check excludes numbered bibliography
 entries, fenced code and inline code spans. An unclosed fence or an ambiguous
 reference section leaves the draft intact and records a skipped check with
-unknown measurements.
+unknown measurements. The same rule applies when the draft already uses
+Belay's reserved checked-sources heading.
 
 Citation text is attached before final deterministic governance. Rewrites are checked again;
 remaining leaking prose is replaced with a checked safe fallback or no answer is

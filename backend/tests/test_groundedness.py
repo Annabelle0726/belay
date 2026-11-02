@@ -253,9 +253,7 @@ def test_each_grounded_sentence_gets_its_shared_reference():
     assert trace["citations_used"] == ["stats"]
 
 
-@pytest.mark.parametrize(
-    "heading", ["References:", "**References**:", "Sources checked by Belay for this reply:"]
-)
+@pytest.mark.parametrize("heading", ["References:", "**References**:"])
 def test_draft_reference_list_cannot_supply_a_verified_citation(heading):
     claim = "Copper conducts electrical current"
     draft_references = f"\n\n{heading}\n[1] Birds grow soft feathers."
@@ -307,6 +305,7 @@ def test_reference_syntax_in_code_is_left_intact():
     "tail",
     [
         "\n\nReferences:\nThis mountain contains buried gold.",
+        "\n\nSources checked by Belay for this reply:\n[1] Birds grow soft feathers.",
         "\n```python\nprint(values[1])",
     ],
 )

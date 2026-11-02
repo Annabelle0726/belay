@@ -35,7 +35,11 @@ logger = logging.getLogger(__name__)
 
 _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)")
 _INLINE_CODE = re.compile(r"(?<!`)(`+)(?!`).+?(?<!`)\1(?!`)", re.DOTALL)
-_REFERENCES = re.compile(r"\s*(?:#{1,6}\s+)?(?:\*\*)?References:?(?:\*\*)?\s*", re.I)
+_VERIFIED_HEADING = "Sources checked by Belay for this reply"
+_REFERENCES = re.compile(
+    rf"\s*(?:#{{1,6}}\s+)?(?:\*\*)?(?:References|(?P<verified>{_VERIFIED_HEADING})):?(?:\*\*)?:?\s*",
+    re.I,
+)
 _DRAFT_MARKER = re.compile(r"\[(Belay )?([0-9]+)\]", re.I)
 
 
@@ -106,7 +110,9 @@ def _claim_prose(response: str) -> tuple[str | None, bool]:
                 elif run.startswith(fence) and not rest.strip():
                     fence = ""
             lines.append(re.sub(r"[^\r\n]", " ", line))
-        elif _REFERENCES.fullmatch(line):
+        elif heading := _REFERENCES.fullmatch(line):
+            if heading["verified"]:
+                return None, True
             has_references = True
             # Without recognizable entries, this could be additional answer
             # prose. Do not silently omit it from a successful check.
@@ -384,7 +390,7 @@ def _attach_inline_citations(
     updated_response = "".join(chunks)
 
     references = [c.to_reference(citation_to_idx[c.passage_id], prefix) for c in citations_used]
-    heading = "Sources checked by Belay for this reply:" if distinct_markers else "References:"
+    heading = _VERIFIED_HEADING + ":" if distinct_markers else "References:"
     updated_response += "\n\n" + heading + "\n" + "\n".join(references)
 
     return updated_response, citations_used
