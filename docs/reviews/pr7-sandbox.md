@@ -2,6 +2,8 @@
 
 Student output is limited while pipes are read (256 KiB total), not after allocating it. Overflow, wall time and CPU limits fail safely; the exact container is removed in `finally`. The host captures at most 8 MiB of JSON transport, independently of student limits.
 
+The reader detects the first excess byte even if the writer then sleeps. If Docker reports a removal error, the runner checks whether the named container still exists, including stopped containers. Failure to confirm cleanup is an execution error.
+
 The output directory is now an 8 MiB container tmpfs, with no writable host output mount. At most 16 requested artifacts and 1 MiB aggregate artifact bytes may cross the boundary. Descriptor-relative, no-follow opens reject traversal, absolute paths, symlinks, hard links and nonregular files, including path replacement races. Reads remain bounded if files grow. Windows host fallback does not attempt an unsafe check-then-open implementation.
 
 Greg's host-side grader and wrapper staging remain intact. The container receives no reference solutions. Structured results are bounded and validated before grading. The opt-in legacy runner now bounds pipes too, but is still insecure and unsuitable for untrusted submissions.

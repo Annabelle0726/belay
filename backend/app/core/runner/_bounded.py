@@ -9,7 +9,7 @@ import time
 from typing import Any
 
 
-def capture(command, *, limit, timeout, env=None, cwd=None, stop=None) -> dict[str, Any]:
+def capture(command, *, limit, timeout, env=None, cwd=None) -> dict[str, Any]:
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
@@ -27,7 +27,8 @@ def capture(command, *, limit, timeout, env=None, cwd=None, stop=None) -> dict[s
         nonlocal size
         try:
             while True:
-                chunk = pipe.read(8192)
+                # A buffered read can wait for a full block after the first excess byte.
+                chunk = pipe.read1(8192)
                 if not chunk:
                     break
                 with lock:
@@ -51,8 +52,6 @@ def capture(command, *, limit, timeout, env=None, cwd=None, stop=None) -> dict[s
         while process.poll() is None:
             if overflow.is_set() or time.monotonic() >= deadline:
                 timed_out = not overflow.is_set()
-                if stop is not None:
-                    stop()
                 if process.poll() is None:
                     process.kill()
                 break

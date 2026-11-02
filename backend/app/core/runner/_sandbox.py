@@ -59,15 +59,24 @@ class ContainerSandbox:
         container_name = f"ptf-sandbox-{uuid.uuid4().hex[:12]}"
 
         def remove():
-            for attempt in range(2):
+            for _ in range(2):
                 try:
-                    subprocess.run(
+                    removed = subprocess.run(
                         ["docker", "rm", "-f", container_name], capture_output=True, timeout=15
                     )
-                    return
-                except subprocess.TimeoutExpired:
-                    if attempt:
-                        raise RuntimeError("sandbox cleanup unavailable") from None
+                    if removed.returncode == 0:
+                        return
+                    # --rm can win this race. Confirm absence even among stopped containers.
+                    remaining = subprocess.run(
+                        ["docker", "ps", "-a", "-q", "--filter", f"name=^/{container_name}$"],
+                        capture_output=True,
+                        timeout=15,
+                    )
+                    if remaining.returncode == 0 and not remaining.stdout.strip():
+                        return
+                except (OSError, subprocess.TimeoutExpired):
+                    continue
+            raise RuntimeError(f"sandbox cleanup unavailable for {container_name}")
 
         try:
             directory = Path(__file__).parent
@@ -88,11 +97,43 @@ class ContainerSandbox:
             Path(workdir, "__transport__.py").write_text(source, encoding="utf-8")
             os.chmod(Path(workdir, "__transport__.py"), 0o644)
             t0 = time.perf_counter()
+            # A cancelled 'docker run' can create a container after cleanup checks.
+            # Finish creation before starting a client that may be killed on timeout.
+            try:
+                created = subprocess.run(
+                    self._build_docker_command(workdir, "", container_name),
+                    capture_output=True,
+                    timeout=15,
+                )
+            except subprocess.TimeoutExpired:
+                raise RuntimeError(f"sandbox creation unconfirmed for {container_name}") from None
+            elapsed = time.perf_counter() - t0
+            if created.returncode:
+                return RunnerResult(
+                    False,
+                    created.returncode,
+                    "",
+                    safe_decode(created.stderr),
+                    False,
+                    round(elapsed * 1000, 1),
+                    "container creation failed",
+                    {},
+                )
+            if elapsed >= self.wall_seconds:
+                return RunnerResult(
+                    False,
+                    None,
+                    "",
+                    "",
+                    True,
+                    round(elapsed * 1000, 1),
+                    "execution timeout",
+                    {},
+                )
             result = capture(
-                self._build_docker_command(workdir, "", container_name),
+                ["docker", "start", "--attach", container_name],
                 limit=MAX_RESULT_BYTES,
-                timeout=self.wall_seconds,
-                stop=remove,
+                timeout=self.wall_seconds - elapsed,
             )
             wall_ms = round((time.perf_counter() - t0) * 1000, 1)
             if result["timed_out"] or result["overflow"]:
@@ -174,7 +215,7 @@ class ContainerSandbox:
         self, workdir: str, output_dir: str, container_name: str
     ) -> list[str]:
         """
-        Build the Docker run command with sandbox flags.
+        Build the Docker create command with sandbox flags.
 
         Security flags:
         - --read-only: root filesystem is read-only
@@ -194,7 +235,9 @@ class ContainerSandbox:
 
         cmd = [
             "docker",
-            "run",
+            "create",
+            "--pull",
+            "never",
             "--rm",
             "--read-only",
             "--cap-drop",

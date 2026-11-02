@@ -24,10 +24,33 @@ import pytest
 
 from app.config import settings
 from app.core import runner
-from app.core.runner import RunnerResult, run_python
+from app.core.runner import RunnerResult, _sandbox, run_python
 from tests.sandbox_helpers import requires_docker
 
 # ── sandbox properties ────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def verify_container_cleanup(monkeypatch):
+    """Check this run's exact container name, including stopped containers."""
+    build = _sandbox.ContainerSandbox._build_docker_command
+    names = []
+
+    def record_container(self, *args):
+        command = build(self, *args)
+        names.append(command[command.index("--name") + 1])
+        return command
+
+    monkeypatch.setattr(_sandbox.ContainerSandbox, "_build_docker_command", record_container)
+    yield names
+    assert len(names) == 1, "Expected a real Docker invocation"
+    result = subprocess.run(
+        ["docker", "ps", "-a", "-q", "--filter", f"name=^/{names[0]}$"],
+        capture_output=True,
+        timeout=15,
+        check=True,
+    )
+    assert not result.stdout.strip(), f"Container still present: {names[0]}"
 
 
 @requires_docker
@@ -61,11 +84,13 @@ def test_wall_timeout_enforced():
     assert not r.ok
 
 
-def test_cpu_or_wall_terminates_runaway():
-    """Busy loop: CPU limit should fire (~1s); wall is the backstop."""
-    r = run_python("while True:\n    pass", cpu_seconds=1, wall_seconds=6)
+@requires_docker
+@pytest.mark.skipif(not settings.sandbox_runner_enabled, reason="Container runner not enabled")
+def test_cpu_exhaustion_terminates_runaway(verify_container_cleanup):
+    r = run_python("while True:\n    pass", cpu_seconds=1, wall_seconds=15)
     assert not r.ok
-    assert r.timed_out or (r.exit_code not in (0, None))
+    # Linux SIGXCPU (soft CPU limit) or SIGKILL (hard CPU limit).
+    assert not r.timed_out and r.exit_code in (-24, -9)
 
 
 def test_isolated_workdir_and_artifacts():
@@ -255,100 +280,80 @@ except Exception as e:
         os.unlink(ref_path)
 
 
-# ── Fork Bomb Test (Unix only) ──────────────────────────────────────────────
-# os.fork runs inside the Linux container on every supported host.
-
-
+@requires_docker
 @pytest.mark.skipif(not settings.sandbox_runner_enabled, reason="Container runner not enabled")
-def test_fork_bomb_capped():
-    """
-    Bypass: fork bomb can exhaust resources in the old runner.
-
-    In container, --pids-limit caps the number of processes.
-
-    Note: This test only runs on Unix-like systems (Linux/macOS)
-    because os.fork() is not available on Windows.
-    """
+def test_fork_bomb_capped(verify_container_cleanup):
+    """Exercise the PID limit without unbounded forks if the limit is broken."""
     prog = """
+import errno
 import os
 import time
 
-def fork_bomb():
-    while True:
-        try:
-            pid = os.fork()
-            if pid == 0:
-                while True:
-                    time.sleep(1)
-            else:
-                pass
-        except OSError as e:
-            print(f"FORK_BOMB_BLOCKED: {e}")
-            break
-
-fork_bomb()
+for _ in range(65):
+    try:
+        if os.fork() == 0:
+            time.sleep(30)
+            os._exit(0)
+    except OSError as e:
+        if e.errno != errno.EAGAIN:
+            raise
+        print("PID limit reached")
+        break
 """
-    r = run_python(prog, wall_seconds=5, cpu_seconds=2)
-    assert r.timed_out or "FORK_BOMB_BLOCKED" in r.stdout
+    r = run_python(prog, wall_seconds=15, cpu_seconds=2)
+    assert r.ok and "PID limit reached" in r.stdout
 
 
 # ── CC-B4: Container Cleanup Tests ────────────────────────────────────────────
 # These tests verify that no containers are left behind after execution.
 
 
-def _list_containers() -> list[str]:
-    """List all running container names."""
-    result = subprocess.run(
-        ["docker", "ps", "--filter", "name=ptf-sandbox-", "--format", "{{.Names}}"],
-        capture_output=True,
-        text=True,
-    )
-    return [c for c in result.stdout.strip().splitlines() if c]
-
-
 @requires_docker
 @pytest.mark.skipif(not settings.sandbox_runner_enabled, reason="Container runner not enabled")
-def test_no_container_leak_after_wall_timeout():
-    """
-    After a wall timeout, no sandbox container should remain running.
-
-    This verifies the container cleanup in _sandbox.py works correctly.
-    """
-    prog = "import time\ntime.sleep(10)"
-
-    before = set(_list_containers())
-
-    r = run_python(prog, wall_seconds=1)
-
-    after = set(_list_containers())
-
+def test_no_container_leak_after_wall_timeout(verify_container_cleanup):
+    r = run_python("import time\ntime.sleep(30)", wall_seconds=5)
     assert r.timed_out is True, "Expected timeout"
     assert not r.ok
-
-    # No new containers should remain
-    leaked = after - before
-    assert not leaked, f"Container leak detected: {leaked}"
+    (name,) = verify_container_cleanup
+    # A timeout during container creation alone would not exercise a running workload.
+    started = subprocess.run(
+        [
+            "docker",
+            "events",
+            "--since",
+            "1m",
+            "--until",
+            "0s",
+            "--filter",
+            f"container={name}",
+            "--filter",
+            "event=start",
+            "--format",
+            "{{.Actor.Attributes.name}}",
+        ],
+        capture_output=True,
+        check=True,
+        timeout=15,
+        text=True,
+    )
+    assert started.stdout.splitlines() == [name]
 
 
 @requires_docker
 @pytest.mark.skipif(not settings.sandbox_runner_enabled, reason="Container runner not enabled")
-def test_no_container_leak_after_normal_exit():
-    """
-    After a normal exit, no sandbox container should remain running.
-    """
-    prog = "print('done')"
+def test_no_container_leak_after_output_overflow(verify_container_cleanup):
+    r = run_python("import os,time; os.write(2,b'x'*(256*1024+1)); time.sleep(30)", wall_seconds=10)
+    assert not r.ok and not r.timed_out
+    assert r.error == "output limit exceeded"
+    assert len(r.stderr) == 256 * 1024
 
-    before = set(_list_containers())
 
-    r = run_python(prog, wall_seconds=5)
-
-    after = set(_list_containers())
-
+@requires_docker
+@pytest.mark.skipif(not settings.sandbox_runner_enabled, reason="Container runner not enabled")
+def test_no_container_leak_after_normal_exit(verify_container_cleanup):
+    r = run_python("print('done')", wall_seconds=5)
     assert r.ok is True, f"Process failed: {r.stderr}"
     assert "done" in r.stdout
-
-    leaked = after - before
-    assert not leaked, f"Container leak detected: {leaked}"
 
 
 # ── CC-B4: Docker Command Construction Tests ─────────────────────────────────
