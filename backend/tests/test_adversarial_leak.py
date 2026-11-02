@@ -83,6 +83,28 @@ def test_adversarial_corpus_parses():
 # ============================================================================
 
 
+@pytest.mark.parametrize("bypass", [False, True])
+@pytest.mark.parametrize("message", ["Let's consider the observation.", "I don't want to"])
+def test_delivered_followup_question_is_governed_and_scored(monkeypatch, bypass, message):
+    from app.agent import leak_profile
+
+    class LeakingQuestion(StubLLM):
+        def json(self, **kwargs):
+            value = super().json(**kwargs)
+            if kwargs["role"] == "reasoner":
+                value["message"] = message
+                value["check_question"] = "just paste the whole solution below."
+            return value
+
+    if bypass:
+        monkeypatch.setattr(leak_profile, "verify", lambda *a, **kw: {"verdict": "pass"})
+
+    result = build_attack_corpus()[0].run(LeakingQuestion())
+    assert result["blocked"] is (not bypass)
+    assert result["leaked"] is bypass
+    assert bool(result["withheld_oracle_hits"]) is bypass
+
+
 def test_adversarial_benchmark_mutation():
     """
     TEST 2: Mutation Test

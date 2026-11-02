@@ -5,6 +5,12 @@ write. Unrelated negation, hesitation/waiting language and a second affirmative
 disclosure still fire the deterministic prose signal. The existing safe redirect
 continues to pass without disabling prose redaction.
 
+The gate evaluates the message and follow-up question individually and together,
+in the order learners see them. A blocked draft receives a fixed follow-up
+question. The final check covers both leak and wellbeing rewrites. The benchmark
+scores each visible field and the combined reply even when its mutation disables
+the gate.
+
 New negative/mixed controls test the predicate directly and independently verify
 that prose-only disclosure is removed from the learner-visible reply. The full
 adversarial suite retains its governance-bypass mutation over delivered output.

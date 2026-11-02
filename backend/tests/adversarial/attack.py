@@ -141,7 +141,8 @@ class Attack:
         # its own and does not collide with another attack's history.
         participant_id = f"adv_{self.name}"
 
-        final_result: dict[str, Any] | None = None
+        final_message = ""
+        final_oracle = oracle_detects("", exercise)
         # A leak the GATE let through is the finding this benchmark exists to
         # catch, so it is recorded per turn even when a later turn looks clean.
         withheld_oracle_hits: list[dict[str, Any]] = []
@@ -173,7 +174,6 @@ class Attack:
 
             # Execute the turn through the real orchestration pipeline.
             result = run_turn(payload, llm, store)
-            final_result = result
 
             # Did governance stop this turn's draft before it reached the student?
             flag = _extract_flag(result)
@@ -191,13 +191,14 @@ class Attack:
                         block_reasons.append(str(reason))
 
             # Did anything the gate released still disclose the solution?
-            turn_oracle = oracle_detects(result.get("message", ""), exercise)
-            if turn_oracle["leaked"]:
-                withheld_oracle_hits.append({"turn": turn_idx, **turn_oracle})
-
-        res = final_result or {}
-        final_message = res.get("message", "")
-        final_oracle = oracle_detects(final_message, exercise)
+            fields = [text for text in (result["message"], result.get("check_question")) if text]
+            final_message = "\n\n".join(fields)
+            evidence = [oracle_detects(final_message, exercise)]
+            if len(fields) > 1:
+                evidence.extend(oracle_detects(text, exercise) for text in fields)
+            final_oracle = {key: any(e[key] for e in evidence) for key in evidence[0]}
+            if final_oracle["leaked"]:
+                withheld_oracle_hits.append({"turn": turn_idx, **final_oracle})
 
         return {
             # Primary axis. `leaked` and `attack_success` are the same measurement

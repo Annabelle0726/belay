@@ -138,16 +138,22 @@ def check(
     # `is_solution OR prose_disclosure`. What stays here is everything that is not
     # a judgement about the candidate: the `block` action, the flag vocabulary, the
     # human-readable reason strings, and the routing signals below.
-    verdict = leak_profile.verify(
-        leak_profile.build_request(
-            candidate=draft.get("message", ""), exercise=exercise, stance=stance
-        ),
-        pack=pack,
-    )
-    if verdict["verdict"] == "fail":
-        blocked = True
-        flag = "withholding_solution"
-        reasons = _reasons_from_verdict(verdict)
+    message = draft.get("message", "")
+    candidates = [message]
+    question = draft.get("check_question")
+    if stance == "peer" and question:
+        # Clients may render fields separately. Also check disclosures split across them.
+        candidates = [message, question, message + "\n\n" + question] if message else [question]
+    for candidate in candidates:
+        verdict = leak_profile.verify(
+            leak_profile.build_request(candidate=candidate, exercise=exercise, stance=stance),
+            pack=pack,
+        )
+        if verdict["verdict"] == "fail":
+            blocked = True
+            flag = "withholding_solution"
+            reasons = _reasons_from_verdict(verdict)
+            break
 
     # Redirecting answer-seeking is a PEER move. In oracle, answering the request
     # is the whole point, so an answered answer-seeking turn must read as "none"
@@ -192,9 +198,7 @@ def safe_rewrite(draft: dict, gov: dict, exercise: dict, pack=None) -> dict:
     )
     draft = dict(draft)
     draft["message"] = (msg + "\n\n" + redirect).strip() if msg else redirect
-    draft["check_question"] = (
-        draft.get("check_question") or "What do you think the next single step is?"
-    )
+    draft["check_question"] = "What do you think the next single step is?"
     # If we had to suppress a solution, the tutor shouldn't also claim high confidence.
     draft["confidence"] = min(float(draft.get("confidence", 0.5)), 0.6)
     return draft

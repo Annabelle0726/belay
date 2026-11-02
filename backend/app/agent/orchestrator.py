@@ -538,16 +538,6 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
     gov = governance.check(ctx, plan, draft, evaluation, stance=stance)
     if gov["block"]:
         draft = governance.safe_rewrite(draft, gov, exercise)
-        # The old rewrite can retain leaking prose. Verify what will be delivered.
-        if governance.check(ctx, plan, draft, evaluation, stance=stance)["block"]:
-            draft = {
-                **draft,
-                "message": "Let's work through one small step together. What would you try next?",
-                "check_question": None,
-                "confidence": min(float(draft.get("confidence", 0.5)), 0.6),
-            }
-            if governance.check(ctx, plan, draft, evaluation, stance=stance)["block"]:
-                raise ValueError("safe response unavailable")
 
     # Wellbeing floor — DEFENSE-IN-DEPTH, NOT a deterministic gate (peer only).
     # Tone has no ground-truth oracle, so unlike the supreme leak gate this is a
@@ -558,6 +548,20 @@ def _run_turn(payload: dict, llm: LLMClient, store: Store) -> dict:
     wellbeing_softened = False
     if stance == "peer":
         draft, wellbeing_softened = governance.soften_if_berating(draft)
+
+    if gov["block"] or wellbeing_softened:
+        final_check = governance.check(ctx, plan, draft, evaluation, stance=stance)
+        if final_check["block"]:
+            if not gov["block"]:
+                gov = final_check
+            draft = {
+                **draft,
+                "message": "Let's work through one small step together. What would you try next?",
+                "check_question": None,
+                "confidence": min(float(draft.get("confidence", 0.5)), 0.6),
+            }
+            if governance.check(ctx, plan, draft, evaluation, stance=stance)["block"]:
+                raise ValueError("safe response unavailable")
 
     if draft["message"] != cited_candidate:
         groundedness_data = groundedness.unchecked(len(passages), "skipped", "safety rewrite")
