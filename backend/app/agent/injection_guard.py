@@ -11,18 +11,19 @@ Follows CC-B1 isolation requirements:
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 from dataclasses import dataclass
+from typing import Never
 
 from fastapi import HTTPException
-from openai import OpenAI  # Direct connection to Portage Sovereign endpoint
+from openai import DefaultHttpxClient, OpenAI
 
 from ..config import settings
 from ..controls.contracts import ControlError
 from ..controls.runtime import model_call
 from ..pedagogy import check_current
-from .llm import parse_json  # Reuse core JSON parsing utility
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,17 @@ class InjectionVerdict:
     score: float
     model_used: str
     error_category: str | None = None
+
+
+def _unique_fields(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    fields = dict(pairs)
+    if len(fields) != len(pairs):
+        raise ValueError("MALFORMED_RESPONSE")
+    return fields
+
+
+def _reject_non_json_number(_: str) -> Never:
+    raise ValueError("MALFORMED_RESPONSE")
 
 
 class SovereignLLMClient:
@@ -53,6 +65,8 @@ class SovereignLLMClient:
             api_key="sovereign-internal-token",
             max_retries=0,
             timeout=20.0,
+            # A redirect can resend the learner's message outside the configured endpoint.
+            http_client=DefaultHttpxClient(follow_redirects=False),
         )
 
     def json(self, system: str, user: str, max_tokens: int = 100) -> dict | None:
@@ -95,9 +109,14 @@ class SovereignLLMClient:
             kwargs.pop("response_format", None)
             resp = attempt()
 
-        msg = resp.choices[0].message
-        text = getattr(msg, "content", None) or getattr(msg, "reasoning_content", "") or ""
-        return parse_json(text)
+        text = getattr(resp.choices[0].message, "content", None) if resp.choices else None
+        if not isinstance(text, str):
+            return None
+        # Only the complete final message is classifier evidence.
+        verdict = json.loads(
+            text, object_pairs_hook=_unique_fields, parse_constant=_reject_non_json_number
+        )
+        return verdict if isinstance(verdict, dict) else None
 
 
 class InjectionGuard:

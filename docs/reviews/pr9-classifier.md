@@ -5,6 +5,11 @@ numeric confidence between zero and one. Missing fields, strings, booleans used
 as confidence, nonfinite/out-of-range values and nonobjects yield bounded
 `malformed` evidence. They never become successful `safe` verification.
 
+The dedicated client reads one complete JSON object from the final response.
+Prose examples, reasoning-only text and duplicate fields yield malformed
+evidence. Redirects are disabled so learner input stays on the configured
+endpoint. A supported-format fallback has its own authorization and budget check.
+
 The optional guard retains its existing fail-open availability policy: malformed
 classification permits tutoring to continue through deterministic governance,
 while its trace explicitly says verification was malformed. This does not skip a
