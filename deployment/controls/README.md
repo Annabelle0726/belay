@@ -18,35 +18,17 @@ original teaching-pack dependencies installed. From the repository root:
 python -m pip install -r .\backend\requirements.txt -r .\backend\requirements-packs.txt
 ```
 
-The following block works from **your own checkout's root**, without a fixed
-developer-machine path. It refuses existing config/data directories. If already
-prepared, skip this block and use the daily commands below. Do not delete old
-data or overwrite an existing private config merely to rerun setup.
+With Docker running, build the image used to execute learner code, then prepare
+a fresh local installation from the repository root:
 
 ```powershell
-& {
-    $ErrorActionPreference = 'Stop'
-    $belayRoot = (Get-Location).Path
-    if (-not (Test-Path -LiteralPath (Join-Path $belayRoot 'backend/app/controlled_runtime.py'))) {
-        throw 'Run this block from the Belay repository root.'
-    }
-    $configDir = Join-Path $belayRoot 'deployment/local/controlled-config'
-    $dataDir = Join-Path $belayRoot 'deployment/local/controlled-runtime'
-    if ((Test-Path -LiteralPath $configDir) -or (Test-Path -LiteralPath $dataDir)) {
-        throw 'Config or data already exists. Retain it; use check/start or choose fresh paths.'
-    }
-    New-Item -ItemType Directory -Path $configDir | Out-Null
-    Copy-Item -LiteralPath (Join-Path $belayRoot 'deployment/controls/controlled-runtime.env.example') -Destination (Join-Path $configDir '.env')
-    Copy-Item -LiteralPath (Join-Path $belayRoot 'deployment/controls/controlled-runtime-policy.example.json') -Destination (Join-Path $configDir 'policy.json')
-    Push-Location -LiteralPath (Join-Path $belayRoot 'backend')
-    try {
-        python -m app.controlled_runtime prepare --data-dir $dataDir --env-file (Join-Path $configDir '.env') --policy (Join-Path $configDir 'policy.json') --api-port 8004 --frontend-port 5177
-        if ($LASTEXITCODE -ne 0) { throw 'Preparation failed. Do not use start to repair missing state.' }
-        python -m app.controlled_runtime check --data-dir $dataDir --env-file (Join-Path $configDir '.env')
-        if ($LASTEXITCODE -ne 0) { throw 'Preflight failed; inspect the private configuration.' }
-    } finally { Pop-Location }
-}
+docker build -t belay-sandbox:0.1.0 -f backend/Dockerfile.sandbox backend
+.\deployment\controls\prepare-local-stub.ps1
 ```
+
+The preparation script copies the stub configuration, initializes its database
+and runs preflight. It refuses existing configuration or data directories.
+For an existing installation, continue with the daily commands below.
 
 `prepare` explicitly creates this new installation's keys, test authorization,
 shared database, schemas, deletion ledger and policy. It does not start services
@@ -120,10 +102,6 @@ not a live-provider certification. PostgreSQL/load acceptance is separate.
 | [`controlled-runtime-policy.example.json`](controlled-runtime-policy.example.json) | Synthetic zero-price policy with finite resource limits; not a paid-provider pricing profile |
 | [`controlled-runtime.md`](controlled-runtime.md) | Detailed operator guide |
 | [`controlled-runtime-summary.md`](controlled-runtime-summary.md) | Implementation steps, verification evidence and remaining limits |
-
-Ignored `deployment/local/run-feedback-verification/deepseek_preview.py` and its
-dedicated scripts are historical local previews, not the general team entry.
-
 
 ## Existing credential file (no repeat key entry)
 
@@ -244,34 +222,13 @@ tiny test limit in place. Preserve old spend and unknown holds. `update-policy`
 alone does not change the manifest's cumulative ceiling, and `authorize-window`
 is a timed grant operation, not an amount-only top-up.
 
-The [local policy and future course requirements](budget-policy.md)
-keep those concerns separate. Local values are **not course defaults**.
-Formal teaching may refresh learner allowances daily or every configurable few
-hours while course access is valid, without resetting the class/course cumulative
-budget or ledger history. That independent policy/interface remains unimplemented
-and requires agreement with Greg; this round adds no administrator page or quota
-refresh mechanism.
+Optional deployment-wide quotas add a short window and a weekly window.
+The operator chooses their UTC anchors and monetary limits. Each window must
+allow the reservation, along with cumulative and scoped limits. A refresh
+preserves ledger history and outstanding holds. Formal course entitlements
+remain an open platform requirement. See the [budget policy](budget-policy.md)
+for configuration, explicit funding changes and recovery.
 
-The newer [local short-period + weekly plan](budget-policy.md) adds
-optional deployment-wide model quotas, default disabled, using the same ledger
-transaction. It does not implement formal learner quota renewal. Both fixed
-windows, cumulative funding and existing scoped limits must pass. UTC anchors
-define refresh boundaries; old consumption and unknown holds remain counted.
-The original proposals did not authorize spending. The subsequent explicit
-2026-10-11 local authorization **has been applied**: add USD5, retain the prior
-balance and pin a USD5.148223 cumulative ceiling, with USD1/six hours and USD5/week.
-Timezone **Asia/Shanghai (UTC+08:00)** uses fixed 00/06/12/18 boundaries and Monday
-00:00 weeks. Short refresh does not reset week consumption; weekly refresh does
-not reset cumulative consumption or grant money. No expiry is restored and no
-non-money resource limit was raised. These are private local test settings, not
-formal student/course defaults. See the [applied summary](budget-policy.md).
-
-Once an exact incremental grant and its policy are approved, the prepared entry
-is `./start-belay.ps1 -BudgetAuthorization <approved-json> -BudgetPolicy <policy-json>`.
-It updates a stopped installation without starting services; normal `-Check`,
-start and stop stay unchanged. It preserves the amount-only mode and prior
-balance, and rejects changed price/period/traffic configuration. See the plan
-for the concrete repository-relative paths, recovery contract and test evidence.
 Start uses an exclusive installation lock. Stop requires a matching nonce and a
 held lock; it signals the host cooperatively and never kills a PID/port. Worker
 cleanup continues to enforce temporary-content and saved-history retention.

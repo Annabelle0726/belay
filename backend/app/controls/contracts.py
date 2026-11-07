@@ -66,7 +66,7 @@ class ModelQuotas(BaseModel):
     """Optional deployment-wide fixed buckets, independent of scope periods.
 
     Anchors are explicit UTC epoch seconds supplied by the operator. They do not
-    move on restart or policy update. This is not a learner entitlement policy.
+    depend on the host timezone. Fixed-duration windows repeat from each anchor.
     """
 
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)

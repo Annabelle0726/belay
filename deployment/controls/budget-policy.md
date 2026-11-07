@@ -11,18 +11,24 @@ with a persisted first-start deadline (currently up to 7200 seconds); restart
 does not move that deadline. This is a configurable local test policy, not a
 model requirement, login lifetime or student entitlement.
 
-The current local approval is USD5.148223 cumulative, USD1 per six hours and USD5
-per week. These are installation-specific values, not defaults. Each existing
-scope's monetary cap is also USD5.148223. Existing non-money limits remain in
-force. Changing providers/models retains the database, deployment ID, history
-and unknown reservations; both quota windows and all other limits must pass.
+The operator selects the cumulative ceiling and each scope limit for the
+installation. Models and providers share the deployment ledger. Keep the
+deployment identity and its database when changing models.
 
 ## Fixed boundaries
 
-Asia/Shanghai (UTC+08:00): six-hour periods begin at 00/06/12/18; weeks begin
-Monday 00:00. The policy uses UTC epoch anchors 57600 and 316800, respectively.
-Intervals include their start and exclude their end. These are fixed buckets,
-not rolling windows. Other timezones/DST require a reviewed alignment strategy.
+The optional `model_quotas` policy requires both limits and both anchors.
+`short_period_seconds` sets the short window (whole hours from 1 through 24).
+`short_anchor_utc` and `week_anchor_utc` are Unix timestamps in seconds. Choose
+each anchor at an intended boundary. The ledger repeats the short window at its
+configured interval and the weekly window every seven days, using elapsed UTC
+seconds. Each interval includes its start and excludes its end. Changing the
+host timezone or restarting the worker does not move either boundary.
+
+An operator who wants Monday midnight in a particular location must translate
+that boundary to UTC when preparing the policy. Fixed intervals do not follow
+daylight-saving changes. Omit `model_quotas` to use only the other configured
+limits.
 
 Short-period renewal does not reset weekly consumption. Weekly renewal does not
 reset cumulative consumption or add funds. Settlements belong to the original
@@ -70,15 +76,5 @@ conversation retention and token/resource limits remain independent.
 
 Configurable student daily/hourly entitlement renewal during valid course access,
 with spending accumulated against course/class funding, is a candidate for
-discussion with Greg. Responsibilities, semester rules and administrator UI are
+institutional review. Responsibilities, semester rules and administrator UI are
 not implemented by these local developer policies.
-
-## Documentation consolidation
-
-Temporary budget proposals and local debugging summaries have been retained in
-ignored `deployment/local/documentation-archive/`, and removed from the branch's
-current file tree. Implementation stage records, protocols, startup instructions
-and the final audit remain tracked. Historical Git commits are not rewritten.
-This cleanup changes no executable code, policy or database. Markdown references
-and `git diff --check` are checked; the unchanged implementation's regression
-results are recorded in the final audit.

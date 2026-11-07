@@ -18,9 +18,9 @@ def quotas(**changes):
     return ModelQuotas(
         **{
             "short_period_seconds": 21600,
-            "short_anchor_utc": 57600,
+            "short_anchor_utc": 0,
             "short_microunits": 100,
-            "week_anchor_utc": 316800,
+            "week_anchor_utc": 4 * 86400,
             "week_microunits": 150,
             **changes,
         }
@@ -48,12 +48,26 @@ def spend(ledger, name, amount, scope=SCOPE):
 
 @pytest.fixture
 def week_start(ledger, monkeypatch):
-    # Monday 2026-10-05 00:00 Asia/Shanghai.
-    now = datetime(2026, 10, 4, 16, tzinfo=UTC).timestamp()
+    now = datetime(2026, 10, 5, tzinfo=UTC).timestamp()
     ledger.clock = lambda: now
     monkeypatch.setattr(settings, "controls_inference_total_microunits", 10**8)
     monkeypatch.setattr(settings, "controls_inference_expires_at", 0)
     return now
+
+
+@pytest.mark.parametrize("offset_hours", [-7, 0, 8])
+@pytest.mark.parametrize("window", ["short", "week"])
+def test_window_starts_at_operator_anchor(ledger, week_start, offset_hours, window):
+    # A local midnight can fall on either side of the UTC date boundary.
+    boundary = int(week_start) - offset_hours * 3600
+    install(ledger, **{f"{window}_anchor_utc": boundary, f"{window}_microunits": 10})
+    ledger.clock = lambda: boundary - 1
+    spend(ledger, "old-window", 10)
+    with pytest.raises(ControlError, match="budget_exhausted"):
+        spend(ledger, "before-boundary", 1)
+    ledger.clock = lambda: boundary
+    spend(ledger, "new-window", 10)
+    assert ledger.summary()["consumed"]["microunits"] == 20
 
 
 def test_short_refresh_preserves_week_and_history(ledger, week_start):
@@ -181,30 +195,28 @@ def test_daily_candidate_boundary_and_idempotent_reservation(ledger, week_start)
     assert ledger.summary()["attempts"] == 2
 
 
-def test_approved_local_values_preserve_history_and_funding(ledger, week_start, monkeypatch):
-    # Exact October 11 authorization: USD5 additional, USD1 / six hours,
-    # USD5 / week. These are isolated ledger amounts, not provider requests.
-    spend(ledger, "earlier-this-week", 114475)
+def test_enabling_windows_preserves_prior_spend_against_each_limit(ledger, week_start, monkeypatch):
+    spend(ledger, "earlier-this-week", 15)
     ledger.clock = lambda: week_start + 21600
-    spend(ledger, "current-short-period", 17362)
-    monkeypatch.setattr(settings, "controls_inference_total_microunits", 5148223)
-    install(ledger, short_microunits=1000000, week_microunits=5000000)
-    spend(ledger, "short-remainder", 982638)
+    spend(ledger, "current-short-period", 6)
+    monkeypatch.setattr(settings, "controls_inference_total_microunits", 530)
+    install(ledger, short_microunits=100, week_microunits=500)
+    spend(ledger, "short-remainder", 94)
     with pytest.raises(ControlError, match="budget_exhausted"):
         spend(ledger, "short-full", 1)
     for index in range(2, 5):
         ledger.clock = lambda index=index: week_start + index * 21600
-        spend(ledger, f"later-short-{index}", 1000000)
+        spend(ledger, f"later-short-{index}", 100)
     ledger.clock = lambda: week_start + 5 * 21600
-    spend(ledger, "weekly-remainder", 885525)
+    spend(ledger, "weekly-remainder", 85)
     with pytest.raises(ControlError, match="budget_exhausted"):
         spend(ledger, "week-full", 1)
-    assert ledger.summary()["consumed"]["microunits"] == 5000000
+    assert ledger.summary()["consumed"]["microunits"] == 500
     ledger.clock = lambda: week_start + 604800
-    spend(ledger, "last-funded-balance", 148223)
+    spend(ledger, "last-funded-balance", 30)
     with pytest.raises(ControlError, match="budget_exhausted"):
         spend(ledger, "no-automatic-funding", 1)
-    assert ledger.summary()["consumed"]["microunits"] == 5148223
+    assert ledger.summary()["consumed"]["microunits"] == 530
 
 
 @pytest.mark.parametrize(

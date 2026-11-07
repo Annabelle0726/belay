@@ -1,23 +1,12 @@
 # Shared-provider budget audit — 2026-10-11
 
-## 1. Scope and actual configuration
+## 1. Historical verification scope
 
-The user reports successful manual real DeepSeek testing. This is user-provided
-verification, not a new model invocation or browser test by this audit. No live
-service was started/stopped, no paid request submitted, and no local budget,
-identity, database, deployment ID or accepted student UI changed in this audit.
-
-A read-only SQLite connection (`mode=ro`, `query_only`) confirmed installed
-policy `local-sixhour-week-budget-20261011-v4`: USD1 per 21600 seconds, USD5 per
-604800 seconds, and all four legacy scope money caps USD5.148223. The private
-manifest retains amount-only cumulative USD5.148223. Snapshot at epoch
-1791688664: consumed USD0.140980, outstanding-held USD0, cumulative available
-USD5.007243; 14 completed / 12 failed jobs, none queued/running/unknown.
-Balances can change with later user activity. No credentials or content read.
-
-Fixed Asia/Shanghai boundaries remain 00/06/12/18 daily and Monday 00:00 weekly
-(UTC epoch anchors 57600 and 316800). These local approved values are not model
-defaults or formal student/course quota rules.
+This audit examined a single local installation with a finite cumulative budget
+and operator-selected short and weekly windows. A read-only ledger inspection
+confirmed that spending and outstanding holds were accounted for. The operator
+also reported a successful manual provider test. The audit itself made no paid
+requests. For the supported configuration, see the [budget policy](budget-policy.md).
 
 ## 2. Implementation evidence and minimal repair
 
@@ -57,8 +46,8 @@ and Anthropic adapter classes with simulated SDK responses verify mixed-provider
 spend, model changes, short/week/cumulative denial before dispatch, actual
 planner/reasoner/evaluator/revision accounting, explicit unmetered token limits,
 zero-price denial, and independent spawned-process reservation/settlement.
-Existing `test_model_budget_quotas.py` covers exact Shanghai boundaries, unknown
-holds, pre-existing history and exact authorized local values; provider tests
+Existing `test_model_budget_quotas.py` covered fixed window boundaries, unknown
+holds, pre-existing history and cumulative funding; provider tests
 cover fallback/repair, missing usage, timeouts and Anthropic cache accounting.
 
 Final verification: full backend suite **837 passed / 0 failed / 18 skipped**

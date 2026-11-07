@@ -132,7 +132,7 @@ modify the user's open browser storage. The page needs a refresh to load the
 current scripts and run recovery in its own storage scope.
 
 No model call was submitted; latest model attempt remained unchanged. Existing
-budget policy, USD 5.148223 cumulative cap, database and deployment were reused.
+budget policy, cumulative cap, database and deployment were reused.
 No prepare, migration, budget grant, commit or push. Actual model feedback after
 a new user submission and the user's existing browser page remain unverified.
 
@@ -238,7 +238,7 @@ Owner explicitly approved the prepared temporary concurrency increase and one
 real verification request. Applied policy
 `local-sixhour-week-budget-20261014-recovery-v5`: active_jobs/model_calls changed
 from 1 to 2 at all four scopes. All monetary/resource budgets, quota anchors,
-prices, deployment identity, amount-only manifest cap (5148223 microunits), and
+prices, deployment identity, amount-only manifest cap, and
 all existing ledger job/attempt/slot rows were verified unchanged at application.
 Applied under the installation lock after cooperative stop; no prepare/migration.
 The previous policy and a review record are retained in local controlled-config.

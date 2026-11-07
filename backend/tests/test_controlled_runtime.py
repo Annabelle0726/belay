@@ -826,9 +826,9 @@ l.reserve('unknown','old-unknown',s,Amount(microunits=7),'model');l.settle('unkn
         "version": "amount-grant-v2",
         "model_quotas": {
             "short_period_seconds": 21600,
-            "short_anchor_utc": 57600,
+            "short_anchor_utc": 0,
             "short_microunits": 100,
-            "week_anchor_utc": 316800,
+            "week_anchor_utc": 4 * 86400,
             "week_microunits": 150,
         },
     }
