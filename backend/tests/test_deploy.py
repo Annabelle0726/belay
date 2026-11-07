@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """
-Deployability tests (6c): the preflight doctor + the minimal /quad/v1 embed turn
-against the _skeleton pack. No network (control stance; provider probe skipped).
+Deployability tests: preflight, the legacy /quad/v1 turn contract, and the
+controlled embed page against the _skeleton pack. No paid model calls.
 """
 
 from __future__ import annotations
@@ -9,12 +9,12 @@ from __future__ import annotations
 import os
 
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 from app.integrations.quad import build_router
 from app.packs._skeleton import SkeletonPack
 from app.preflight import check_config, check_store, run
 from app.store import ConsentRouter, InMemoryStore
+from tests.http_auth import authenticated_client
 
 # ── preflight doctor ──────────────────────────────────────────────────────────
 
@@ -59,7 +59,7 @@ def test_embed_demo_turn_against_skeleton(monkeypatch):
     app.include_router(
         build_router(ConsentRouter(InMemoryStore()), get_active_pack(), lambda: None)
     )  # control stance: no LLM
-    out = TestClient(app).post(
+    out = authenticated_client(app, "gh:12345").post(
         "/quad/v1/turn",
         json={
             "pseudo_id": "gh:12345",
@@ -70,17 +70,21 @@ def test_embed_demo_turn_against_skeleton(monkeypatch):
     )
     assert out.status_code == 200, out.text
     body = out.json()
-    assert body["components"]["pack"] == "_skeleton"
-    assert "intervention" in body and "message" in body
+    assert "message" in body and body["glass_box"]["approach"]
+    assert "components" not in body and "intervention" not in body
 
 
-def test_embed_demo_page_targets_quad_and_skeleton():
+def test_embed_demo_page_targets_controlled_quad_jobs_and_skeleton():
     path = os.path.normpath(
         os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "embed-demo.html")
     )
     assert os.path.exists(path), path
     with open(path, encoding="utf-8") as fh:
         html = fh.read()
-    assert "/quad/v1/turn" in html
+    assert '<script src="ask-jobs.js"></script>' in html
+    assert "askJobs.ask(base, '/quad/v1/jobs'" in html
+    assert "askJobs.recover(base,'/quad/v1/jobs'" in html
+    assert "askJobs.acknowledge(data)" in html
+    assert "/quad/v1/turn" not in html
     assert "echo-1" in html  # the _skeleton pack exercise
     assert "gh:12345" in html  # pseudonymous identity only

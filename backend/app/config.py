@@ -20,6 +20,92 @@ def _envbool(key: str, default: bool) -> bool:
 
 @dataclass
 class Settings:
+    # Metered is fail-closed for a zero/missing price. Zero-cost inference must
+    # be explicitly declared; this never disables token or resource accounting.
+    llm_billing_mode: str = field(default_factory=lambda: _env("LLM_BILLING_MODE", "metered"))
+    # Explicit development bypass preserves the main-branch local workflow.
+    # Enforced execution requires trusted operation context; HTTP integration
+    # remains gated on the identity/conversation prerequisites.
+    controls_mode: str = field(default_factory=lambda: _env("CONTROLS_MODE", "development_bypass"))
+    controls_jobs_enabled: bool = field(
+        default_factory=lambda: _envbool("CONTROLS_JOBS_ENABLED", False)
+    )
+    # Explicit operator continuity grant, scoped to a policy and owned request IDs.
+    # Does not close old work, release slots, refund usage, or replay a request.
+    controls_operator_continuations: str = field(
+        default_factory=lambda: _env("CONTROLS_OPERATOR_CONTINUATIONS", "")
+    )
+    controls_database_url: str = field(default_factory=lambda: _env("CONTROLS_DATABASE_URL", ""))
+    controls_deployment_id: str = field(default_factory=lambda: _env("CONTROLS_DEPLOYMENT_ID", ""))
+    controls_data_key_file: str = field(default_factory=lambda: _env("CONTROLS_DATA_KEY_FILE", ""))
+    # Optional bounded local authorization. The general launcher persists the
+    # first-start deadline; model_call checks it before every external dispatch.
+    controls_inference_window_seconds: int = field(
+        default_factory=lambda: int(_env("CONTROLS_INFERENCE_WINDOW_SECONDS", "0"))
+    )
+    controls_inference_expires_at: float = field(
+        default_factory=lambda: float(_env("CONTROLS_INFERENCE_EXPIRES_AT", "0"))
+    )
+    controls_inference_total_microunits: int | None = field(
+        default_factory=lambda: int(os.environ["CONTROLS_INFERENCE_TOTAL_MICROUNITS"])
+        if os.environ.get("CONTROLS_INFERENCE_TOTAL_MICROUNITS")
+        else None
+    )
+    # Production is fail-closed; local/test must be explicitly selected and still
+    # require signed credentials and an operator-controlled authorization file.
+    belay_env: str = field(default_factory=lambda: _env("BELAY_ENV", "production"))
+    auth_issuer: str = field(default_factory=lambda: _env("AUTH_ISSUER", ""))
+    auth_audience: str = field(default_factory=lambda: _env("AUTH_AUDIENCE", ""))
+    auth_public_key_file: str = field(default_factory=lambda: _env("AUTH_PUBLIC_KEY_FILE", ""))
+    auth_authorization_file: str = field(
+        default_factory=lambda: _env("AUTH_AUTHORIZATION_FILE", "")
+    )
+    # Dialogue saving is independently opt-in and requires an approved policy.
+    dialogue_enabled: bool = field(default_factory=lambda: _envbool("DIALOGUE_ENABLED", False))
+    dialogue_policy_id: str = field(default_factory=lambda: _env("DIALOGUE_POLICY_ID", ""))
+    dialogue_retention_seconds: int = field(
+        default_factory=lambda: int(_env("DIALOGUE_RETENTION_SECONDS", "0"))
+    )
+    dialogue_backup_max_age_seconds: int = field(
+        default_factory=lambda: int(_env("DIALOGUE_BACKUP_MAX_AGE_SECONDS", "0"))
+    )
+    dialogue_deletion_ledger_file: str = field(
+        default_factory=lambda: _env("DIALOGUE_DELETION_LEDGER_FILE", "")
+    )
+    dialogue_max_body_bytes: int = field(
+        default_factory=lambda: int(_env("DIALOGUE_MAX_BODY_BYTES", "65536"))
+    )
+    dialogue_max_message_bytes: int = field(
+        default_factory=lambda: int(_env("DIALOGUE_MAX_MESSAGE_BYTES", "8192"))
+    )
+    dialogue_max_messages: int = field(
+        default_factory=lambda: int(_env("DIALOGUE_MAX_MESSAGES", "200"))
+    )
+    dialogue_max_stored_bytes: int = field(
+        default_factory=lambda: int(_env("DIALOGUE_MAX_STORED_BYTES", "524288"))
+    )
+    dialogue_max_attempts: int = field(
+        default_factory=lambda: int(_env("DIALOGUE_MAX_ATTEMPTS", "5"))
+    )
+    dialogue_page_messages: int = field(
+        default_factory=lambda: int(_env("DIALOGUE_PAGE_MESSAGES", "40"))
+    )
+    dialogue_page_bytes: int = field(
+        default_factory=lambda: int(_env("DIALOGUE_PAGE_BYTES", "65536"))
+    )
+    dialogue_context_tokens: int = field(
+        default_factory=lambda: int(_env("DIALOGUE_CONTEXT_TOKENS", "16384"))
+    )
+    dialogue_model_tokens: int = field(
+        default_factory=lambda: int(_env("DIALOGUE_MODEL_TOKENS", "32768"))
+    )
+    dialogue_response_tokens: int = field(
+        default_factory=lambda: int(_env("DIALOGUE_RESPONSE_TOKENS", "1024"))
+    )
+    dialogue_pending_seconds: int = field(
+        default_factory=lambda: int(_env("DIALOGUE_PENDING_SECONDS", "120"))
+    )
+
     # --- Model/inference provider seam -------------------------------------
     # PROVIDER selects the inference provider (and is recorded in the §6 telemetry
     # `provider` field). The fast/strong TIER POLICY (which component uses which
@@ -54,6 +140,17 @@ class Settings:
     # OPENAI_REASONING=1 for an endpoint that serves a reasoning model (e.g.
     # gpt-oss), which then receives reasoning_effort.
     openai_reasoning: bool = field(default_factory=lambda: _envbool("OPENAI_REASONING", False))
+    # Explicit endpoint capabilities, never inferred from model names/hosts.
+    openai_thinking_mode: str = field(default_factory=lambda: _env("OPENAI_THINKING_MODE", ""))
+    openai_response_format: str = field(
+        default_factory=lambda: _env("OPENAI_RESPONSE_FORMAT", "json_object")
+    )
+    openai_final_content_only: bool = field(
+        default_factory=lambda: _envbool("OPENAI_FINAL_CONTENT_ONLY", True)
+    )
+    llm_timeout_seconds: float = field(
+        default_factory=lambda: float(_env("LLM_TIMEOUT_SECONDS", "30"))
+    )
     # anthropic requests extended thinking by default (its capability).
     anthropic_thinking: bool = field(default_factory=lambda: _envbool("ANTHROPIC_THINKING", True))
     anthropic_thinking_budget: int = field(
@@ -137,6 +234,9 @@ class Settings:
 
     # Persistence backend for the store: "sql" (durable) or "memory" (ephemeral).
     store_backend: str = field(default_factory=lambda: _env("STORE_BACKEND", "sql"))
+    # Legacy local_dev keeps explicit auto-creation; controlled_runtime disables
+    # it and requires prepare/migrate before constructing any SQL store.
+    store_auto_create: bool = field(default_factory=lambda: _envbool("STORE_AUTO_CREATE", True))
 
     # --- Durable store DSN -------------------------------------------------
     # SQLite is the zero-config durable DEFAULT (a local file; no server). Postgres
@@ -150,9 +250,14 @@ class Settings:
         return self.database_url.startswith("postgres")
 
     cors_origins: list = field(
-        default_factory=lambda: _env(
-            "CORS_ORIGINS", "http://localhost:5173,http://localhost:3000"
-        ).split(",")
+        default_factory=lambda: [
+            o.strip()
+            for o in _env(
+                "CORS_ORIGINS",
+                "http://localhost:5173,http://localhost:3000,http://localhost:63342,http://127.0.0.1:63342,http://localhost:8000",
+            ).split(",")
+            if o.strip()
+        ]
     )
 
     # --- Distress-routing layer (Slice G) — INSTITUTION + IRB OWNED ---------
@@ -183,6 +288,30 @@ class Settings:
     # on top of the conservative built-in vocabulary. Default empty.
     distress_signal_terms: str = field(default_factory=lambda: _env("DISTRESS_SIGNAL_TERMS", ""))
 
+    # --- Sandbox runner (CC-B4) ---
+    # Enable container-based sandbox (default: True)
+    sandbox_runner_enabled: bool = field(
+        default_factory=lambda: _envbool("SANDBOX_RUNNER_ENABLED", True)
+    )
+
+    # Use gVisor (runsc) for stronger isolation (default: False)
+    sandbox_use_gvisor: bool = field(default_factory=lambda: _envbool("SANDBOX_USE_GVISOR", False))
+    # Allow insecure subprocess runner (opt-in, for local dev only)
+    sandbox_allow_insecure: bool = field(
+        default_factory=lambda: _envbool("SANDBOX_ALLOW_INSECURE", False)
+    )
+
+    # Memory limit in MB for sandbox (default: 256)
+    sandbox_memory_mb: int = field(default_factory=lambda: int(_env("SANDBOX_MEMORY_MB", "256")))
+
+    # CPU limit in seconds (default: 10)
+    sandbox_cpu_seconds: int = field(default_factory=lambda: int(_env("SANDBOX_CPU_SECONDS", "10")))
+
+    # Wall clock timeout in seconds (default: 20)
+    sandbox_wall_seconds: float = field(
+        default_factory=lambda: float(_env("SANDBOX_WALL_SECONDS", "20.0"))
+    )
+
     @property
     def distress_configured(self) -> bool:
         """True once BOTH FILL-IN defaults are replaced with real institution values.
@@ -191,6 +320,18 @@ class Settings:
             "[FILL-IN" not in self.distress_support_message
             and "[FILL-IN" not in self.distress_escalation_target
         )
+
+    # --- Injection Guard (CC-B1 Compliance) ----------------------------------
+    # OFF by default. Dedicated sovereign classifier configuration.
+    injection_guard_enabled: bool = field(
+        default_factory=lambda: _envbool("INJECTION_GUARD_ENABLED", False)
+    )
+    injection_guard_endpoint: str | None = field(
+        default_factory=lambda: os.environ.get("INJECTION_GUARD_ENDPOINT")
+    )
+    injection_guard_model: str | None = field(
+        default_factory=lambda: os.environ.get("INJECTION_GUARD_MODEL")
+    )
 
 
 settings = Settings()

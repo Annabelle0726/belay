@@ -8,12 +8,12 @@ network or DB is touched.
 from __future__ import annotations
 
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 from app.core.registry import get_active_pack
 from app.integrations.quad import build_router
 from app.integrations.quad.pii import PIIRejected, assert_no_pii, pii_reason
 from app.store import ConsentRouter, InMemoryStore
+from tests.http_auth import authenticated_client
 
 
 def _client():
@@ -28,7 +28,7 @@ def _client():
 
     app = FastAPI()
     app.include_router(build_router(cr, get_active_pack(), _no_llm))
-    return TestClient(app)
+    return authenticated_client(app, "gh:12345")
 
 
 # ── the four routes ───────────────────────────────────────────────────────────
@@ -64,12 +64,14 @@ def test_turn_runs_control_stance():
     )
     assert r.status_code == 200, r.text
     out = r.json()
-    assert out["components"]["stance"] == "control"
-    assert "message" in out
+    assert "message" in out and out["glass_box"]["approach"]
+    assert "components" not in out
 
 
 def test_events_acks_clean_payload():
-    r = _client().post("/quad/v1/events", json={"type": "workspace.updated", "pseudo_id": "gh:7"})
+    r = _client().post(
+        "/quad/v1/events", json={"type": "workspace.updated", "pseudo_id": "gh:12345"}
+    )
     assert r.status_code == 200
     assert r.json()["ok"] is True
 
@@ -127,7 +129,7 @@ def test_non_pseudonymous_id_rejected():
             "stance": "control",
         },
     )
-    assert r.status_code == 422
+    assert r.status_code == 404
 
 
 def test_pii_helper_unit():
@@ -171,9 +173,14 @@ def test_gradingspec_result_is_read_only_context():
 
 def test_no_grade_write_route_exists():
     """The sidecar exposes exactly health/capabilities/turn/goals/reflection/overlay/
-    events — none of which write a grade (the tutor never writes grades)."""
+    events and scoped dialogue — none of which write a grade (the tutor never writes grades)."""
     api = build_router(ConsentRouter(InMemoryStore()), get_active_pack(), lambda: None)
-    paths = {(r.path, tuple(sorted(set(r.methods) - {"HEAD", "OPTIONS"}))) for r in api.routes}
+    app = FastAPI()
+    app.include_router(api)
+    paths = {
+        (path, tuple(sorted(method.upper() for method in operations)))
+        for path, operations in app.openapi()["paths"].items()
+    }
     assert paths == {
         ("/quad/v1/health", ("GET",)),
         ("/quad/v1/capabilities", ("GET",)),
@@ -182,6 +189,19 @@ def test_no_grade_write_route_exists():
         ("/quad/v1/reflection", ("POST",)),
         ("/quad/v1/overlay", ("POST",)),
         ("/quad/v1/events", ("POST",)),
+        ("/quad/v1/conversations/config", ("GET",)),
+        ("/quad/v1/conversations", ("GET", "POST")),
+        ("/quad/v1/conversations/{cid}", ("DELETE", "GET")),
+        ("/quad/v1/conversations/{cid}/messages", ("GET",)),
+        ("/quad/v1/conversations/{cid}/turns", ("POST",)),
+        ("/quad/v1/conversations/{cid}/jobs/config", ("GET",)),
+        ("/quad/v1/conversations/{cid}/jobs", ("POST",)),
+        ("/quad/v1/conversations/{cid}/jobs/by-request/{request_id}", ("GET",)),
+        ("/quad/v1/jobs/config", ("GET",)),
+        ("/quad/v1/jobs", ("POST",)),
+        ("/quad/v1/jobs/by-request/{request_id}", ("GET",)),
+        ("/quad/v1/jobs/by-request/{request_id}/reconcile", ("POST",)),
+        ("/quad/v1/jobs/{job_id}", ("GET",)),
     }
 
 

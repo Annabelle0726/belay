@@ -14,6 +14,7 @@ from ..core.registry import get_active_pack
 from . import context as ctx_mod
 from .llm import LLMClient
 from .prompts import TEACH_ADDENDUM, planner_system
+from .reply_context import FOLLOWUP_GUIDANCE
 
 _VALID_INTERVENTIONS = {
     "observe",
@@ -117,6 +118,8 @@ def plan(ctx: dict, llm: LLMClient, stance: str = "peer") -> dict:
     persona = get_active_pack().persona
     base = planner_system(persona, stance, goals=ctx.get("goals"), overlay=ctx.get("overlay"))
     system = base + (("\n\n" + TEACH_ADDENDUM) if ctx["mode"] == "teach" else "")
+    if ctx.get("quoted_prior_reply"):
+        system += "\n" + FOLLOWUP_GUIDANCE
     out = llm.json(
         role="planner", tier="fast", system=system, user=ctx_mod.serialize(ctx), max_tokens=400
     )

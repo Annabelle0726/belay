@@ -138,16 +138,22 @@ def check(
     # `is_solution OR prose_disclosure`. What stays here is everything that is not
     # a judgement about the candidate: the `block` action, the flag vocabulary, the
     # human-readable reason strings, and the routing signals below.
-    verdict = leak_profile.verify(
-        leak_profile.build_request(
-            candidate=draft.get("message", ""), exercise=exercise, stance=stance
-        ),
-        pack=pack,
-    )
-    if verdict["verdict"] == "fail":
-        blocked = True
-        flag = "withholding_solution"
-        reasons = _reasons_from_verdict(verdict)
+    message = draft.get("message", "")
+    candidates = [message]
+    question = draft.get("check_question")
+    if stance == "peer" and question:
+        # Clients may render fields separately. Also check disclosures split across them.
+        candidates = [message, question, message + "\n\n" + question] if message else [question]
+    for candidate in candidates:
+        verdict = leak_profile.verify(
+            leak_profile.build_request(candidate=candidate, exercise=exercise, stance=stance),
+            pack=pack,
+        )
+        if verdict["verdict"] == "fail":
+            blocked = True
+            flag = "withholding_solution"
+            reasons = _reasons_from_verdict(verdict)
+            break
 
     # Redirecting answer-seeking is a PEER move. In oracle, answering the request
     # is the whole point, so an answered answer-seeking turn must read as "none"
@@ -166,18 +172,33 @@ def safe_rewrite(draft: dict, gov: dict, exercise: dict, pack=None) -> dict:
     The domain-specific redaction comes from the pack (via `LeakEvidence`); the
     peer-voiced redirect and the confidence cap are the core decision. Re-derives
     the evidence from the pack (deterministic; only runs on a block).
+
+    CODE-ONLY STRIPPING IS NOT ENOUGH, and assuming otherwise was a real hole:
+    a draft that discloses the answer in *prose* has no code to remove, so the
+    redaction returned it unchanged and the disclosure was delivered despite the
+    block firing. (Found by the CC-B2 adversarial benchmark's prose-leak case;
+    the earlier fixed-corpus tests only ever blocked drafts whose leak lived in a
+    fenced block, so they could not see it.) So the rewrite re-checks its own
+    output with the same oracle the gate used, and drops the prose entirely —
+    leaving only the redirect — when the prose itself is what disclosed. The
+    redirect is non-disclosing by construction, which is what makes that a fix
+    rather than another round of the same mistake.
     """
     pack = pack or get_active_pack()
-    msg = pack.leak_evidence(draft.get("message", ""), exercise).redacted_message
+    evidence = pack.leak_evidence(draft.get("message", ""), exercise)
+    msg = evidence.redacted_message
+    if (
+        msg and evidence.prose_disclosure
+    ):  # The leak was in the prose, not in stripped code: there is nothing left
+        # worth keeping, because what remains is the disclosure.
+        msg = ""
     redirect = (
         "Actually — I don't want to just paste the whole thing, that's the part "
         "worth working out. What's the *one* operation you think comes next, and why?"
     )
     draft = dict(draft)
     draft["message"] = (msg + "\n\n" + redirect).strip() if msg else redirect
-    draft["check_question"] = (
-        draft.get("check_question") or "What do you think the next single step is?"
-    )
+    draft["check_question"] = "What do you think the next single step is?"
     # If we had to suppress a solution, the tutor shouldn't also claim high confidence.
     draft["confidence"] = min(float(draft.get("confidence", 0.5)), 0.6)
     return draft
